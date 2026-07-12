@@ -5,7 +5,7 @@ export function PitchMonitor() {
     <section className="monitor" aria-label="Pitch monitor">
       <div className="monitor__heading">
         <h2>Pitch history</h2>
-        <span>Waiting for input</span>
+        <span>Pitch graph will be added in a later issue</span>
       </div>
       <div className="semitone-grid" aria-label="Empty semitone grid">
         {noteLabels.map((note) => (

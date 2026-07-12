@@ -29,7 +29,9 @@ describe('App', () => {
         'Your microphone audio is processed locally on this device and is not uploaded.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Microphone inactive');
+    expect(
+      screen.getByRole('status', { name: 'Microphone status' }),
+    ).toHaveTextContent('Microphone inactive');
     expect(
       screen.getByRole('meter', { name: 'Microphone input level' }),
     ).toHaveAttribute('aria-valuenow', '0');
@@ -40,9 +42,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start microphone' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent(
-        'Microphone unsupported',
-      ),
+      expect(
+        screen.getByRole('status', { name: 'Microphone status' }),
+      ).toHaveTextContent('Microphone unsupported'),
     );
     expect(screen.getByRole('alert')).toHaveTextContent(
       'This browser does not support microphone access.',
@@ -64,6 +66,8 @@ describe('App', () => {
       name: 'Allow microphone…',
     });
     expect(button).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('Requesting access');
+    expect(
+      screen.getByRole('status', { name: 'Microphone status' }),
+    ).toHaveTextContent('Requesting access');
   });
 });

@@ -5,31 +5,44 @@ import {
   supportsMicrophoneCapture,
 } from '../audio/microphone';
 import {
-  startInputLevelMonitor,
-  type InputLevelMonitorHandle,
-} from '../audio/inputLevel';
+  startPitchAnalysis,
+  type PitchAnalysisHandle,
+} from '../audio/pitchAnalysis';
 import type { MicrophoneState } from '../types/microphone';
+import type { RawPitchDetection } from '../types/pitch';
 
 export type MicrophoneServices = {
   isSupported: () => boolean;
   requestStream: () => Promise<MediaStream>;
   startLevelMonitor: (
     stream: MediaStream,
-    onLevel: (level: number) => void,
-  ) => InputLevelMonitorHandle;
+    onDetection: (detection: RawPitchDetection) => void,
+    onError: () => void,
+  ) => PitchAnalysisHandle;
+};
+
+type MicrophoneAnalysisCallbacks = {
+  onDetection?: (detection: RawPitchDetection) => void;
+  onAnalysisError?: () => void;
+  onAnalysisReset?: () => void;
 };
 
 const defaultServices: MicrophoneServices = {
   isSupported: supportsMicrophoneCapture,
   requestStream: requestMicrophoneStream,
-  startLevelMonitor: startInputLevelMonitor,
+  startLevelMonitor: startPitchAnalysis,
 };
 
-export function useMicrophone(services: MicrophoneServices = defaultServices) {
+export function useMicrophone(
+  services: MicrophoneServices = defaultServices,
+  callbacks: MicrophoneAnalysisCallbacks = {},
+) {
   const [state, setState] = useState<MicrophoneState>('idle');
   const [inputLevel, setInputLevel] = useState(0);
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
   const streamRef = useRef<MediaStream | null>(null);
-  const monitorRef = useRef<InputLevelMonitorHandle | null>(null);
+  const monitorRef = useRef<PitchAnalysisHandle | null>(null);
   const endedListenersRef = useRef<
     Array<{ track: MediaStreamTrack; listener: () => void }>
   >([]);
@@ -52,6 +65,7 @@ export function useMicrophone(services: MicrophoneServices = defaultServices) {
     monitorRef.current = null;
     await monitor?.stop();
 
+    callbacksRef.current.onAnalysisReset?.();
     if (mountedRef.current) setInputLevel(0);
   }, []);
 
@@ -97,7 +111,15 @@ export function useMicrophone(services: MicrophoneServices = defaultServices) {
         endedListenersRef.current.push({ track, listener: handleEnded });
       }
 
-      monitorRef.current = services.startLevelMonitor(stream, setInputLevel);
+      monitorRef.current = services.startLevelMonitor(
+        stream,
+        (detection) => {
+          if (!mountedRef.current || operation !== operationRef.current) return;
+          setInputLevel(detection.rms);
+          callbacksRef.current.onDetection?.(detection);
+        },
+        () => callbacksRef.current.onAnalysisError?.(),
+      );
       setState('active');
     } catch (error) {
       await cleanup();

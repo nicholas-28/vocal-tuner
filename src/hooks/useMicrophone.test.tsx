@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { InputLevelMonitorHandle } from '../audio/inputLevel';
+import type { PitchAnalysisHandle } from '../audio/pitchAnalysis';
 import type { MicrophoneServices } from './useMicrophone';
 import { useMicrophone } from './useMicrophone';
 
@@ -18,15 +18,21 @@ function createStream() {
 
 function createServices(
   stream: MediaStream,
-  monitor: InputLevelMonitorHandle = {
+  monitor: PitchAnalysisHandle = {
     stop: vi.fn().mockResolvedValue(undefined),
   },
 ): MicrophoneServices {
   return {
     isSupported: vi.fn(() => true),
     requestStream: vi.fn().mockResolvedValue(stream),
-    startLevelMonitor: vi.fn((_stream, onLevel) => {
-      onLevel(0.4);
+    startLevelMonitor: vi.fn((_stream, onDetection) => {
+      onDetection({
+        timestampMs: 1,
+        frequencyHz: 220,
+        confidence: 0.95,
+        rms: 0.4,
+        analysisDurationMs: 1,
+      });
       return monitor;
     }),
   };
@@ -63,6 +69,7 @@ describe('useMicrophone', () => {
 
     act(() => void result.current.start());
     await waitFor(() => expect(result.current.state).toBe('requesting'));
+    expect(services.startLevelMonitor).not.toHaveBeenCalled();
 
     await act(async () => resolveStream(stream));
     expect(result.current.state).toBe('active');
@@ -111,8 +118,43 @@ describe('useMicrophone', () => {
     await act(() => result.current.stop());
 
     expect(services.requestStream).toHaveBeenCalledTimes(2);
+    expect(services.startLevelMonitor).toHaveBeenCalledTimes(2);
     expect(first.track.stop).toHaveBeenCalledOnce();
     expect(second.track.stop).toHaveBeenCalledOnce();
+  });
+
+  it('ignores detector updates after stop', async () => {
+    const { stream } = createStream();
+    let publishDetection!: (detection: {
+      timestampMs: number;
+      frequencyHz: number | null;
+      confidence: number;
+      rms: number;
+      analysisDurationMs: number;
+    }) => void;
+    const services = createServices(stream);
+    services.startLevelMonitor = vi.fn((_stream, onDetection) => {
+      publishDetection = onDetection;
+      return { stop: vi.fn().mockResolvedValue(undefined) };
+    });
+    const onDetection = vi.fn();
+    const { result } = renderHook(() =>
+      useMicrophone(services, { onDetection }),
+    );
+    await act(() => result.current.start());
+    await act(() => result.current.stop());
+
+    act(() =>
+      publishDetection({
+        timestampMs: 10,
+        frequencyHz: 440,
+        confidence: 1,
+        rms: 0.5,
+        analysisDurationMs: 1,
+      }),
+    );
+    expect(result.current.inputLevel).toBe(0);
+    expect(onDetection).not.toHaveBeenCalled();
   });
 
   it.each([

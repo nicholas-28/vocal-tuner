@@ -1,11 +1,15 @@
-export function TunerReadout() {
+type TunerReadoutProps = {
+  frequencyHz: number | null;
+};
+
+export function TunerReadout({ frequencyHz }: TunerReadoutProps) {
   return (
     <section className="readout" aria-label="Current pitch">
       <div className="current-note" aria-label="Current note: unavailable">
         —
       </div>
       <div className="pitch-details">
-        <p>— Hz</p>
+        <p>{frequencyHz === null ? '— Hz' : `${frequencyHz.toFixed(1)} Hz`}</p>
         <span aria-hidden="true" />
         <p>— cents</p>
       </div>

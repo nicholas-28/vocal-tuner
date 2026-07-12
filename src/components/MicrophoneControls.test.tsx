@@ -33,7 +33,9 @@ describe('microphone UI', () => {
 
   it('announces status and exposes the normalized input level', () => {
     render(<MicrophoneStatus state="active" inputLevel={0.25} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Microphone active');
+    expect(
+      screen.getByRole('status', { name: 'Microphone status' }),
+    ).toHaveTextContent('Microphone active');
     expect(screen.getByRole('meter')).toHaveAttribute('aria-valuenow', '0.25');
   });
 });

@@ -21,6 +21,7 @@ export function MicrophoneStatus({ state, inputLevel }: MicrophoneStatusProps) {
         className={`status status--${state}`}
         role="status"
         aria-live="polite"
+        aria-label="Microphone status"
       >
         <span className="status__dot" aria-hidden="true" />
         {content.status}
