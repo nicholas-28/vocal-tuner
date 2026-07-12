@@ -48,8 +48,13 @@ export function App() {
         history={history.history}
         summary={history.summary}
         active={state === 'active'}
+        captureState={history.captureState}
+        sessionVersion={history.sessionVersion}
+        toEffectiveTimestamp={history.toEffectiveTimestamp}
         durationMs={history.durationMs}
         onClear={history.clear}
+        onPause={history.pause}
+        onResume={history.resume}
       />
       <MicrophoneControls
         state={state}

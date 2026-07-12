@@ -296,6 +296,16 @@ h1 {
   font-size: 0.72rem;
 }
 
+.history-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.history-capture-status {
+  display: inline-block;
+}
+
 .secondary-button {
   min-height: 2.75rem;
   padding: 0.55rem 0.8rem;
@@ -443,6 +453,14 @@ h1 {
   .monitor__heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .history-controls {
+    justify-content: stretch;
+  }
+
+  .history-controls .secondary-button {
+    flex: 1;
   }
 }
 

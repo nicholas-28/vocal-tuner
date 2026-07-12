@@ -115,4 +115,100 @@ describe('usePitchHistory', () => {
     hook.unmount();
     expect(() => onDetection(createPitchDetection())).not.toThrow();
   });
+
+  it('pauses ingestion, rebases resume time, and inserts one gap boundary', () => {
+    let sourceNowMs = 1000;
+    const { result } = renderHook(() =>
+      usePitchHistory(15_000, () => sourceNowMs),
+    );
+    act(() => result.current.startSession());
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 900 })),
+    );
+    act(() => result.current.pause());
+    expect(result.current.captureState.status).toBe('paused');
+
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 3000 })),
+    );
+    act(() =>
+      result.current.onDetection(
+        createPitchDetection({
+          timestampMs: 4000,
+          frequencyHz: null,
+          rejectionReason: 'silence',
+        }),
+      ),
+    );
+    expect(result.current.history.points).toHaveLength(1);
+
+    sourceNowMs = 6000;
+    act(() => result.current.resume());
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 6100 })),
+    );
+    expect(result.current.captureState.status).toBe('recording');
+    expect(result.current.history.points.map((point) => point.kind)).toEqual([
+      'pitch',
+      'gap',
+      'pitch',
+    ]);
+    expect(
+      result.current.history.points.map((point) => point.timestampMs),
+    ).toEqual([900, 1000, 1100]);
+    expect(result.current.summary.retainedDurationMs).toBe(200);
+  });
+
+  it('keeps Clear paused and resumes fresh without a stale boundary', () => {
+    let sourceNowMs = 1000;
+    const { result } = renderHook(() =>
+      usePitchHistory(15_000, () => sourceNowMs),
+    );
+    act(() => result.current.startSession());
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 900 })),
+    );
+    act(() => result.current.pause());
+    act(() => result.current.clear());
+    expect(result.current.captureState.status).toBe('paused');
+    expect(result.current.history.points).toEqual([]);
+
+    sourceNowMs = 3000;
+    act(() => result.current.resume());
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 3100 })),
+    );
+    expect(result.current.history.points).toHaveLength(1);
+    expect(result.current.history.points[0]).toMatchObject({
+      kind: 'pitch',
+      timestampMs: 1100,
+    });
+  });
+
+  it('resets pause bookkeeping on Stop and starts the next session recording', () => {
+    let sourceNowMs = 1000;
+    const { result } = renderHook(() =>
+      usePitchHistory(15_000, () => sourceNowMs),
+    );
+    act(() => result.current.startSession());
+    const firstSessionVersion = result.current.sessionVersion;
+    act(() => result.current.pause());
+    act(() => result.current.stopSession());
+    expect(result.current.captureState).toMatchObject({
+      status: 'recording',
+      accumulatedPausedDurationMs: 0,
+    });
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 2000 })),
+    );
+    expect(result.current.history.points).toEqual([]);
+
+    sourceNowMs = 50;
+    act(() => result.current.startSession());
+    expect(result.current.sessionVersion).toBe(firstSessionVersion + 1);
+    act(() =>
+      result.current.onDetection(createPitchDetection({ timestampMs: 60 })),
+    );
+    expect(result.current.history.points[0].timestampMs).toBe(60);
+  });
 });

@@ -123,3 +123,11 @@ Status: accepted
 Live pitch history uses a transparent foreground Canvas over the static grid Canvas. Both layers share the validated viewport, backing dimensions, DPR, and fractional-MIDI mapping. This keeps the grid out of the animation cadence while allowing the curve layer to clear independently.
 
 The 15-second historical interval spans graph-left to the existing present marker. Active rendering advances with monotonic RAF timestamps compatible with detector `performance.now()` timestamps; Stop freezes the last render reference. Straight segments break at explicit gaps, invalid data, non-monotonic time, intervals over 250 ms, and points outside the fixed time or MIDI range. The React layer owns one cancellable RAF chain and performs no per-frame state update.
+
+## ADR-013 — Rebased history-only pause time
+
+Status: accepted
+
+Pitch-history capture uses explicit `recording` and `paused` states independent from microphone lifecycle. Pause blocks only history ingestion and curve RAF; audio analysis and live tuner state continue. Effective history and render timestamps subtract accumulated paused monotonic duration, so paused wall-clock time neither ages retained history nor shifts the curve after Resume.
+
+Resume arms one sparse gap boundary before the next accepted pitch when retained history exists, preventing connection across the capture break. Clear preserves capture state and pause accounting. Stop resets pause accounting for the next successful microphone session without rewriting retained timestamps.

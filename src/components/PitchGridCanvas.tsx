@@ -3,6 +3,7 @@ import { useCanvasViewport } from '../hooks/useCanvasViewport';
 import { usePitchCurveAnimation } from '../hooks/usePitchCurveAnimation';
 import type { MidiRange } from '../types/pitchGrid';
 import type { PitchHistory } from '../types/pitchHistory';
+import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
 import { drawPitchCurve } from '../visualization/drawPitchCurve';
 import { drawPitchGrid } from '../visualization/drawPitchGrid';
 import { DEFAULT_PITCH_CURVE_CONFIG } from '../visualization/pitchCurveConfig';
@@ -19,6 +20,9 @@ import { getPitchGridNote } from '../visualization/pitchGridNotes';
 type PitchGridCanvasProps = Partial<MidiRange> & {
   history: PitchHistory;
   active: boolean;
+  captureState: PitchHistoryCaptureState;
+  sessionVersion: number;
+  toEffectiveTimestamp: (sourceTimestampMs: number) => number | null;
   visibleDurationMs: number;
   presentTimeXRatio?: number;
 };
@@ -26,6 +30,9 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
 export const PitchGridCanvas = memo(function PitchGridCanvas({
   history,
   active,
+  captureState,
+  sessionVersion,
+  toEffectiveTimestamp,
   visibleDurationMs,
   lowMidi = DEFAULT_PITCH_GRID_RANGE.lowMidi,
   highMidi = DEFAULT_PITCH_GRID_RANGE.highMidi,
@@ -83,8 +90,14 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   );
 
   usePitchCurveAnimation({
-    active,
-    fallbackReferenceTimeMs: history.points.at(-1)?.timestampMs ?? null,
+    active: active && captureState.status === 'recording',
+    fallbackReferenceTimeMs: history.points.at(-1)?.timestampMs ?? 0,
+    inactiveReferenceTimeMs:
+      captureState.status === 'paused'
+        ? captureState.frozenEffectiveTimeMs
+        : null,
+    resetKey: sessionVersion,
+    toReferenceTime: toEffectiveTimestamp,
     draw: drawCurve,
   });
 
@@ -92,7 +105,11 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
     <figure
       className="pitch-grid"
       role="img"
-      aria-label={`Live pitch history from ${lowLabel} to ${highLabel} over the last ${visibleDurationMs / 1000} seconds.`}
+      aria-label={
+        captureState.status === 'paused'
+          ? `Pitch history paused. Showing the last captured ${visibleDurationMs / 1000} seconds from ${lowLabel} to ${highLabel}.`
+          : `Live pitch history from ${lowLabel} to ${highLabel} over the last ${visibleDurationMs / 1000} seconds.`
+      }
     >
       <div className="pitch-grid__viewport" ref={elementRef}>
         <canvas
@@ -109,9 +126,11 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
       </div>
       {history.points.every((point) => point.kind !== 'pitch') && (
         <figcaption>
-          {active
-            ? 'Sing a sustained note to begin pitch history.'
-            : 'Start the microphone to begin pitch history.'}
+          {captureState.status === 'paused'
+            ? 'History is paused.'
+            : active
+              ? 'Sing a sustained note to begin pitch history.'
+              : 'Start the microphone to begin pitch history.'}
         </figcaption>
       )}
     </figure>

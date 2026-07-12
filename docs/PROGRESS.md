@@ -80,3 +80,17 @@ Implemented on branch `issue-008-scrolling-pitch-curve`.
 - One cancellable RAF loop with ref-based drawing and frozen Stop behavior
 - Responsive clipping, empty-state messaging, and preserved diagnostics/Clear behavior
 - No smoothing, keyboard, reference tone, recording, replay, persistence, or backend
+
+## Issue 009 — Pitch-history pause and resume
+
+Implemented on branch `issue-009-pitch-history-pause-resume`.
+
+- Explicit recording/paused history-capture state separate from microphone lifecycle
+- Effective timestamp rebasing that excludes accumulated paused wall-clock duration
+- Pause-aware ingestion and exact frozen-reference Canvas redraw
+- Single RAF cancellation/restart lifecycle with no per-frame React state
+- One sparse resume boundary preventing pre/post-pause curve connections
+- Independent Clear behavior in recording and paused states
+- Accessible Pause/Resume control and live/paused/inactive history status
+- Fresh recording state and pause accounting on every successful microphone Start
+- No microphone pause, recording, replay, persistence, keyboard, or reference tone

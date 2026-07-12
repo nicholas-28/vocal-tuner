@@ -30,8 +30,17 @@ describe('PitchMonitor history diagnostics', () => {
         history={{ points: [] }}
         summary={emptySummary}
         active={false}
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+        sessionVersion={0}
+        toEffectiveTimestamp={(timestamp) => timestamp}
         durationMs={15_000}
         onClear={vi.fn()}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
       />,
     );
     expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
@@ -40,6 +49,10 @@ describe('PitchMonitor history diagnostics', () => {
     expect(
       screen.getByRole('button', { name: 'Clear history' }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Pause history' }),
+    ).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('History inactive');
     expect(
       screen.getByRole('img', {
         name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
@@ -91,8 +104,17 @@ describe('PitchMonitor history diagnostics', () => {
           latestKind: 'pitch',
         }}
         active={true}
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+        sessionVersion={1}
+        toEffectiveTimestamp={(timestamp) => timestamp}
         durationMs={15_000}
         onClear={onClear}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
       />,
     );
     expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
@@ -104,5 +126,40 @@ describe('PitchMonitor history diagnostics', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
     expect(onClear).toHaveBeenCalledOnce();
     expect(screen.queryByText(/begin pitch history/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
+      'Capturerecording',
+    );
+  });
+
+  it('announces paused history and describes the frozen graph', () => {
+    render(
+      <PitchMonitor
+        history={{ points: [] }}
+        summary={emptySummary}
+        active
+        captureState={{
+          status: 'paused',
+          accumulatedPausedDurationMs: 5000,
+          pauseStartedSourceMs: 6000,
+          frozenEffectiveTimeMs: 1000,
+        }}
+        sessionVersion={1}
+        toEffectiveTimestamp={() => 1000}
+        durationMs={15_000}
+        onClear={vi.fn()}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('History paused');
+    expect(
+      screen.getByRole('button', { name: 'Resume history' }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole('img', {
+        name: 'Pitch history paused. Showing the last captured 15 seconds from C3 to C5.',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('History is paused.')).toBeInTheDocument();
   });
 });

@@ -11,7 +11,7 @@ pixelsPerMs = historicalWidth / visibleDurationMs
 x = presentTimeX - (referenceTimeMs - point.timestampMs) × pixelsPerMs
 ```
 
-The reference timestamp maps to the present marker, a timestamp one full duration old maps to graph-left, and the region to the marker's right remains empty future space. Older and future points are omitted rather than clamped. Resize changes pixel positions but not timestamp meaning.
+The reference timestamp maps to the present marker, a timestamp one full duration old maps to graph-left, and the region to the marker's right remains empty future space. Older and future points are omitted rather than clamped. Resize changes pixel positions but not timestamp meaning. While history is paused, both detector and RAF source timestamps are rebased by accumulated paused duration as documented in `PITCH_HISTORY_PAUSE_RESUME.md`.
 
 Detector publications use `performance.now()`. While the microphone session is active, the curve RAF timestamp advances the same monotonic reference origin. The latest reference is retained in a ref. Stop, unexpected microphone cleanup, or another inactive state cancels animation and redraws at that frozen reference, so history does not drift left. Clear supplies an empty history immediately without stopping capture. A successful new Start already clears history and begins a fresh RAF session through the existing lifecycle.
 

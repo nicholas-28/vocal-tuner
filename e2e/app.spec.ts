@@ -35,6 +35,12 @@ test('loads the initial tuner screen', async ({ page }) => {
     page.getByRole('button', { name: 'Clear history' }),
   ).toBeDisabled();
   await expect(
+    page.getByRole('button', { name: 'Pause history' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'History inactive' }),
+  ).toBeVisible();
+  await expect(
     page.getByRole('status', { name: 'Microphone status' }),
   ).toContainText('Microphone inactive');
   await expect(

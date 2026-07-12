@@ -85,4 +85,59 @@ describe('usePitchCurveAnimation', () => {
     hook.rerender({ active: false, fallbackReferenceTimeMs: 1040 });
     expect(draw).toHaveBeenLastCalledWith(1050);
   });
+
+  it('cancels for pause, redraws frozen on resize, and resumes rebased once', () => {
+    let accumulatedPauseMs = 0;
+    const toReferenceTime = (sourceTimestampMs: number) =>
+      sourceTimestampMs - accumulatedPauseMs;
+    const firstDraw = vi.fn();
+    const hook = renderHook(
+      ({ active, draw }) =>
+        usePitchCurveAnimation({
+          active,
+          fallbackReferenceTimeMs: 900,
+          resetKey: 1,
+          toReferenceTime,
+          draw,
+        }),
+      { initialProps: { active: true, draw: firstDraw } },
+    );
+    act(() => callbacks.get(1)?.(1100));
+    hook.rerender({ active: false, draw: firstDraw });
+    expect(cancelAnimationFrame).toHaveBeenCalledOnce();
+    expect(firstDraw).toHaveBeenLastCalledWith(1100);
+
+    const resizedDraw = vi.fn();
+    hook.rerender({ active: false, draw: resizedDraw });
+    expect(resizedDraw).toHaveBeenCalledWith(1100);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(2);
+
+    accumulatedPauseMs = 5000;
+    vi.mocked(performance.now).mockReturnValue(6100);
+    hook.rerender({ active: true, draw: resizedDraw });
+    expect(resizedDraw).toHaveBeenLastCalledWith(1100);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses the exact pause reference between animation frames', () => {
+    const draw = vi.fn();
+    const hook = renderHook(
+      ({ active, inactiveReferenceTimeMs }) =>
+        usePitchCurveAnimation({
+          active,
+          fallbackReferenceTimeMs: 900,
+          inactiveReferenceTimeMs,
+          draw,
+        }),
+      {
+        initialProps: {
+          active: true,
+          inactiveReferenceTimeMs: null as number | null,
+        },
+      },
+    );
+    act(() => callbacks.get(1)?.(1000));
+    hook.rerender({ active: false, inactiveReferenceTimeMs: 1016 });
+    expect(draw).toHaveBeenLastCalledWith(1016);
+  });
 });

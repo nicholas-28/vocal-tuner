@@ -46,6 +46,9 @@ describe('App', () => {
       screen.getByRole('button', { name: 'Clear history' }),
     ).toBeDisabled();
     expect(
+      screen.getByRole('button', { name: 'Pause history' }),
+    ).toBeDisabled();
+    expect(
       screen.getByRole('img', {
         name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
       }),
