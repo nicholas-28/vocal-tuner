@@ -107,3 +107,11 @@ Status: accepted
 Pitch history stores immutable accepted musical points using monotonic detector timestamps and fractional MIDI. Rejected or silent input creates sparse null gap points, preventing a future renderer from connecting through unpitched intervals. Regular pitch sampling is capped at 15 points per second, while gap transitions and changes of at least 0.5 semitone are preserved immediately.
 
 History retains 15 seconds by default, with validated 5–60 second configuration. Trimming uses timestamp cutoffs and an optional cutoff boundary point, keeping normal memory near 225 points. A successful microphone Start clears and activates a fresh in-memory session; Stop freezes it; Clear empties it without affecting capture or the current note. No persistence, timer, rendering state, or backend is introduced.
+
+## ADR-011 — Validated semitone-center Canvas viewport
+
+Status: accepted
+
+The pitch monitor grid uses a typed, validated Canvas viewport with an inclusive fixed C3–C5 range. Each integer MIDI note occupies the center of one equal-height band, so fractional MIDI maps continuously and half-semitone boundaries meet the graph edges. A graph-relative present marker defaults to 80% of graph width.
+
+Canvas CSS and backing-store sizes remain separate, with device-pixel ratio normalized to 1–3. Rendering resets the transform before clearing and applies an absolute DPR transform. A configuration-only, React-free renderer draws the grid after observed size or configuration changes; it does not receive history, detector state, or create an animation loop. Note labels reuse the shared music conversion utilities.

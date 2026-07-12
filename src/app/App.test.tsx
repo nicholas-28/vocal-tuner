@@ -4,6 +4,13 @@ import { App } from './App';
 
 describe('App', () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: undefined,
@@ -38,6 +45,11 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: 'Clear history' }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole('img', {
+        name: 'Pitch grid from C3 to C5. Live pitch curve is not yet displayed.',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('shows an accessible unsupported state', async () => {

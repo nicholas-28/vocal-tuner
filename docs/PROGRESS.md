@@ -55,3 +55,15 @@ Implemented on branch `issue-006-pitch-history-buffer`.
 - Bounded 15-second default retention with validated 5–60 second configuration
 - Fresh history on successful Start, frozen history on Stop, and independent Clear control
 - Compact developer summary; no Canvas, curve, smoothing, persistence, or playback
+
+## Issue 007 — Semitone grid
+
+Implemented on branch `issue-007-semitone-grid`.
+
+- Responsive Canvas grid with a validated, typed viewport and no animation loop
+- Fixed inclusive C3–C5 range with 25 equal semitone-center bands
+- Pure fractional-MIDI-to-Y and inverse coordinate mapping
+- Distinct octave C, natural, and accidental hierarchy using shared note utilities
+- Graph-relative 80% present-time marker and deterministic label-density policy
+- DPR-aware backing store, pixel-aligned strokes, ResizeObserver cleanup, and fallback sizing
+- Preserved history diagnostics and Clear behavior; no curve, scrolling, keyboard, or playback

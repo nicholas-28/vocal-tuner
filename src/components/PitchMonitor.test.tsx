@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PitchHistorySummary } from '../types/pitchHistory';
 import { PitchMonitor } from './PitchMonitor';
 
@@ -14,6 +14,16 @@ const emptySummary: PitchHistorySummary = {
 };
 
 describe('PitchMonitor history diagnostics', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+  });
+
   it('shows an empty summary and disabled clear control', () => {
     render(
       <PitchMonitor
@@ -28,7 +38,15 @@ describe('PitchMonitor history diagnostics', () => {
     expect(
       screen.getByRole('button', { name: 'Clear history' }),
     ).toBeDisabled();
-    expect(screen.getByLabelText('Empty semitone grid')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', {
+        name: 'Pitch grid from C3 to C5. Live pitch curve is not yet displayed.',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('pitch-grid-canvas')).toBeInTheDocument();
+    expect(
+      screen.getByText('Pitch curve will be added in Issue 008.'),
+    ).toBeInTheDocument();
   });
 
   it('reports point types and clears without invoking microphone controls', () => {

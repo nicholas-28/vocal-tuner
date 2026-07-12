@@ -1,6 +1,5 @@
 import type { PitchHistorySummary } from '../types/pitchHistory';
-
-const noteLabels = ['A4', 'G♯4', 'G4', 'F♯4', 'F4', 'E4', 'D♯4'];
+import { PitchGridCanvas } from './PitchGridCanvas';
 
 type PitchMonitorProps = {
   summary: PitchHistorySummary;
@@ -23,7 +22,7 @@ export function PitchMonitor({
       <div className="monitor__heading">
         <div>
           <h2>Pitch history</h2>
-          <span>Pitch graph will be added in a later issue</span>
+          <span>Semitone grid</span>
         </div>
         <button
           className="secondary-button"
@@ -66,14 +65,7 @@ export function PitchMonitor({
           </dd>
         </div>
       </dl>
-      <div className="semitone-grid" aria-label="Empty semitone grid">
-        {noteLabels.map((note) => (
-          <div className="grid-row" key={note}>
-            <span>{note}</span>
-          </div>
-        ))}
-        <div className="playhead" aria-hidden="true" />
-      </div>
+      <PitchGridCanvas />
     </section>
   );
 }
