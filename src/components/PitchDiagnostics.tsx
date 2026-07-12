@@ -4,6 +4,7 @@ import type {
   PitchAnalysisState,
   PitchDiagnostics as Diagnostics,
 } from '../types/pitch';
+import type { PitchRejectionReason } from '../types/pitch';
 
 type PitchDiagnosticsProps = {
   diagnostics: Diagnostics;
@@ -17,6 +18,17 @@ const statusLabels: Record<PitchAnalysisState, string> = {
   'low-confidence': 'No stable pitch — low confidence',
   detected: 'Stable input',
   error: 'Detector error',
+};
+
+const rejectionLabels: Record<PitchRejectionReason, string> = {
+  silence: 'Signal too quiet',
+  'no-candidate': 'No YIN candidate',
+  'yin-threshold': 'Candidate above YIN threshold',
+  'low-confidence': 'Candidate below confidence threshold',
+  'invalid-frequency': 'Invalid candidate frequency',
+  'out-of-range': 'Candidate outside supported range',
+  detected: 'Accepted',
+  'detector-error': 'Detector error',
 };
 
 export function PitchDiagnostics({
@@ -42,14 +54,48 @@ export function PitchDiagnostics({
       </div>
       <dl className="diagnostics__grid">
         <div>
-          <dt>Confidence</dt>
+          <dt>Accepted confidence</dt>
           <dd>
             {detection ? `${Math.round(detection.confidence * 100)}%` : '—'}
           </dd>
         </div>
         <div>
+          <dt>Raw confidence</dt>
+          <dd>
+            {detection ? `${Math.round(detection.rawConfidence * 100)}%` : '—'}
+          </dd>
+        </div>
+        <div>
+          <dt>Raw candidate</dt>
+          <dd>
+            {detection?.rawCandidateFrequencyHz
+              ? `${detection.rawCandidateFrequencyHz.toFixed(1)} Hz`
+              : '—'}
+          </dd>
+        </div>
+        <div>
+          <dt>Rejection</dt>
+          <dd>
+            {detection ? rejectionLabels[detection.rejectionReason] : '—'}
+          </dd>
+        </div>
+        <div>
           <dt>Signal RMS</dt>
           <dd>{detection ? detection.rms.toFixed(3) : '—'}</dd>
+        </div>
+        <div>
+          <dt>Signal gate</dt>
+          <dd>
+            {detection ? (detection.signalPassed ? 'Passed' : 'Rejected') : '—'}
+          </dd>
+        </div>
+        <div>
+          <dt>Selected lag</dt>
+          <dd>{detection?.selectedLag?.toFixed(2) ?? '—'}</dd>
+        </div>
+        <div>
+          <dt>Minimum CMND</dt>
+          <dd>{detection?.minimumYinValue?.toFixed(3) ?? '—'}</dd>
         </div>
         <div>
           <dt>Computation</dt>
@@ -66,8 +112,24 @@ export function PitchDiagnostics({
           </dd>
         </div>
         <div>
+          <dt>Sample rate</dt>
+          <dd>{detection ? `${detection.settings.sampleRate} Hz` : '—'}</dd>
+        </div>
+        <div>
           <dt>Window</dt>
-          <dd>{pitchAnalysisConfig.fftSize} samples</dd>
+          <dd>
+            {detection
+              ? `${detection.settings.fftSize} / ${detection.settings.windowDurationMs.toFixed(1)} ms`
+              : `${pitchAnalysisConfig.fftSize} samples`}
+          </dd>
+        </div>
+        <div>
+          <dt>Thresholds</dt>
+          <dd>
+            {detection
+              ? `RMS ${detection.settings.minimumRms} · YIN ${detection.settings.yinThreshold} · conf ${detection.settings.minimumConfidence}`
+              : '—'}
+          </dd>
         </div>
       </dl>
     </section>

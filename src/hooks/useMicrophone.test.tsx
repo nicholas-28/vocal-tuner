@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PitchAnalysisHandle } from '../audio/pitchAnalysis';
+import { createPitchDetection } from '../test/pitchFixture';
+import type { RawPitchDetection } from '../types/pitch';
 import type { MicrophoneServices } from './useMicrophone';
 import { useMicrophone } from './useMicrophone';
 
@@ -26,13 +28,7 @@ function createServices(
     isSupported: vi.fn(() => true),
     requestStream: vi.fn().mockResolvedValue(stream),
     startLevelMonitor: vi.fn((_stream, onDetection) => {
-      onDetection({
-        timestampMs: 1,
-        frequencyHz: 220,
-        confidence: 0.95,
-        rms: 0.4,
-        analysisDurationMs: 1,
-      });
+      onDetection(createPitchDetection());
       return monitor;
     }),
   };
@@ -125,36 +121,28 @@ describe('useMicrophone', () => {
 
   it('ignores detector updates after stop', async () => {
     const { stream } = createStream();
-    let publishDetection!: (detection: {
-      timestampMs: number;
-      frequencyHz: number | null;
-      confidence: number;
-      rms: number;
-      analysisDurationMs: number;
-    }) => void;
+    let publishDetection!: (detection: RawPitchDetection) => void;
     const services = createServices(stream);
     services.startLevelMonitor = vi.fn((_stream, onDetection) => {
       publishDetection = onDetection;
       return { stop: vi.fn().mockResolvedValue(undefined) };
     });
     const onDetection = vi.fn();
+    const onAnalysisReset = vi.fn();
     const { result } = renderHook(() =>
-      useMicrophone(services, { onDetection }),
+      useMicrophone(services, { onDetection, onAnalysisReset }),
     );
     await act(() => result.current.start());
     await act(() => result.current.stop());
 
     act(() =>
-      publishDetection({
-        timestampMs: 10,
-        frequencyHz: 440,
-        confidence: 1,
-        rms: 0.5,
-        analysisDurationMs: 1,
-      }),
+      publishDetection(
+        createPitchDetection({ timestampMs: 10, frequencyHz: 440, rms: 0.5 }),
+      ),
     );
     expect(result.current.inputLevel).toBe(0);
     expect(onDetection).not.toHaveBeenCalled();
+    expect(onAnalysisReset).toHaveBeenCalled();
   });
 
   it.each([

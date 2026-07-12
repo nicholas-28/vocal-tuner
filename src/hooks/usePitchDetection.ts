@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { pitchDetectorConfig } from '../audio/pitchDetector';
 import type { PitchDiagnostics, RawPitchDetection } from '../types/pitch';
 
 const initialDiagnostics: PitchDiagnostics = {
@@ -22,11 +21,13 @@ export function usePitchDetection() {
         ? null
         : 1000 / (detection.timestampMs - previousTimestamp);
     const state =
-      detection.rms < pitchDetectorConfig.minimumRms
+      detection.rejectionReason === 'silence'
         ? 'silence'
-        : detection.frequencyHz === null
-          ? 'low-confidence'
-          : 'detected';
+        : detection.rejectionReason === 'detected'
+          ? 'detected'
+          : detection.rejectionReason === 'detector-error'
+            ? 'error'
+            : 'low-confidence';
     setDiagnostics({ state, detection, cadenceHz });
   }, []);
 

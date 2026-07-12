@@ -27,6 +27,7 @@ export function startPitchAnalysis(
   source.connect(analyser);
 
   let samples: Float32Array | null = new Float32Array(analyser.fftSize);
+  let centeredBuffer: Float32Array | null = new Float32Array(analyser.fftSize);
   let differenceBuffer: Float64Array | null = new Float64Array(
     Math.floor(context.sampleRate / 65) + 1,
   );
@@ -42,6 +43,7 @@ export function startPitchAnalysis(
     source.disconnect();
     analyser.disconnect();
     samples = null;
+    centeredBuffer = null;
     differenceBuffer = null;
     if (context.state !== 'closed') await context.close();
   };
@@ -66,7 +68,10 @@ export function startPitchAnalysis(
           samples,
           context.sampleRate,
           performance.now(),
-          { differenceBuffer: differenceBuffer ?? undefined },
+          {
+            differenceBuffer: differenceBuffer ?? undefined,
+            centeredBuffer: centeredBuffer ?? undefined,
+          },
         );
         lastAnalysisAt = timestamp;
         if (

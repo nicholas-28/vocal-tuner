@@ -21,3 +21,15 @@ Implemented on branch `issue-003-pitch-detection-spike`.
 - Deterministic generated-signal and lifecycle coverage
 - Technical evaluation and real-device acceptance checklist in `PITCH_DETECTION_SPIKE.md`
 - Note, octave, cents, pitch history, recording, and upload remain unimplemented
+
+## Issue 004 — Real-voice detection follow-up
+
+Implemented on branch `issue-004-real-voice-detection-fix`.
+
+- Audited the YIN stages and exposed raw candidate evidence plus exact rejection reasons
+- Fixed hidden 0% confidence when no strict threshold crossing occurred
+- Added DC-mean removal while preserving raw RMS
+- Tuned provisional RMS, CMND, and confidence thresholds against vocal-like fixtures
+- Added a narrow weak-fundamental safeguard for stronger second harmonics
+- Added harmonic, noisy, DC-offset, modulated, attack, vibrato, breath, and threshold tests
+- Preserved microphone lifecycle and shared-analysis cleanup behavior

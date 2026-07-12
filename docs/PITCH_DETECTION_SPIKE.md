@@ -66,3 +66,45 @@ Test recent iPhone Safari, Android Chrome, macOS Safari, and desktop Chrome:
 ## Acceptance or replacement criteria
 
 Keep and tune YIN if sustained voices across the device matrix usually produce plausible frequency, silence clears promptly, computation remains affordable, and octave errors are infrequent enough for the technical proof. Compare or replace it with MPM before continuing if octave/subharmonic errors are common, low voices are unreliable, or mobile computation materially harms responsiveness or battery use.
+
+## Real-voice detector tuning
+
+### Observed failure and root-cause evidence
+
+Manual sustained vowels produced RMS around 0.015–0.016, 4–5 ms computation, 10–12 Hz UI cadence, frequent 0% confidence, and no accepted frequency. That RMS exceeded the old 0.01 gate, so the signal gate was not the primary rejection point.
+
+The audit found that confidence was calculated only after CMND crossed the strict 0.15 absolute threshold. A plausible harmonic voice candidate with a higher CMND minimum therefore became indistinguishable from “no candidate”: confidence was reset to zero and raw frequency was discarded before the 0.85 application threshold. This is the strongest proven implementation cause. Physical-device retesting is still required to quantify how much of the original failure it explains.
+
+The audit also reproduced a stronger-second-harmonic case where the first threshold crossing selected half the fundamental period. Candidate selection now prefers a later full-period minimum only when it is approximately twice the first lag and its CMND is materially lower. This avoids changing clean sine results while recovering the generated weak fundamental.
+
+### YIN audit
+
+- Difference function: correct squared sample differences over valid overlapping samples.
+- CMND: starts at lag 1, handles a zero running sum, and remains finite.
+- Lag bounds: derived from the actual sample rate, 65–1200 Hz range, and half-buffer limit.
+- Threshold search: continues to the local minimum and now preserves a best allowed candidate when no crossing occurs.
+- Interpolation: falls back to the integer lag for zero, invalid, or non-positive refinement.
+- Conversion: rejects non-finite and out-of-range frequencies explicitly.
+- Confidence: derived from the selected candidate and retained separately from final accepted confidence.
+
+### Diagnostics
+
+The development panel now shows raw RMS and gate result, selected lag, raw candidate frequency, minimum CMND, raw and accepted confidence, exact rejection reason, computation duration, cadence, sample rate, FFT size/window duration, and active thresholds. Audio samples are never logged.
+
+### Preprocessing and thresholds
+
+The detector subtracts the sample-buffer mean to remove DC offset. RMS is calculated first from the untouched samples. No amplitude normalization is used because YIN is scale invariant and normalizing quiet noise could create false evidence. A Hann window was rejected because its amplitude envelope distorts time-domain comparisons between delayed samples.
+
+Provisional defaults changed from RMS 0.01 / CMND 0.15 / confidence 0.85 to RMS 0.005 / CMND 0.35 / confidence 0.70. The lower RMS threshold gives built-in microphones more margin, although the observed voice already passed the former gate. Harmonic, weak-fundamental, noisy harmonic, DC-offset, amplitude-modulated, attack/sustain, and mild-vibrato fixtures remain accepted, while silence, very low input, random noise, and breath-like noise remain rejected.
+
+Auto gain remains disabled in production constraints. That preserves raw input behavior but may yield low levels on built-in microphones; basic `{ audio: true, video: false }` constraints can be compared manually through the existing compatibility fallback, never through a simultaneous second stream.
+
+### Temporal behavior
+
+No pitch-hold policy was added. Each frame exposes raw and accepted results, and silence or rejection clears frequency immediately at the next published diagnostic. This avoids stale notes, concealed slides, and premature graph smoothing. A short temporal policy should be considered only after multi-device recordings demonstrate isolated confidence dips.
+
+### Manual retest and acceptance
+
+Repeat humming, “oo,” “ah,” quiet/normal/loud voice, low/middle/high pitch, glides, vibrato, silence, breath, and consonants in Chrome and Safari. For each, record RMS, raw candidate, raw confidence, accepted frequency, rejection reason, perceived delay, and octave jumps.
+
+Detection is acceptable for continuation when sustained vowels and humming across representative devices normally produce plausible raw and accepted frequencies, silence and breath remain rejected, and octave errors are uncommon enough for the technical proof. Replace or compare YIN with MPM if raw CMND remains poor on common voices or harmonic selection remains unreliable after this retest.

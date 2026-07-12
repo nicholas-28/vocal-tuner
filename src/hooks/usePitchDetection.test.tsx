@@ -1,19 +1,13 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { RawPitchDetection } from '../types/pitch';
+import { createPitchDetection } from '../test/pitchFixture';
 import { usePitchDetection } from './usePitchDetection';
 
 function detection(
   overrides: Partial<RawPitchDetection> = {},
 ): RawPitchDetection {
-  return {
-    timestampMs: 100,
-    frequencyHz: 220,
-    confidence: 0.96,
-    rms: 0.2,
-    analysisDurationMs: 1.2,
-    ...overrides,
-  };
+  return createPitchDetection({ timestampMs: 100, rms: 0.2, ...overrides });
 }
 
 describe('usePitchDetection', () => {
@@ -25,7 +19,14 @@ describe('usePitchDetection', () => {
 
     act(() =>
       result.current.onDetection(
-        detection({ timestampMs: 200, frequencyHz: null, rms: 0 }),
+        detection({
+          timestampMs: 200,
+          frequencyHz: null,
+          confidence: 0,
+          rms: 0,
+          signalPassed: false,
+          rejectionReason: 'silence',
+        }),
       ),
     );
     expect(result.current.diagnostics.state).toBe('silence');
@@ -35,7 +36,15 @@ describe('usePitchDetection', () => {
 
   it('distinguishes low confidence, errors, and reset', () => {
     const { result } = renderHook(() => usePitchDetection());
-    act(() => result.current.onDetection(detection({ frequencyHz: null })));
+    act(() =>
+      result.current.onDetection(
+        detection({
+          frequencyHz: null,
+          confidence: 0,
+          rejectionReason: 'low-confidence',
+        }),
+      ),
+    );
     expect(result.current.diagnostics.state).toBe('low-confidence');
     act(() => result.current.onError());
     expect(result.current.diagnostics.state).toBe('error');
