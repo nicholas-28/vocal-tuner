@@ -44,3 +44,14 @@ Implemented on branch `issue-005-musical-pitch-conversion`.
 - Live note/octave, frequency, signed cents, and accessible centered cents indicator
 - Immediate neutral reset for rejected, silent, stopped, ended, and error states
 - Sharp-only naming; no graph, keyboard, reference tone, recording, or scoring
+
+## Issue 006 — Timestamped pitch history buffer
+
+Implemented on branch `issue-006-pitch-history-buffer`.
+
+- Immutable accepted pitch and explicit gap points using monotonic detector timestamps
+- Fractional MIDI retained for future equal-semitone graph coordinates
+- 15 Hz deterministic sampling with immediate gap and meaningful-pitch transitions
+- Bounded 15-second default retention with validated 5–60 second configuration
+- Fresh history on successful Start, frozen history on Stop, and independent Clear control
+- Compact developer summary; no Canvas, curve, smoothing, persistence, or playback

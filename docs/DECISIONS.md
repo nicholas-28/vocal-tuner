@@ -99,3 +99,11 @@ Status: accepted
 Accepted detector frequencies convert through a browser-independent twelve-tone equal-temperament layer. A4 defaults to 440 Hz, with a validated future configuration range of 400–480 Hz. MIDI numbering follows C4 = 60 and A4 = 69, and internal/display names use sharps only.
 
 Nearest-note selection uses `Math.round`, so exact half steps select the higher integer. Musical pitch remains separate from raw detector results and contains no history, smoothing, or scoring. Only detector results accepted as `detected` are converted; rejected raw candidates remain diagnostic data.
+
+## ADR-010 — Timestamped bounded pitch history
+
+Status: accepted
+
+Pitch history stores immutable accepted musical points using monotonic detector timestamps and fractional MIDI. Rejected or silent input creates sparse null gap points, preventing a future renderer from connecting through unpitched intervals. Regular pitch sampling is capped at 15 points per second, while gap transitions and changes of at least 0.5 semitone are preserved immediately.
+
+History retains 15 seconds by default, with validated 5–60 second configuration. Trimming uses timestamp cutoffs and an optional cutoff boundary point, keeping normal memory near 225 points. A successful microphone Start clears and activates a fresh in-memory session; Stop freezes it; Clear empties it without affecting capture or the current note. No persistence, timer, rendering state, or backend is introduced.

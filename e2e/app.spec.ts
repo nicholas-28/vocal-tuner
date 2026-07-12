@@ -13,6 +13,10 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByText('— Hz')).toBeVisible();
   await expect(page.getByText('— cents')).toBeVisible();
   await expect(page.getByLabel('Empty semitone grid')).toBeVisible();
+  await expect(page.getByLabel('Pitch history summary')).toContainText('15 s');
+  await expect(
+    page.getByRole('button', { name: 'Clear history' }),
+  ).toBeDisabled();
   await expect(
     page.getByRole('status', { name: 'Microphone status' }),
   ).toContainText('Microphone inactive');

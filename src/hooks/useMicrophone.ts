@@ -22,6 +22,7 @@ export type MicrophoneServices = {
 };
 
 type MicrophoneAnalysisCallbacks = {
+  onSessionStarted?: () => void;
   onDetection?: (detection: RawPitchDetection) => void;
   onAnalysisError?: () => void;
   onAnalysisReset?: () => void;
@@ -111,6 +112,7 @@ export function useMicrophone(
         endedListenersRef.current.push({ track, listener: handleEnded });
       }
 
+      callbacksRef.current.onSessionStarted?.();
       monitorRef.current = services.startLevelMonitor(
         stream,
         (detection) => {

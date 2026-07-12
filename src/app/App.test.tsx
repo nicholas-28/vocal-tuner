@@ -35,6 +35,9 @@ describe('App', () => {
     expect(
       screen.getByRole('meter', { name: 'Microphone input level' }),
     ).toHaveAttribute('aria-valuenow', '0');
+    expect(
+      screen.getByRole('button', { name: 'Clear history' }),
+    ).toBeDisabled();
   });
 
   it('shows an accessible unsupported state', async () => {

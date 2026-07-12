@@ -7,14 +7,23 @@ import {
 import { TunerReadout } from '../components/TunerReadout';
 import { useMicrophone } from '../hooks/useMicrophone';
 import { useMusicalPitchFromDetection } from '../hooks/useMusicalPitch';
+import { usePitchHistory } from '../hooks/usePitchHistory';
 import { usePitchDetection } from '../hooks/usePitchDetection';
 
 export function App() {
   const pitch = usePitchDetection();
+  const history = usePitchHistory();
   const { state, inputLevel, start, stop } = useMicrophone(undefined, {
-    onDetection: pitch.onDetection,
+    onSessionStarted: history.startSession,
+    onDetection: (detection) => {
+      pitch.onDetection(detection);
+      history.onDetection(detection);
+    },
     onAnalysisError: pitch.onError,
-    onAnalysisReset: pitch.reset,
+    onAnalysisReset: () => {
+      pitch.reset();
+      history.stopSession();
+    },
   });
   const musicalPitch = useMusicalPitchFromDetection(
     pitch.diagnostics.detection,
@@ -35,7 +44,11 @@ export function App() {
         diagnostics={pitch.diagnostics}
         microphoneState={state}
       />
-      <PitchMonitor />
+      <PitchMonitor
+        summary={history.summary}
+        durationMs={history.durationMs}
+        onClear={history.clear}
+      />
       <MicrophoneControls
         state={state}
         onStart={() => void start()}

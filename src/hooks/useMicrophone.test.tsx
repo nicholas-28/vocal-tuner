@@ -61,7 +61,10 @@ describe('useMicrophone', () => {
     const monitor = { stop: vi.fn().mockResolvedValue(undefined) };
     const services = createServices(stream, monitor);
     services.requestStream = vi.fn(() => request);
-    const { result } = renderHook(() => useMicrophone(services));
+    const onSessionStarted = vi.fn();
+    const { result } = renderHook(() =>
+      useMicrophone(services, { onSessionStarted }),
+    );
 
     act(() => void result.current.start());
     await waitFor(() => expect(result.current.state).toBe('requesting'));
@@ -70,6 +73,7 @@ describe('useMicrophone', () => {
     await act(async () => resolveStream(stream));
     expect(result.current.state).toBe('active');
     expect(result.current.inputLevel).toBe(0.4);
+    expect(onSessionStarted).toHaveBeenCalledOnce();
 
     await act(() => result.current.stop());
     expect(result.current.state).toBe('idle');
