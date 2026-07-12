@@ -1,8 +1,15 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
 describe('App', () => {
+  beforeEach(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
   it('renders the initial tuner placeholders', () => {
     render(<App />);
 
@@ -19,8 +26,44 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your microphone audio will be processed locally on this device.',
+        'Your microphone audio is processed locally on this device and is not uploaded.',
       ),
     ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Microphone inactive');
+    expect(
+      screen.getByRole('meter', { name: 'Microphone input level' }),
+    ).toHaveAttribute('aria-valuenow', '0');
+  });
+
+  it('shows an accessible unsupported state', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start microphone' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Microphone unsupported',
+      ),
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This browser does not support microphone access.',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Start microphone' }),
+    ).toBeEnabled();
+  });
+
+  it('disables the control and changes its label while requesting', async () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(() => new Promise(() => undefined)) },
+    });
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start microphone' }));
+
+    const button = await screen.findByRole('button', {
+      name: 'Allow microphone…',
+    });
+    expect(button).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Requesting access');
   });
 });

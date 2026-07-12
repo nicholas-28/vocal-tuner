@@ -67,3 +67,11 @@ Reasons:
 - less misleading display behavior;
 - future analytics;
 - safer tuning of the UI.
+
+## ADR-006 — Direct browser microphone lifecycle
+
+Status: accepted
+
+Microphone capture uses `navigator.mediaDevices.getUserMedia` directly. The application first requests mono audio with echo cancellation, noise suppression, and automatic gain control disabled. If a browser rejects those optional constraints as over-constrained, it retries once with `{ audio: true, video: false }`.
+
+The React hook owns lifecycle coordination while dedicated modules own capture and level monitoring. Active streams, track listeners, animation frames, audio nodes, and the level-monitoring `AudioContext` are released through one idempotent cleanup path. No audio samples are stored, recorded, logged, or uploaded.
