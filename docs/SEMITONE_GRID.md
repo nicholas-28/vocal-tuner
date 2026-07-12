@@ -1,6 +1,6 @@
 # Semitone Grid
 
-Issue 007 replaces the temporary DOM rows with a static Canvas coordinate background. It deliberately draws no pitch history, starts no animation loop, and reads no microphone or detector state.
+Issue 007 replaced the temporary DOM rows with a static Canvas coordinate background. Issue 008 adds pitch history on a separate foreground Canvas, so the grid itself still starts no animation loop and reads no microphone or detector state.
 
 ## Musical coordinates and visible range
 
@@ -24,10 +24,10 @@ CSS size and backing-store size are separate. Backing dimensions are rounded CSS
 
 The component observes its graph container with `ResizeObserver`. It skips zero or invalid initial dimensions, avoids state changes for identical observations, disconnects on unmount, and falls back to one measurement plus the window resize event when `ResizeObserver` is unavailable. There is no `requestAnimationFrame` loop.
 
-Redraws occur only when CSS size, DPR, MIDI range, or present-time ratio changes. The memoized component receives no live pitch or history props, so detector publications and history additions do not trigger Canvas drawing.
+Grid redraws occur only when CSS size, DPR, MIDI range, or present-time ratio changes. Detector publications and history additions redraw only the separate foreground curve layer.
 
 ## Accessibility and future curve integration
 
-The graph region is named “Pitch grid from C3 to C5. Live pitch curve is not yet displayed.” Decorative Canvas details are not duplicated as hidden DOM nodes. Current note, frequency, cents, diagnostics, history summary, and Clear remain semantic DOM controls and text. A visible caption also states that the curve is deferred to Issue 008.
+The graph region is named “Live pitch history from C3 to C5 over the last 15 seconds.” Decorative Canvas details are not duplicated as hidden DOM nodes. Current note, frequency, cents, diagnostics, history summary, and Clear remain semantic DOM controls and text.
 
-Future curve rendering should reuse the validated viewport and `midiToY` mapping, consuming the fractional MIDI already stored in pitch history. Curve paths, gaps, timestamp-to-X mapping, scrolling, automatic range tracking, keyboard, zoom, and physical-device rendering checks remain intentionally out of scope.
+The curve renderer reuses the validated viewport and `midiToY` mapping, consuming fractional MIDI already stored in pitch history. Automatic range tracking, keyboard, zoom, and physical-device rendering checks remain intentionally out of scope.

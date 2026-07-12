@@ -1,14 +1,18 @@
-import type { PitchHistorySummary } from '../types/pitchHistory';
+import type { PitchHistory, PitchHistorySummary } from '../types/pitchHistory';
 import { PitchGridCanvas } from './PitchGridCanvas';
 
 type PitchMonitorProps = {
   summary: PitchHistorySummary;
+  history: PitchHistory;
+  active: boolean;
   durationMs: number;
   onClear: () => void;
 };
 
 export function PitchMonitor({
   summary,
+  history,
+  active,
   durationMs,
   onClear,
 }: PitchMonitorProps) {
@@ -65,7 +69,11 @@ export function PitchMonitor({
           </dd>
         </div>
       </dl>
-      <PitchGridCanvas />
+      <PitchGridCanvas
+        history={history}
+        active={active}
+        visibleDurationMs={durationMs}
+      />
     </section>
   );
 }

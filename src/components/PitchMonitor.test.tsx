@@ -27,7 +27,9 @@ describe('PitchMonitor history diagnostics', () => {
   it('shows an empty summary and disabled clear control', () => {
     render(
       <PitchMonitor
+        history={{ points: [] }}
         summary={emptySummary}
+        active={false}
         durationMs={15_000}
         onClear={vi.fn()}
       />,
@@ -40,12 +42,13 @@ describe('PitchMonitor history diagnostics', () => {
     ).toBeDisabled();
     expect(
       screen.getByRole('img', {
-        name: 'Pitch grid from C3 to C5. Live pitch curve is not yet displayed.',
+        name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
       }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('pitch-grid-canvas')).toBeInTheDocument();
+    expect(screen.getByTestId('pitch-curve-canvas')).toBeInTheDocument();
     expect(
-      screen.getByText('Pitch curve will be added in Issue 008.'),
+      screen.getByText('Start the microphone to begin pitch history.'),
     ).toBeInTheDocument();
   });
 
@@ -53,6 +56,31 @@ describe('PitchMonitor history diagnostics', () => {
     const onClear = vi.fn();
     render(
       <PitchMonitor
+        history={{
+          points: [
+            {
+              timestampMs: 100,
+              midi: 60,
+              frequencyHz: 261.63,
+              confidence: 0.9,
+              kind: 'pitch',
+            },
+            {
+              timestampMs: 500,
+              midi: null,
+              frequencyHz: null,
+              confidence: 0,
+              kind: 'gap',
+            },
+            {
+              timestampMs: 1300,
+              midi: 61,
+              frequencyHz: 277.18,
+              confidence: 0.9,
+              kind: 'pitch',
+            },
+          ],
+        }}
         summary={{
           totalPoints: 3,
           pitchPoints: 2,
@@ -62,6 +90,7 @@ describe('PitchMonitor history diagnostics', () => {
           newestTimestampMs: 1300,
           latestKind: 'pitch',
         }}
+        active={true}
         durationMs={15_000}
         onClear={onClear}
       />,
@@ -74,5 +103,6 @@ describe('PitchMonitor history diagnostics', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
     expect(onClear).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/begin pitch history/)).not.toBeInTheDocument();
   });
 });

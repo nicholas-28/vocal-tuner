@@ -45,7 +45,9 @@ export function App() {
         microphoneState={state}
       />
       <PitchMonitor
+        history={history.history}
         summary={history.summary}
+        active={state === 'active'}
         durationMs={history.durationMs}
         onClear={history.clear}
       />

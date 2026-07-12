@@ -115,3 +115,11 @@ Status: accepted
 The pitch monitor grid uses a typed, validated Canvas viewport with an inclusive fixed C3–C5 range. Each integer MIDI note occupies the center of one equal-height band, so fractional MIDI maps continuously and half-semitone boundaries meet the graph edges. A graph-relative present marker defaults to 80% of graph width.
 
 Canvas CSS and backing-store sizes remain separate, with device-pixel ratio normalized to 1–3. Rendering resets the transform before clearing and applies an absolute DPR transform. A configuration-only, React-free renderer draws the grid after observed size or configuration changes; it does not receive history, detector state, or create an animation loop. Note labels reuse the shared music conversion utilities.
+
+## ADR-012 — Layered timestamp-driven pitch curve
+
+Status: accepted
+
+Live pitch history uses a transparent foreground Canvas over the static grid Canvas. Both layers share the validated viewport, backing dimensions, DPR, and fractional-MIDI mapping. This keeps the grid out of the animation cadence while allowing the curve layer to clear independently.
+
+The 15-second historical interval spans graph-left to the existing present marker. Active rendering advances with monotonic RAF timestamps compatible with detector `performance.now()` timestamps; Stop freezes the last render reference. Straight segments break at explicit gaps, invalid data, non-monotonic time, intervals over 250 ms, and points outside the fixed time or MIDI range. The React layer owns one cancellable RAF chain and performs no per-frame state update.

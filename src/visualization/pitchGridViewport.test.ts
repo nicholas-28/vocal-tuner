@@ -10,6 +10,7 @@ import {
   getCrispStrokeWidth,
   getVisibleMidiSequence,
   isValidMidiRange,
+  isValidPitchGridViewport,
   midiToY,
   normalizeDevicePixelRatio,
   normalizePresentTimeRatio,
@@ -64,6 +65,7 @@ describe('pitch grid viewport and coordinates', () => {
     expect(result.graphTopY).toBe(8);
     expect(result.graphBottomY).toBe(408);
     expect(result.semitoneHeight).toBe(16);
+    expect(isValidPitchGridViewport(result)).toBe(true);
     expect(midiToY(72, result)).toBe(16);
     expect(midiToY(60, result)).toBe(208);
     expect(midiToY(48, result)).toBe(400);

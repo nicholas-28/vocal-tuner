@@ -47,8 +47,12 @@ describe('App', () => {
     ).toBeDisabled();
     expect(
       screen.getByRole('img', {
-        name: 'Pitch grid from C3 to C5. Live pitch curve is not yet displayed.',
+        name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
       }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('pitch-curve-canvas')).toBeInTheDocument();
+    expect(
+      screen.getByText('Start the microphone to begin pitch history.'),
     ).toBeInTheDocument();
   });
 

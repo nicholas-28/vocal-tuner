@@ -67,3 +67,16 @@ Implemented on branch `issue-007-semitone-grid`.
 - Graph-relative 80% present-time marker and deterministic label-density policy
 - DPR-aware backing store, pixel-aligned strokes, ResizeObserver cleanup, and fallback sizing
 - Preserved history diagnostics and Clear behavior; no curve, scrolling, keyboard, or playback
+
+## Issue 008 — Scrolling pitch curve
+
+Implemented on branch `issue-008-scrolling-pitch-curve`.
+
+- Layered static-grid and animated-curve Canvases sharing one viewport and DPR sizing
+- Timestamp-based 15-second horizontal mapping ending at the 80% present marker
+- Fractional-MIDI vertical coordinates reused directly from the semitone grid
+- Gap-aware straight segments with a documented 250 ms maximum connection interval
+- Out-of-range MIDI omitted without clamping; re-entry starts a new segment
+- One cancellable RAF loop with ref-based drawing and frozen Stop behavior
+- Responsive clipping, empty-state messaging, and preserved diagnostics/Clear behavior
+- No smoothing, keyboard, reference tone, recording, replay, persistence, or backend

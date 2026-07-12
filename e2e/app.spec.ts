@@ -14,7 +14,7 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByText('— cents')).toBeVisible();
   await expect(
     page.getByRole('img', {
-      name: 'Pitch grid from C3 to C5. Live pitch curve is not yet displayed.',
+      name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
     }),
   ).toBeVisible();
   const canvas = page.getByTestId('pitch-grid-canvas');
@@ -22,8 +22,13 @@ test('loads the initial tuner screen', async ({ page }) => {
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox?.width).toBeGreaterThan(0);
   expect(canvasBox?.height).toBeGreaterThan(0);
+  const curveCanvas = page.getByTestId('pitch-curve-canvas');
+  await expect(curveCanvas).toBeVisible();
+  const curveCanvasBox = await curveCanvas.boundingBox();
+  expect(curveCanvasBox?.width).toBe(canvasBox?.width);
+  expect(curveCanvasBox?.height).toBe(canvasBox?.height);
   await expect(
-    page.getByText('Pitch curve will be added in Issue 008.'),
+    page.getByText('Start the microphone to begin pitch history.'),
   ).toBeVisible();
   await expect(page.getByLabel('Pitch history summary')).toContainText('15 s');
   await expect(

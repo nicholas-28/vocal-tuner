@@ -86,6 +86,37 @@ export function createPitchGridViewport(
   };
 }
 
+export function isValidPitchGridViewport(viewport: PitchGridViewport): boolean {
+  return (
+    isValidMidiRange(viewport) &&
+    Number.isFinite(viewport.widthCssPx) &&
+    viewport.widthCssPx > 0 &&
+    Number.isFinite(viewport.heightCssPx) &&
+    viewport.heightCssPx > 0 &&
+    Number.isFinite(viewport.devicePixelRatio) &&
+    viewport.devicePixelRatio >= 1 &&
+    Number.isFinite(viewport.backingWidthPx) &&
+    viewport.backingWidthPx > 0 &&
+    Number.isFinite(viewport.backingHeightPx) &&
+    viewport.backingHeightPx > 0 &&
+    Number.isFinite(viewport.graphLeftX) &&
+    Number.isFinite(viewport.graphRightX) &&
+    viewport.graphRightX > viewport.graphLeftX &&
+    Number.isFinite(viewport.graphTopY) &&
+    Number.isFinite(viewport.graphBottomY) &&
+    viewport.graphBottomY > viewport.graphTopY &&
+    Number.isFinite(viewport.graphWidth) &&
+    viewport.graphWidth > 0 &&
+    Number.isFinite(viewport.graphHeight) &&
+    viewport.graphHeight > 0 &&
+    Number.isFinite(viewport.semitoneHeight) &&
+    viewport.semitoneHeight > 0 &&
+    Number.isFinite(viewport.presentTimeX) &&
+    viewport.presentTimeX >= viewport.graphLeftX &&
+    viewport.presentTimeX <= viewport.graphRightX
+  );
+}
+
 export function midiToY(
   midi: number,
   viewport: PitchGridViewport,

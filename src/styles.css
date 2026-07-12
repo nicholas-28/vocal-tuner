@@ -342,6 +342,7 @@ h1 {
 }
 
 .pitch-grid__viewport {
+  position: relative;
   width: 100%;
   height: clamp(22rem, 55vh, 32rem);
   min-width: 0;
@@ -349,8 +350,11 @@ h1 {
 }
 
 .pitch-grid canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   max-width: 100%;
+  pointer-events: none;
 }
 
 .pitch-grid figcaption {

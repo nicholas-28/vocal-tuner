@@ -38,13 +38,12 @@ A session begins only after microphone capture succeeds. That callback clears ol
 
 Clear removes all points immediately without stopping the microphone, resetting the detector, or changing the current live note. The next publication begins fresh history. Page refresh naturally discards the in-memory buffer. No local storage, upload, or other persistence exists.
 
-## Future rendering
+## Canvas rendering
 
-Canvas rendering should consume a readonly snapshot and map horizontal positions from timestamps, not indexes. It should map vertical positions from fractional MIDI and break the curve at every gap. Sparse gap duration is determined by the next pitch timestamp or the renderer's current session time. Interpolation and visual smoothing are explicitly deferred.
+Canvas rendering consumes a readonly snapshot and maps horizontal positions from timestamps, not indexes. It maps vertical positions from fractional MIDI and breaks the curve at every gap. Sparse gap duration is determined by the next pitch timestamp or the renderer's current session time. Straight interpolation is implemented; visual smoothing remains deferred.
 
 ## Known limitations
 
-- No curve or Canvas rendering exists yet.
 - Sparse gaps do not contain repeated duration samples.
 - No pause state, persistence, smoothing, or octave correction exists.
 - History resets between microphone sessions.
