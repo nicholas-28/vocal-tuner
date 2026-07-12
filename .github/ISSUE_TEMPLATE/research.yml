@@ -1,0 +1,33 @@
+name: Research spike
+description: A time-boxed technical or product investigation
+title: "[Research] "
+labels:
+  - "type: research"
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What uncertainty must be resolved?
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: What limits or requirements matter?
+
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Deliverable
+      description: What document, prototype, or recommendation must be produced?
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision criteria
+      description: How will options be compared?
