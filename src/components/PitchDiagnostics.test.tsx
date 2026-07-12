@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { PitchDiagnostics as Diagnostics } from '../types/pitch';
 import { createPitchDetection } from '../test/pitchFixture';
+import { frequencyToMusicalPitch } from '../music/pitchConversion';
 import { PitchDiagnostics } from './PitchDiagnostics';
 import { TunerReadout } from './TunerReadout';
 
@@ -21,12 +22,10 @@ describe('pitch diagnostics UI', () => {
   };
 
   it('shows the raw frequency while preserving note and cents placeholders', () => {
-    render(<TunerReadout frequencyHz={220.04} />);
+    render(<TunerReadout pitch={frequencyToMusicalPitch(220.04)} />);
     expect(screen.getByText('220.0 Hz')).toBeInTheDocument();
-    expect(
-      screen.getByLabelText('Current note: unavailable'),
-    ).toHaveTextContent('—');
-    expect(screen.getByText('— cents')).toBeInTheDocument();
+    expect(screen.getByLabelText('Current note: A3')).toHaveTextContent('A3');
+    expect(screen.getByText('+0.3 cents')).toBeInTheDocument();
   });
 
   it('shows confidence, signal, computation time, cadence, and status', () => {

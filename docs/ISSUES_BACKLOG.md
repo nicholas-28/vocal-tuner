@@ -96,7 +96,17 @@ Detect the fundamental frequency of a single singing voice in real time.
 
 ---
 
-## Issue 004 — Implement musical pitch conversion
+## Issue 004 — Diagnose and improve real-voice pitch detection
+
+**Milestone:** Technical Proof
+
+**Status:** implemented
+
+Improved YIN candidate diagnostics, real-voice thresholds, DC-offset handling, and harmonic fixture coverage.
+
+---
+
+## Issue 005 — Implement musical pitch conversion
 
 **Milestone:** Technical Proof  
 **Labels:** `type: feature`, `area: music-theory`, `priority: high`, `codex-ready`
@@ -116,10 +126,10 @@ Convert frequency into fractional MIDI, note, octave, and cents deviation.
 
 ---
 
-## Issue 005 — Build technical pitch readout
+## Technical pitch readout — implemented across Issues 003–005
 
 **Milestone:** Technical Proof  
-**Labels:** `type: feature`, `area: ui`, `priority: high`, `codex-ready`
+**Status:** implemented
 
 ### Goal
 

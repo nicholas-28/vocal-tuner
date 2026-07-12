@@ -6,6 +6,7 @@ import {
 } from '../components/MicrophoneControls';
 import { TunerReadout } from '../components/TunerReadout';
 import { useMicrophone } from '../hooks/useMicrophone';
+import { useMusicalPitchFromDetection } from '../hooks/useMusicalPitch';
 import { usePitchDetection } from '../hooks/usePitchDetection';
 
 export function App() {
@@ -15,6 +16,9 @@ export function App() {
     onAnalysisError: pitch.onError,
     onAnalysisReset: pitch.reset,
   });
+  const musicalPitch = useMusicalPitchFromDetection(
+    pitch.diagnostics.detection,
+  );
 
   return (
     <main className="app-shell">
@@ -26,9 +30,7 @@ export function App() {
       </header>
 
       <MicrophoneStatus state={state} inputLevel={inputLevel} />
-      <TunerReadout
-        frequencyHz={pitch.diagnostics.detection?.frequencyHz ?? null}
-      />
+      <TunerReadout pitch={musicalPitch} />
       <PitchDiagnostics
         diagnostics={pitch.diagnostics}
         microphoneState={state}

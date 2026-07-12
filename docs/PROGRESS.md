@@ -33,3 +33,14 @@ Implemented on branch `issue-004-real-voice-detection-fix`.
 - Added a narrow weak-fundamental safeguard for stronger second harmonics
 - Added harmonic, noisy, DC-offset, modulated, attack, vibrato, breath, and threshold tests
 - Preserved microphone lifecycle and shared-analysis cleanup behavior
+
+## Issue 005 — Musical pitch conversion
+
+Implemented on branch `issue-005-musical-pitch-conversion`.
+
+- Pure equal-temperament frequency, MIDI, note, octave, cents, and ideal-frequency utilities
+- Typed musical-pitch model separate from raw detector output
+- Fixed A4 = 440 Hz production reference with validated 400–480 Hz architecture
+- Live note/octave, frequency, signed cents, and accessible centered cents indicator
+- Immediate neutral reset for rejected, silent, stopped, ended, and error states
+- Sharp-only naming; no graph, keyboard, reference tone, recording, or scoring
