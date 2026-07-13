@@ -73,4 +73,34 @@ describe('pitch curve segments', () => {
     expect(segments(input)).toEqual([[pitch(19_100, 60)], [pitch(19_300, 69)]]);
     expect(input).toEqual(snapshot);
   });
+
+  it('reveals retained points after a range-only viewport change', () => {
+    const input = [pitch(19_800, 40), pitch(19_900, 50), pitch(20_000, 70)];
+    const snapshot = input.map((point) => ({ ...point }));
+    const lowView = createPitchGridViewport({
+      widthCssPx: 500,
+      heightCssPx: 416,
+      devicePixelRatio: 1,
+      lowMidi: 36,
+      highMidi: 60,
+      ...DEFAULT_PITCH_GRID_LAYOUT,
+      presentTimeXRatio: 0.8,
+    })!;
+    const highView = createPitchGridViewport({
+      widthCssPx: 500,
+      heightCssPx: 416,
+      devicePixelRatio: 1,
+      lowMidi: 60,
+      highMidi: 84,
+      ...DEFAULT_PITCH_GRID_LAYOUT,
+      presentTimeXRatio: 0.8,
+    })!;
+    expect(
+      buildPitchCurveSegments(input, lowView, 20_000, 15_000, 250),
+    ).toEqual([[pitch(19_800, 40), pitch(19_900, 50)]]);
+    expect(
+      buildPitchCurveSegments(input, highView, 20_000, 15_000, 250),
+    ).toEqual([[pitch(20_000, 70)]]);
+    expect(input).toEqual(snapshot);
+  });
 });

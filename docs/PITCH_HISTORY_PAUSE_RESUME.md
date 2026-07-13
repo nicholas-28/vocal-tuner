@@ -59,5 +59,5 @@ Pause adds no audio work and creates no timer. Detector publications still updat
 - Sessions and pause accounting are not persisted.
 - Background tabs may throttle RAF and suspend audio independently.
 - Straight unsmoothed curves still expose vibrato and detector octave errors.
-- The visible range remains fixed to C3–C5.
+- The selected fixed-span C2–C6 graph range remains unchanged through pause and resume.
 - Physical Safari and Android performance still requires device testing.

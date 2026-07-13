@@ -94,3 +94,17 @@ Implemented on branch `issue-009-pitch-history-pause-resume`.
 - Accessible Pause/Resume control and live/paused/inactive history status
 - Fresh recording state and pause accounting on every successful microphone Start
 - No microphone pause, recording, replay, persistence, keyboard, or reference tone
+
+## Issue 010 — Visible-range controls
+
+Implemented on branch `issue-010-visible-range-controls`.
+
+- Typed fixed-span visible range with centralized MIDI 36–84 limits
+- C2–C4, C3–C5, and C4–C6 presets derived from shared note utilities
+- One-octave shift controls with disabled, non-clamping boundaries
+- Independent Reset to the default C3–C5 range
+- Shared grid/curve viewport updates without history or audio mutation
+- Above/below visible-range status while the live tuner remains unchanged
+- Range preserved across Pause, Clear, Stop, and new Start; reset on refresh
+- Accessible pressed states, labels, focus behavior, and graph descriptions
+- No persistence, auto-follow, zoom, panning, keyboard, or reference tone

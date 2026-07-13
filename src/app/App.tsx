@@ -9,10 +9,12 @@ import { useMicrophone } from '../hooks/useMicrophone';
 import { useMusicalPitchFromDetection } from '../hooks/useMusicalPitch';
 import { usePitchHistory } from '../hooks/usePitchHistory';
 import { usePitchDetection } from '../hooks/usePitchDetection';
+import { useVisiblePitchRange } from '../hooks/useVisiblePitchRange';
 
 export function App() {
   const pitch = usePitchDetection();
   const history = usePitchHistory();
+  const visiblePitchRange = useVisiblePitchRange();
   const { state, inputLevel, start, stop } = useMicrophone(undefined, {
     onSessionStarted: history.startSession,
     onDetection: (detection) => {
@@ -55,6 +57,15 @@ export function App() {
         onClear={history.clear}
         onPause={history.pause}
         onResume={history.resume}
+        visibleRange={visiblePitchRange.range}
+        selectedRangePresetId={visiblePitchRange.selectedPresetId}
+        canShiftRangeDown={visiblePitchRange.canShiftDown}
+        canShiftRangeUp={visiblePitchRange.canShiftUp}
+        currentMidi={musicalPitch?.fractionalMidi ?? null}
+        onSelectRangePreset={visiblePitchRange.selectPreset}
+        onShiftRangeDown={visiblePitchRange.shiftDownOctave}
+        onShiftRangeUp={visiblePitchRange.shiftUpOctave}
+        onResetRange={visiblePitchRange.reset}
       />
       <MicrophoneControls
         state={state}

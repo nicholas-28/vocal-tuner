@@ -48,6 +48,13 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: 'Pause history' }),
     ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'C3–C5' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Reset graph range' }),
+    ).toBeDisabled();
     expect(
       screen.getByRole('img', {
         name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
@@ -91,5 +98,27 @@ describe('App', () => {
     expect(
       screen.getByRole('status', { name: 'Microphone status' }),
     ).toHaveTextContent('Requesting access');
+  });
+
+  it('changes and resets graph range without touching microphone state', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'C2–C4' }));
+    expect(screen.getByRole('button', { name: 'C2–C4' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(
+      screen.getByRole('img', {
+        name: 'Live pitch history from C2 to C4 over the last 15 seconds.',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('status', { name: 'Microphone status' }),
+    ).toHaveTextContent('Microphone inactive');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset graph range' }));
+    expect(screen.getByRole('button', { name: 'C3–C5' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 });

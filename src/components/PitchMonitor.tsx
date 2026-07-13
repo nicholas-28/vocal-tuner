@@ -1,7 +1,12 @@
 import type { PitchHistory, PitchHistorySummary } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
+import type {
+  VisiblePitchRange,
+  VisiblePitchRangePresetId,
+} from '../types/visiblePitchRange';
 import { PitchGridCanvas } from './PitchGridCanvas';
 import { PitchHistoryControls } from './PitchHistoryControls';
+import { PitchRangeControls } from './PitchRangeControls';
 
 type PitchMonitorProps = {
   summary: PitchHistorySummary;
@@ -14,6 +19,15 @@ type PitchMonitorProps = {
   onClear: () => void;
   onPause: () => void;
   onResume: () => void;
+  visibleRange: VisiblePitchRange;
+  selectedRangePresetId: VisiblePitchRangePresetId | null;
+  canShiftRangeDown: boolean;
+  canShiftRangeUp: boolean;
+  currentMidi: number | null;
+  onSelectRangePreset: (id: VisiblePitchRangePresetId) => void;
+  onShiftRangeDown: () => void;
+  onShiftRangeUp: () => void;
+  onResetRange: () => void;
 };
 
 export function PitchMonitor({
@@ -27,6 +41,15 @@ export function PitchMonitor({
   onClear,
   onPause,
   onResume,
+  visibleRange,
+  selectedRangePresetId,
+  canShiftRangeDown,
+  canShiftRangeUp,
+  currentMidi,
+  onSelectRangePreset,
+  onShiftRangeDown,
+  onShiftRangeUp,
+  onResetRange,
 }: PitchMonitorProps) {
   const relativeNewestMs =
     summary.oldestTimestampMs === null || summary.newestTimestampMs === null
@@ -95,6 +118,17 @@ export function PitchMonitor({
           </dd>
         </div>
       </dl>
+      <PitchRangeControls
+        range={visibleRange}
+        selectedPresetId={selectedRangePresetId}
+        canShiftDown={canShiftRangeDown}
+        canShiftUp={canShiftRangeUp}
+        currentMidi={currentMidi}
+        onSelectPreset={onSelectRangePreset}
+        onShiftDown={onShiftRangeDown}
+        onShiftUp={onShiftRangeUp}
+        onReset={onResetRange}
+      />
       <PitchGridCanvas
         history={history}
         active={active}
@@ -102,6 +136,8 @@ export function PitchMonitor({
         sessionVersion={sessionVersion}
         toEffectiveTimestamp={toEffectiveTimestamp}
         visibleDurationMs={durationMs}
+        lowMidi={visibleRange.lowMidi}
+        highMidi={visibleRange.highMidi}
       />
     </section>
   );

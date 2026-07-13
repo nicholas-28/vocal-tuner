@@ -37,6 +37,29 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: 'Pause history' }),
   ).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'C3–C5' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Shift graph down one octave' }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: 'Shift graph up one octave' }),
+  ).toBeEnabled();
+  await page.getByRole('button', { name: 'C2–C4' }).click();
+  await expect(
+    page.getByRole('img', {
+      name: 'Live pitch history from C2 to C4 over the last 15 seconds.',
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'C2–C4' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Shift graph down one octave' }),
+  ).toBeDisabled();
   await expect(
     page.getByRole('status').filter({ hasText: 'History inactive' }),
   ).toBeVisible();

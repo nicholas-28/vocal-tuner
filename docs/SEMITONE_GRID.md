@@ -4,7 +4,7 @@ Issue 007 replaced the temporary DOM rows with a static Canvas coordinate backgr
 
 ## Musical coordinates and visible range
 
-The vertical axis uses fractional MIDI because a difference of one always represents one semitone. Frequency in hertz is never mapped directly in the visualization layer. The currently fixed, authoritative default is inclusive MIDI 48–72: C3 through C5. Inclusive bounds produce 25 note bands.
+The vertical axis uses fractional MIDI because a difference of one always represents one semitone. Frequency in hertz is never mapped directly in the visualization layer. The authoritative default is inclusive MIDI 48–72: C3 through C5. Issue 010 adds fixed-span C2–C4, C3–C5, and C4–C6 selection within global MIDI 36–84 limits. Every supported range contains 25 note bands.
 
 Each integer MIDI note is centered in an equal-height band. The high note is centered in the top band, the low note in the bottom band, and values half a semitone beyond those centers meet the graph edges. For a graph height `H`, semitone height is `H / (high - low + 1)`. Fractional MIDI maps linearly and the inverse Y-to-MIDI function uses the same convention.
 
@@ -24,10 +24,10 @@ CSS size and backing-store size are separate. Backing dimensions are rounded CSS
 
 The component observes its graph container with `ResizeObserver`. It skips zero or invalid initial dimensions, avoids state changes for identical observations, disconnects on unmount, and falls back to one measurement plus the window resize event when `ResizeObserver` is unavailable. There is no `requestAnimationFrame` loop.
 
-Grid redraws occur only when CSS size, DPR, MIDI range, or present-time ratio changes. Detector publications and history additions redraw only the separate foreground curve layer.
+Grid redraws occur only when CSS size, DPR, selected MIDI range, or present-time ratio changes. Detector publications and history additions redraw only the separate foreground curve layer.
 
 ## Accessibility and future curve integration
 
-The graph region is named “Live pitch history from C3 to C5 over the last 15 seconds.” Decorative Canvas details are not duplicated as hidden DOM nodes. Current note, frequency, cents, diagnostics, history summary, and Clear remain semantic DOM controls and text.
+The graph region names the selected low/high notes and duration. Decorative Canvas details are not duplicated as hidden DOM nodes. Current note, frequency, cents, diagnostics, history summary, range controls, and Clear remain semantic DOM controls and text.
 
 The curve renderer reuses the validated viewport and `midiToY` mapping, consuming fractional MIDI already stored in pitch history. Automatic range tracking, keyboard, zoom, and physical-device rendering checks remain intentionally out of scope.

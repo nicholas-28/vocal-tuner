@@ -13,6 +13,18 @@ const emptySummary: PitchHistorySummary = {
   latestKind: null,
 };
 
+const defaultRangeProps = {
+  visibleRange: { lowMidi: 48, highMidi: 72 },
+  selectedRangePresetId: 'middle' as const,
+  canShiftRangeDown: true,
+  canShiftRangeUp: true,
+  currentMidi: null,
+  onSelectRangePreset: vi.fn(),
+  onShiftRangeDown: vi.fn(),
+  onShiftRangeUp: vi.fn(),
+  onResetRange: vi.fn(),
+};
+
 describe('PitchMonitor history diagnostics', () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -41,6 +53,7 @@ describe('PitchMonitor history diagnostics', () => {
         onClear={vi.fn()}
         onPause={vi.fn()}
         onResume={vi.fn()}
+        {...defaultRangeProps}
       />,
     );
     expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
@@ -115,6 +128,7 @@ describe('PitchMonitor history diagnostics', () => {
         onClear={onClear}
         onPause={vi.fn()}
         onResume={vi.fn()}
+        {...defaultRangeProps}
       />,
     );
     expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
@@ -149,6 +163,7 @@ describe('PitchMonitor history diagnostics', () => {
         onClear={vi.fn()}
         onPause={vi.fn()}
         onResume={vi.fn()}
+        {...defaultRangeProps}
       />,
     );
     expect(screen.getByRole('status')).toHaveTextContent('History paused');
@@ -161,5 +176,37 @@ describe('PitchMonitor history diagnostics', () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText('History is paused.')).toBeInTheDocument();
+  });
+
+  it('updates the shared graph description without changing history diagnostics', () => {
+    render(
+      <PitchMonitor
+        history={{ points: [] }}
+        summary={emptySummary}
+        active={false}
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+        sessionVersion={0}
+        toEffectiveTimestamp={(timestamp) => timestamp}
+        durationMs={15_000}
+        onClear={vi.fn()}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        {...defaultRangeProps}
+        visibleRange={{ lowMidi: 36, highMidi: 60 }}
+        selectedRangePresetId="low"
+      />,
+    );
+    expect(
+      screen.getByRole('img', {
+        name: 'Live pitch history from C2 to C4 over the last 15 seconds.',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
+      'Total0',
+    );
   });
 });

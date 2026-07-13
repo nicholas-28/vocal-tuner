@@ -51,6 +51,8 @@ Both layers are resized from the same `ResizeObserver` result and redraw against
 
 With no accepted pitch, the caption prompts the user to start the microphone or sing a sustained note. The caption disappears after accepted pitch history exists and returns immediately after Clear.
 
+Changing the visible range creates a shared grid/curve viewport and redraws retained points against the new MIDI bounds. Out-of-range points remain stored but are omitted and break segments; selecting a range that contains them reveals them again. Active range changes update the current draw callback without duplicating RAF. Paused changes redraw once at the frozen reference without starting RAF.
+
 ## Known limitations and extension path
 
 The range remains fixed to C3–C5. Lines are intentionally straight and unsmoothed; raw vibrato and detector octave errors remain visible. There is no pause, keyboard, reference tone, recording, replay, zoom, or persisted history. Mobile background scheduling and Canvas performance still require physical-device verification.

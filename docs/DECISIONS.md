@@ -131,3 +131,11 @@ Status: accepted
 Pitch-history capture uses explicit `recording` and `paused` states independent from microphone lifecycle. Pause blocks only history ingestion and curve RAF; audio analysis and live tuner state continue. Effective history and render timestamps subtract accumulated paused monotonic duration, so paused wall-clock time neither ages retained history nor shifts the curve after Resume.
 
 Resume arms one sparse gap boundary before the next accepted pitch when retained history exists, preventing connection across the capture break. Clear preserves capture state and pause accounting. Stop resets pause accounting for the next successful microphone session without rewriting retained timestamps.
+
+## ADR-014 — Visualization-only fixed-span graph range
+
+Status: accepted
+
+The graph range is an App-level visualization preference independent from microphone, detector, musical conversion, and history storage. It uses an inclusive fixed 24-semitone span within MIDI 36–84, with C2–C4, C3–C5, and C4–C6 presets. C3–C5 remains the default. Octave shifts move both bounds by 12 and reject boundary overflow without clamping.
+
+Grid and curve layers consume the same validated range. Out-of-range curve points are omitted and break segments but remain unchanged in retained history and live tuner output. The selection survives in-page history and microphone operations but intentionally resets on refresh; no localStorage is introduced without demonstrated persistence need.
