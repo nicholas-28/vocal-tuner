@@ -76,7 +76,7 @@ test('loads the initial tuner screen', async ({ page }) => {
   });
   const pageErrors: Error[] = [];
   page.on('pageerror', (error) => pageErrors.push(error));
-  await page.goto('/?droneDiagnostics=1');
+  await page.goto('/?droneDiagnostics=1&centsMeterDemo=1');
 
   await expect(
     page.getByRole('heading', { name: 'Vocal Tuner' }),
@@ -85,10 +85,79 @@ test('loads the initial tuner screen', async ({ page }) => {
     page.getByRole('button', { name: 'Start microphone' }),
   ).toBeVisible();
   await expect(page.getByLabel('Current note: unavailable')).toHaveText('—');
-  await expect(page.getByText('No pitch', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.readout__continuity', { hasText: 'No pitch' }),
+  ).toBeVisible();
   await expect(page.getByText('unvoiced', { exact: true })).toBeVisible();
   await expect(page.getByText('— Hz')).toBeVisible();
   await expect(page.getByText('— cents')).toBeVisible();
+  const centsMeter = page.getByRole('meter', {
+    name: 'Nearest-note cents meter',
+  });
+  await expect(centsMeter).toBeVisible();
+  await expect(centsMeter.locator('.cents-meter__tick-labels')).toContainText(
+    '-50-250+25+50',
+  );
+  expect((await centsMeter.boundingBox())?.width).toBeGreaterThan(330);
+  const setCentsMeterDemo = async (
+    frequencyHz: number | null,
+    status: 'unvoiced' | 'voiced' | 'uncertain',
+    timestampMs: number | null,
+  ) => {
+    await page.evaluate(
+      ({ frequencyHz, status, timestampMs }) =>
+        window.dispatchEvent(
+          new CustomEvent('vocal-tuner:cents-meter-demo', {
+            detail: { frequencyHz, status, timestampMs },
+          }),
+        ),
+      { frequencyHz, status, timestampMs },
+    );
+  };
+  const frequencyAtMidi = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+
+  await setCentsMeterDemo(frequencyAtMidi(69.04), 'voiced', 100);
+  await expect(centsMeter).toHaveAttribute(
+    'aria-valuetext',
+    'Pitch is +4.0 cents, in tune with the nearest note.',
+  );
+  await expect(page.locator('.cents-meter__classification')).toHaveText(
+    'In tune',
+  );
+  await setCentsMeterDemo(frequencyAtMidi(68.88), 'voiced', 167);
+  await expect(page.locator('.cents-meter__classification')).toHaveText('Flat');
+  await setCentsMeterDemo(frequencyAtMidi(69.12), 'voiced', 234);
+  await expect(page.locator('.cents-meter__classification')).toHaveText(
+    'Sharp',
+  );
+  const marker = page.locator('.cents-meter__marker');
+  const heldMarkerPosition = await marker.evaluate(
+    (element) => (element as HTMLElement).style.left,
+  );
+  await setCentsMeterDemo(frequencyAtMidi(69.12), 'uncertain', 234);
+  await expect(centsMeter).toHaveClass(/cents-meter--uncertain/);
+  expect(
+    await marker.evaluate((element) => (element as HTMLElement).style.left),
+  ).toBe(heldMarkerPosition);
+  await setCentsMeterDemo(null, 'unvoiced', null);
+  await expect(marker).toHaveAttribute('data-visible', 'false');
+  await setCentsMeterDemo(frequencyAtMidi(59.49), 'voiced', 300);
+  await expect
+    .poll(() =>
+      marker.evaluate((element) =>
+        Number.parseFloat((element as HTMLElement).style.left),
+      ),
+    )
+    .toBeCloseTo(99, 4);
+  await setCentsMeterDemo(frequencyAtMidi(59.51), 'voiced', 367);
+  await expect
+    .poll(() =>
+      marker.evaluate((element) =>
+        Number.parseFloat((element as HTMLElement).style.left),
+      ),
+    )
+    .toBeCloseTo(1, 4);
+  await expect(page.getByText(/target cents/i)).toHaveCount(0);
   await expect(
     page.getByRole('img', {
       name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
@@ -242,5 +311,14 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     page.getByRole('meter', { name: 'Microphone input level' }),
   ).toHaveAttribute('aria-valuenow', '0');
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect(centsMeter.locator('.cents-meter__tick-labels')).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(centsMeter).toHaveAttribute('data-reduced-motion', 'true');
   expect(pageErrors).toEqual([]);
 });

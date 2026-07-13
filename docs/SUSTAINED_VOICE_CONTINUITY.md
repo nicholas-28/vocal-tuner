@@ -16,6 +16,8 @@ Hold emits neither pitch nor gap. No previous MIDI is duplicated, no interpolati
 
 The live readout retains the last measured note during uncertainty and labels it `Briefly uncertain` with its publication-time age. It does not update frequency or cents. A confirmed gap clears the readout.
 
+Issue 014 also freezes the cents marker at its last display position during uncertainty and visually subdues it. It does not keep moving toward a stale target. Confirmed unvoiced state hides the marker and resets display smoothing; the next accepted pitch initializes directly.
+
 History consumes decisions: holds add nothing; recovery adds only the new raw accepted point; timeout adds one sparse gap at uncertainty onset. Pause/Resume timestamp rebasing, Clear, retention, fractional MIDI, visible-range omission, and the curve's 250 ms safeguard are unchanged.
 
 ## Diagnostics, performance, and accessibility

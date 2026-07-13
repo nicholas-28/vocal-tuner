@@ -149,3 +149,16 @@ Implemented on branch `issue-013-sustained-voice-continuity`.
 - No duplicated points, candidate promotion, threshold changes, or vibrato smoothing
 - Truthful `Briefly uncertain` live state and session-local diagnostics
 - Curve, Pause/Resume, Clear, range, keyboard, drone, and microphone cleanup preserved
+
+## Issue 014 — Cents-meter readability
+
+Implemented on branch `issue-014-cents-meter-readability`.
+
+- Responsive 36 rem scale with −50/−25/0/+25/+50 divisions
+- Symmetric ±5-cent visual zone and calm Flat/In tune/Sharp language
+- Separate raw numeric cents and display-only marker cents
+- Time-aware 150 ms smoothing without timers or arrays
+- Immediate nearest-note boundary reset instead of a full-meter sweep
+- Frozen uncertainty, hidden/reset no-pitch marker, and clean session initialization
+- Reduced-motion direct updates and accessible descriptions
+- Detector, continuity, history, curve, keyboard, and drone semantics unchanged

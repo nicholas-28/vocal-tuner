@@ -6,17 +6,21 @@ import { TunerReadout } from './TunerReadout';
 describe('TunerReadout', () => {
   it('renders musical pitch and an accessible signed cents indicator', () => {
     const { container } = render(
-      <TunerReadout pitch={frequencyToMusicalPitch(442)} />,
+      <TunerReadout
+        pitch={frequencyToMusicalPitch(442)}
+        measurementTimestampMs={100}
+      />,
     );
     expect(screen.getByLabelText('Current note: A4')).toHaveTextContent('A4');
     expect(screen.getByText('442.0 Hz')).toBeInTheDocument();
     expect(screen.getByText('+7.9 cents')).toBeInTheDocument();
     expect(
-      screen.getByRole('meter', { name: 'Cents deviation' }),
-    ).toHaveAttribute('aria-valuetext', '+7.9 cents');
-    const marker = container.querySelector<HTMLElement>(
-      '.tuning-indicator__marker',
+      screen.getByRole('meter', { name: 'Nearest-note cents meter' }),
+    ).toHaveAttribute(
+      'aria-valuetext',
+      'Pitch is +7.9 cents sharp of the nearest note.',
     );
+    const marker = container.querySelector<HTMLElement>('.cents-meter__marker');
     expect(Number.parseFloat(marker?.style.left ?? '')).toBeCloseTo(57.8514, 4);
   });
 
@@ -28,11 +32,12 @@ describe('TunerReadout', () => {
     expect(screen.getByText('— Hz')).toBeInTheDocument();
     expect(screen.getByText('— cents')).toBeInTheDocument();
     expect(
-      screen.getByRole('meter', { name: 'Cents deviation' }),
-    ).toHaveAttribute('aria-valuenow', '0');
-    expect(container.querySelector('.tuning-indicator__marker')).toHaveStyle({
-      left: '50%',
-    });
+      screen.getByRole('meter', { name: 'Nearest-note cents meter' }),
+    ).not.toHaveAttribute('aria-valuenow');
+    expect(container.querySelector('.cents-meter__marker')).toHaveAttribute(
+      'data-visible',
+      'false',
+    );
   });
 
   it('marks a retained measurement as briefly uncertain', () => {
@@ -41,6 +46,7 @@ describe('TunerReadout', () => {
         pitch={frequencyToMusicalPitch(220)}
         continuityStatus="uncertain"
         lastAcceptedAgeMs={67}
+        measurementTimestampMs={100}
       />,
     );
     expect(

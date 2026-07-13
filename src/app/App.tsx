@@ -11,6 +11,7 @@ import { usePitchHistory } from '../hooks/usePitchHistory';
 import { usePitchDetection } from '../hooks/usePitchDetection';
 import { usePitchContinuity } from '../hooks/usePitchContinuity';
 import { useVisiblePitchRange } from '../hooks/useVisiblePitchRange';
+import { useCentsMeterDemo } from '../hooks/useCentsMeterDemo';
 
 export function App() {
   const pitch = usePitchDetection();
@@ -36,6 +37,15 @@ export function App() {
   const musicalPitch = useMusicalPitchFromDetection(
     continuity.state.lastAcceptedPitch,
   );
+  const centsMeterDemo = useCentsMeterDemo();
+  const readoutPitch =
+    centsMeterDemo === null ? musicalPitch : centsMeterDemo.pitch;
+  const readoutContinuityStatus =
+    centsMeterDemo?.status ?? continuity.state.status;
+  const readoutTimestampMs =
+    centsMeterDemo === null
+      ? continuity.state.lastAcceptedAtMs
+      : centsMeterDemo.timestampMs;
 
   return (
     <main className="app-shell">
@@ -48,15 +58,18 @@ export function App() {
 
       <MicrophoneStatus state={state} inputLevel={inputLevel} />
       <TunerReadout
-        pitch={musicalPitch}
-        continuityStatus={continuity.state.status}
+        pitch={readoutPitch}
+        continuityStatus={readoutContinuityStatus}
         lastAcceptedAgeMs={
-          continuity.state.lastAcceptedAtMs === null ||
-          continuity.state.lastPublicationAtMs === null
-            ? null
-            : continuity.state.lastPublicationAtMs -
-              continuity.state.lastAcceptedAtMs
+          centsMeterDemo !== null
+            ? 0
+            : continuity.state.lastAcceptedAtMs === null ||
+                continuity.state.lastPublicationAtMs === null
+              ? null
+              : continuity.state.lastPublicationAtMs -
+                continuity.state.lastAcceptedAtMs
         }
+        measurementTimestampMs={readoutTimestampMs}
       />
       <PitchDiagnostics
         diagnostics={pitch.diagnostics}

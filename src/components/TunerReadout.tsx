@@ -1,24 +1,22 @@
-import {
-  centsToIndicatorPercent,
-  formatCents,
-  formatFrequency,
-} from '../music/pitchDisplay';
+import { formatCents, formatFrequency } from '../music/pitchDisplay';
 import { DEFAULT_TUNING_A4_HZ } from '../music/tuning';
 import type { MusicalPitch } from '../types/musicalPitch';
 import type { PitchContinuityStatus } from '../types/pitchContinuity';
+import { CentsMeter } from './CentsMeter';
 
 type TunerReadoutProps = {
   pitch: MusicalPitch | null;
   continuityStatus?: PitchContinuityStatus;
   lastAcceptedAgeMs?: number | null;
+  measurementTimestampMs?: number | null;
 };
 
 export function TunerReadout({
   pitch,
   continuityStatus = pitch ? 'voiced' : 'unvoiced',
   lastAcceptedAgeMs = null,
+  measurementTimestampMs = null,
 }: TunerReadoutProps) {
-  const indicatorPosition = centsToIndicatorPercent(pitch?.cents ?? null);
   const noteLabel = pitch ? `${pitch.noteName}${pitch.octave}` : '—';
   const centsLabel = formatCents(pitch?.cents ?? null);
 
@@ -48,25 +46,12 @@ export function TunerReadout({
         <span aria-hidden="true" />
         <p>{centsLabel}</p>
       </div>
-      <div
-        className="tuning-indicator"
-        role="meter"
-        aria-label="Cents deviation"
-        aria-valuemin={-50}
-        aria-valuemax={50}
-        aria-valuenow={pitch?.cents ?? 0}
-        aria-valuetext={pitch ? centsLabel : 'No pitch'}
-      >
-        <span className="tuning-indicator__label">Flat</span>
-        <span className="tuning-indicator__track" aria-hidden="true">
-          <span className="tuning-indicator__center" />
-          <span
-            className="tuning-indicator__marker"
-            style={{ left: `${indicatorPosition}%` }}
-          />
-        </span>
-        <span className="tuning-indicator__label">Sharp</span>
-      </div>
+      <CentsMeter
+        rawCents={pitch?.cents ?? null}
+        noteMidi={pitch?.midiNote ?? null}
+        timestampMs={measurementTimestampMs}
+        continuityStatus={continuityStatus}
+      />
       <p className="tuning-reference">A4 = {DEFAULT_TUNING_A4_HZ} Hz</p>
     </section>
   );

@@ -13,6 +13,8 @@ Show:
 - current frequency;
 - compact centered tuning indicator.
 
+The nearest-note indicator uses the practical readout width, five semantic cents divisions, and a calm ±5-cent center zone. Numeric cents remain raw while marker motion alone is stabilized. Flat, In tune, and Sharp are available as text rather than color alone.
+
 ### Main monitor
 
 Show:

@@ -186,45 +186,141 @@ h1 {
   background: #323946;
 }
 
-.tuning-indicator {
-  width: min(100%, 21rem);
-  margin: 1.25rem auto 0;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.65rem;
+.cents-meter {
+  width: min(100%, 36rem);
+  margin: 1.15rem auto 0;
+  direction: ltr;
 }
 
-.tuning-indicator__label {
-  color: #758090;
+.cents-meter__classification {
+  min-height: 1.2rem;
+  margin: 0 0 0.35rem;
+  color: #9aa5b4;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.cents-meter--in-tune .cents-meter__classification {
+  color: #8ce4d2;
+}
+
+.cents-meter--uncertain .cents-meter__classification {
+  color: #d0ad83;
+}
+
+.cents-meter__scale {
+  min-width: 0;
+  padding: 0 0.55rem;
+}
+
+.cents-meter__track {
+  position: relative;
+  height: 1.8rem;
+  border: 1px solid #46505f;
+  border-radius: 999px;
+  background: #151b23;
+}
+
+.cents-meter__in-tune-zone {
+  position: absolute;
+  inset: 0 auto 0 45%;
+  width: 10%;
+  border-right: 1px solid #3e8175;
+  border-left: 1px solid #3e8175;
+  background: rgb(112 213 193 / 14%);
+}
+
+.cents-meter__tick {
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 1px;
+  background: #566171;
+  transform: translateX(-50%);
+}
+
+.cents-meter__tick--center {
+  top: 0.15rem;
+  bottom: 0.15rem;
+  width: 2px;
+  background: #d4dde7;
+}
+
+.cents-meter__marker {
+  position: absolute;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid #78dfcb;
+  border-radius: 50%;
+  background: #0d1218;
+  box-shadow: 0 0 0 2px rgb(11 14 19 / 72%);
+  opacity: 1;
+  transform: translate(-50%, -50%);
+  transition: opacity 100ms ease;
+}
+
+.cents-meter--in-tune .cents-meter__marker {
+  background: #78dfcb;
+  box-shadow:
+    0 0 0 2px #0b0e13,
+    0 0 0 4px rgb(120 223 203 / 24%);
+}
+
+.cents-meter--uncertain .cents-meter__marker {
+  border-style: dashed;
+  opacity: 0.52;
+}
+
+.cents-meter__marker[data-visible='false'] {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.cents-meter__tick-labels,
+.cents-meter__direction-labels {
+  display: grid;
+  font-variant-numeric: tabular-nums;
+}
+
+.cents-meter__tick-labels {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 0.3rem;
+  color: #7e8998;
+  font-size: 0.64rem;
+}
+
+.cents-meter__tick-labels span:first-child,
+.cents-meter__direction-labels span:first-child {
+  text-align: left;
+}
+
+.cents-meter__tick-labels span:last-child,
+.cents-meter__direction-labels span:last-child {
+  text-align: right;
+}
+
+.cents-meter__direction-labels {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.25rem;
+  color: #697586;
   font-size: 0.65rem;
 }
 
-.tuning-indicator__track {
-  position: relative;
-  height: 1.25rem;
-  border-bottom: 1px solid #46505f;
+.cents-meter__direction-labels span:nth-child(2) {
+  color: #84cdbf;
 }
 
-.tuning-indicator__center {
+.visually-hidden {
   position: absolute;
-  left: 50%;
-  bottom: -0.3rem;
-  width: 2px;
-  height: 0.65rem;
-  background: #9aa5b4;
-  transform: translateX(-50%);
-}
-
-.tuning-indicator__marker {
-  position: absolute;
-  bottom: -0.38rem;
-  width: 0.8rem;
-  height: 0.8rem;
-  border: 2px solid #70d5c1;
-  border-radius: 50%;
-  background: #10141a;
-  transform: translateX(-50%);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .tuning-reference {
@@ -759,5 +855,9 @@ h1 {
   *::before,
   *::after {
     scroll-behavior: auto !important;
+  }
+
+  .cents-meter__marker {
+    transition: none;
   }
 }

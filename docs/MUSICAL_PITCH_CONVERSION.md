@@ -1,5 +1,7 @@
 # Musical Pitch Conversion
 
+Issue 014 preserves raw cents exactly as this layer calculates them. Signed numeric text and tuning classification use raw cents. A separate 150 ms display-only value positions the cents marker; it is not part of `MusicalPitch`, is never stored in history, and resets immediately when `midiNote` changes at a ±50-cent boundary.
+
 ## Convention
 
 The application uses twelve-tone equal temperament and standard MIDI numbering:

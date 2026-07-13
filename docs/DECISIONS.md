@@ -163,3 +163,11 @@ The initial implementation optimistically published `playing` after `resume()` a
 Status: accepted
 
 Raw YIN results remain unchanged and inspectable. A pure timestamp-driven continuity layer before live/history state defers a gap for at most 160 ms after an established voice becomes uncertain. Recovery requires a new normally accepted raw pitch and emits no duplicated samples; uncertainty beyond the inclusive boundary emits exactly one gap at uncertainty onset. Entry and continuation keep the same raw thresholds, and candidate recovery remains disabled. Canvas retains its independent 250 ms safeguard.
+
+## ADR-018 — Cents smoothing belongs only to marker presentation
+
+Status: accepted
+
+Nearest-note raw cents remain the musical measurement and drive numeric text and stable classification. A separate constant-space display value positions only the cents marker with a 150 ms time-aware exponential response. It never feeds detector, continuity, history, curve, drone, or scoring state.
+
+The marker initializes directly, freezes during uncertainty, hides and resets when unvoiced, and snaps to new note-relative cents when nearest MIDI changes. The semantic range remains ±50 cents; a ±5-cent center band is visual guidance only. Reduced motion selects direct marker updates.
