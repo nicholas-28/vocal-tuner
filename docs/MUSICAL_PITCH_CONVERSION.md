@@ -34,6 +34,14 @@ Signed cents relative to the nearest note are:
 cents = (fractionalMidi - nearestMidiNote) × 100
 ```
 
+Issue 015 adds a second, explicitly named measurement:
+
+```text
+targetRelativeCents = (fractionalMidi - selectedTargetMidi) × 100
+```
+
+Unlike nearest-note cents, target-relative cents are unbounded and do not wrap when the detected nearest note changes. They compare against the exact selected equal-tempered MIDI target; for example, A#4 against A4 is +100 cents and A5 against A4 is +1200 cents. They are derived outside `MusicalPitch`, preserving the model's existing nearest-note `cents` field.
+
 Calculations retain full JavaScript precision. Rounding occurs only for display.
 
 ## Midpoints

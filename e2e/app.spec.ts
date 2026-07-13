@@ -91,6 +91,12 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByText('unvoiced', { exact: true })).toBeVisible();
   await expect(page.getByText('— Hz')).toBeVisible();
   await expect(page.getByText('— cents')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Target guidance' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Select a reference note to enable target guidance/),
+  ).toBeVisible();
   const centsMeter = page.getByRole('meter', {
     name: 'Nearest-note cents meter',
   });
@@ -157,7 +163,6 @@ test('loads the initial tuner screen', async ({ page }) => {
       ),
     )
     .toBeCloseTo(1, 4);
-  await expect(page.getByText(/target cents/i)).toHaveCount(0);
   await expect(
     page.getByRole('img', {
       name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
@@ -205,6 +210,10 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'could not start',
   );
+  await expect(page.getByText('C4 · 261.6 Hz')).toBeVisible();
+  await expect(
+    page.getByText('Raise the pitch', { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByLabel('Reference-drone diagnostics values'),
   ).toContainText('suspended');
@@ -251,6 +260,58 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'Reference drone playing A4 at 440.0 Hz',
   );
+  await setCentsMeterDemo(frequencyAtMidi(69), 'voiced', 500);
+  const targetMeter = page.getByRole('meter', {
+    name: 'Selected-target cents meter',
+  });
+  await expect(targetMeter).toBeVisible();
+  await expect(page.getByText('On target', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Within 10 cents of A4', { exact: true }),
+  ).toBeVisible();
+  await expect(targetMeter).toHaveAttribute('data-off-scale', 'false');
+  await setCentsMeterDemo(frequencyAtMidi(68.8), 'voiced', 700);
+  await expect(
+    page.getByText('Raise the pitch', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('20.0 cents below A4', { exact: true }),
+  ).toBeVisible();
+  await setCentsMeterDemo(frequencyAtMidi(69.2), 'voiced', 900);
+  await expect(
+    page.getByText('Lower the pitch', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('20.0 cents above A4', { exact: true }),
+  ).toBeVisible();
+  await setCentsMeterDemo(frequencyAtMidi(70), 'voiced', 1100);
+  await expect(
+    page.getByText('1 semitone above A4', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Different note')).toBeVisible();
+  await expect(targetMeter).toHaveAttribute('data-off-scale', 'right');
+  await expect(targetMeter).toHaveAttribute('aria-valuenow', '50');
+  const targetMarker = page.locator('.target-meter__marker');
+  const heldTargetMarkerPosition = await targetMarker.evaluate(
+    (element) => (element as HTMLElement).style.left,
+  );
+  await setCentsMeterDemo(frequencyAtMidi(70), 'uncertain', 1100);
+  await expect(page.locator('.target-guidance')).toHaveClass(
+    /target-guidance--uncertain/,
+  );
+  expect(
+    await targetMarker.evaluate(
+      (element) => (element as HTMLElement).style.left,
+    ),
+  ).toBe(heldTargetMarkerPosition);
+  await setCentsMeterDemo(null, 'unvoiced', null);
+  await expect(page.getByText('A4 · 440.0 Hz')).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Target guidance' })
+      .getByText('No pitch detected.'),
+  ).toBeVisible();
+  await expect(targetMeter).toHaveCount(0);
   await expect(
     page.getByText('Start the microphone to begin pitch history.'),
   ).toBeVisible();
@@ -296,6 +357,7 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'Reference drone playing A4 at 440.0 Hz',
   );
+  await expect(page.getByText('A4 · 440.0 Hz')).toBeVisible();
   await expect(
     page.getByText('Reference drone A4 is outside the visible graph range.'),
   ).toBeVisible();

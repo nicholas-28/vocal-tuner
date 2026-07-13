@@ -725,6 +725,178 @@ h1 {
   line-height: 1.4;
 }
 
+.target-guidance {
+  margin-top: 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid #2d3743;
+  border-radius: 0.8rem;
+  background: #0d1218;
+}
+
+.target-guidance h3 {
+  margin: 0;
+  color: #d9e0e8;
+  font-size: 0.82rem;
+}
+
+.target-guidance__empty {
+  margin: 0.5rem 0 0;
+  color: #8490a0;
+  font-size: 0.72rem;
+}
+
+.target-guidance__notes {
+  margin: 0.65rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.target-guidance__notes div {
+  min-width: 0;
+}
+
+.target-guidance__notes dt {
+  color: #697586;
+  font-size: 0.62rem;
+}
+
+.target-guidance__notes dd {
+  margin: 0.15rem 0 0;
+  color: #cbd3dd;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.target-guidance__measurement {
+  margin-top: 0.7rem;
+}
+
+.target-guidance__instruction {
+  margin: 0;
+  color: #e1e7ee;
+  font-size: 1rem;
+  font-weight: 720;
+}
+
+.target-guidance--on-target .target-guidance__instruction {
+  color: #8ce4d2;
+}
+
+.target-guidance--uncertain .target-guidance__instruction {
+  color: #d0ad83;
+}
+
+.target-guidance__instruction span {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.target-guidance__distance,
+.target-guidance__neighborhood {
+  margin: 0.2rem 0 0;
+  color: #a8b2bf;
+  font-size: 0.72rem;
+}
+
+.target-guidance__neighborhood {
+  color: #758293;
+  font-size: 0.65rem;
+}
+
+.target-meter {
+  position: relative;
+  height: 1.55rem;
+  margin-top: 0.65rem;
+  border: 1px solid #46505f;
+  border-radius: 999px;
+  background: #151b23;
+}
+
+.target-meter__zone {
+  position: absolute;
+  inset: 0 auto 0 40%;
+  width: 20%;
+  border-right: 1px solid #3e8175;
+  border-left: 1px solid #3e8175;
+  background: rgb(112 213 193 / 14%);
+}
+
+.target-meter__center {
+  position: absolute;
+  top: 0.15rem;
+  bottom: 0.15rem;
+  left: 50%;
+  width: 2px;
+  background: #d4dde7;
+  transform: translateX(-50%);
+}
+
+.target-meter__marker {
+  position: absolute;
+  top: 50%;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid #78dfcb;
+  border-radius: 50%;
+  background: #0d1218;
+  transform: translate(-50%, -50%);
+  transition: opacity 100ms ease;
+}
+
+.target-guidance--on-target .target-meter__marker {
+  background: #78dfcb;
+}
+
+.target-guidance--uncertain .target-meter__marker {
+  border-style: dashed;
+  opacity: 0.52;
+}
+
+.target-meter__overflow {
+  position: absolute;
+  top: 50%;
+  display: none;
+  color: #d0ad83;
+  font-size: 1.2rem;
+  font-weight: 800;
+  transform: translateY(-53%);
+}
+
+.target-meter__overflow--left {
+  left: 0.18rem;
+}
+
+.target-meter__overflow--right {
+  right: 0.18rem;
+}
+
+.target-meter[data-off-scale='left'] .target-meter__overflow--left,
+.target-meter[data-off-scale='right'] .target-meter__overflow--right {
+  display: block;
+}
+
+.target-meter__labels {
+  margin-top: 0.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  color: #6f7b8b;
+  font-size: 0.6rem;
+}
+
+.target-meter__labels span:first-child {
+  text-align: left;
+}
+
+.target-meter__labels span:nth-child(2) {
+  color: #84cdbf;
+  text-align: center;
+}
+
+.target-meter__labels span:last-child {
+  text-align: right;
+}
+
 .reference-drone-diagnostics {
   margin-top: 0.55rem;
   border: 1px solid var(--border-subtle);
@@ -858,6 +1030,10 @@ h1 {
   }
 
   .cents-meter__marker {
+    transition: none;
+  }
+
+  .target-meter__marker {
     transition: none;
   }
 }

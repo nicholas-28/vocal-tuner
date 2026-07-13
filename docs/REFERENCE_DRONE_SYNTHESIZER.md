@@ -57,6 +57,8 @@ Changing the visible graph range releases transient key pressure and clamps keyb
 
 Reference playback never requests microphone permission and does not start, stop, pause, clear, record, or transform microphone or history state. Conversely, microphone Start/Stop and history Pause/Resume/Clear do not change the drone.
 
+Issue 015 derives target guidance from persistent keyboard selection, not `activeMidi`. Guidance therefore remains active when playback is stopped, suspended, unavailable, or in error. Starting or stopping the selected drone neither creates nor clears a separate target, while selecting another key updates both selection-driven guidance and the existing drone command through their separate owners.
+
 Because speaker output can feed back into the microphone and pitch detector, the interface recommends headphones. Echo cancellation settings cannot guarantee acoustic isolation, so users remain responsible for output level and physical routing.
 
 ## Confirmed playback, suspension, errors, and races

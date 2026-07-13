@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { frequencyToMusicalPitch } from '../music/pitchConversion';
 import type { PitchHistorySummary } from '../types/pitchHistory';
 import { installReferenceDroneAudioMock } from '../test/referenceDroneAudioMock';
 import { PitchMonitor } from './PitchMonitor';
@@ -24,6 +25,9 @@ const defaultRangeProps = {
   onShiftRangeDown: vi.fn(),
   onShiftRangeUp: vi.fn(),
   onResetRange: vi.fn(),
+  detectedPitch: null,
+  continuityStatus: 'unvoiced' as const,
+  measurementTimestampMs: null,
 };
 
 describe('PitchMonitor history diagnostics', () => {
@@ -292,6 +296,8 @@ describe('PitchMonitor history diagnostics', () => {
     expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
       'Reference drone playing A4 at 440.0 Hz',
     );
+    expect(screen.getByText('A4 · 440.0 Hz')).toBeInTheDocument();
+    expect(screen.getByText('No pitch detected.')).toBeInTheDocument();
 
     rerender(
       <PitchMonitor
@@ -321,5 +327,75 @@ describe('PitchMonitor history diagnostics', () => {
     expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
       'Reference drone playing A4 at 440.0 Hz',
     );
+
+    rerender(
+      <PitchMonitor
+        {...sharedProps}
+        active
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+      />,
+    );
+    expect(a4).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('A4 · 440.0 Hz')).toBeInTheDocument();
+  });
+
+  it('keeps target guidance independent from drone playback and visible range', async () => {
+    const sharedProps = {
+      history: { points: [] },
+      summary: emptySummary,
+      active: false,
+      captureState: {
+        status: 'recording' as const,
+        accumulatedPausedDurationMs: 0,
+        resumeBoundaryEffectiveMs: null,
+      },
+      sessionVersion: 0,
+      toEffectiveTimestamp: (timestamp: number) => timestamp,
+      durationMs: 15_000,
+      onClear: vi.fn(),
+      onPause: vi.fn(),
+      onResume: vi.fn(),
+      ...defaultRangeProps,
+      detectedPitch: frequencyToMusicalPitch(440),
+      continuityStatus: 'voiced' as const,
+      measurementTimestampMs: 100,
+    };
+    const { rerender } = render(<PitchMonitor {...sharedProps} />);
+    const a4 = screen.getByRole('button', {
+      name: 'Reference note A4, 440.0 hertz',
+    });
+    fireEvent.click(a4);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone playing A4 at 440.0 Hz',
+      ),
+    );
+    expect(screen.getByText('On target')).toBeInTheDocument();
+
+    fireEvent.click(a4);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone stopped',
+      ),
+    );
+    expect(a4).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('On target')).toBeInTheDocument();
+
+    rerender(
+      <PitchMonitor
+        {...sharedProps}
+        visibleRange={{ lowMidi: 36, highMidi: 60 }}
+        selectedRangePresetId="low"
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Reference note A4, 440.0 hertz' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText('A4 · 440.0 Hz')).toHaveLength(2);
+    expect(screen.getByText('On target')).toBeInTheDocument();
   });
 });

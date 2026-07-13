@@ -1,5 +1,7 @@
 import type { PitchHistory, PitchHistorySummary } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
+import type { MusicalPitch } from '../types/musicalPitch';
+import type { PitchContinuityStatus } from '../types/pitchContinuity';
 import type {
   VisiblePitchRange,
   VisiblePitchRangePresetId,
@@ -28,6 +30,9 @@ type PitchMonitorProps = {
   onShiftRangeDown: () => void;
   onShiftRangeUp: () => void;
   onResetRange: () => void;
+  detectedPitch: MusicalPitch | null;
+  continuityStatus: PitchContinuityStatus;
+  measurementTimestampMs: number | null;
 };
 
 export function PitchMonitor({
@@ -50,6 +55,9 @@ export function PitchMonitor({
   onShiftRangeDown,
   onShiftRangeUp,
   onResetRange,
+  detectedPitch,
+  continuityStatus,
+  measurementTimestampMs,
 }: PitchMonitorProps) {
   const relativeNewestMs =
     summary.oldestTimestampMs === null || summary.newestTimestampMs === null
@@ -139,6 +147,9 @@ export function PitchMonitor({
         visibleDurationMs={durationMs}
         lowMidi={visibleRange.lowMidi}
         highMidi={visibleRange.highMidi}
+        detectedPitch={detectedPitch}
+        continuityStatus={continuityStatus}
+        measurementTimestampMs={measurementTimestampMs}
       />
     </section>
   );

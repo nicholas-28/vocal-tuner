@@ -35,6 +35,12 @@ Start with:
 - visible range;
 - settings.
 
+### Target guidance
+
+Selecting a reference key reveals a compact panel near the drone controls. It clearly labels the selected target and detected note, then uses neutral practice wording: Raise the pitch, On target, or Lower the pitch. A dedicated ±50-cent target meter highlights the inclusive ±10 target zone and shows explicit overflow beyond its visual range. Text always retains meaningful unbounded distance, so a different note or octave never appears centered through nearest-note wrapping.
+
+The panel stays useful with the drone stopped and keeps its target through microphone and history controls. Brief uncertainty is subdued and frozen; confirmed no pitch keeps target identity but removes active correction. The panel uses position and words rather than color alone and is not a high-frequency live region.
+
 ## Visual principles
 
 - Calm, minimal, and readable

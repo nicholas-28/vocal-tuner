@@ -36,6 +36,8 @@ Pointer or Enter/Space press sets only `pressedMidi`. A completed activation sel
 
 The selected note and drone are independent from detected pitch, microphone lifecycle, history Pause/Resume, and Clear. A visible-range change releases any active press but preserves selection and playback. When hidden, an explicit status describes the out-of-range sounding reference.
 
+Issue 015 also treats persistent `selectedMidi` as the target for pitch guidance. Selection remains the target when the drone is stopped, unavailable, or outside the visible range. `activeDroneMidi` is never used as target ownership, and no Web Audio state is required for comparison.
+
 ## Pointer lifecycle and drag policy
 
 Pointer Events cover mouse, touch, and pen input. The first pointer owns the monophonic press and additional pointers are ignored. Pointer capture keeps release delivery reliable outside the key. Pointer up, pointer cancel, lost capture, window blur, focus leaving the keyboard, range change, and unmount all clear the transient press.

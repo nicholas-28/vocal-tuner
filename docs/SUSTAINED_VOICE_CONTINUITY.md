@@ -18,6 +18,8 @@ The live readout retains the last measured note during uncertainty and labels it
 
 Issue 014 also freezes the cents marker at its last display position during uncertainty and visually subdues it. It does not keep moving toward a stale target. Confirmed unvoiced state hides the marker and resets display smoothing; the next accepted pitch initializes directly.
 
+Issue 015 applies the same evidence boundary to selected-target guidance with a separate display state. Brief uncertainty retains the last accepted target comparison, freezes its marker, labels it uncertain, and never evaluates the rejected candidate. Confirmed unvoiced keeps the selected target visible but removes Raise/Lower and the current target distance. Recovery resumes from the next accepted measurement. A target selection change recomputes from the retained accepted pitch and resets target-marker smoothing without changing continuity state.
+
 History consumes decisions: holds add nothing; recovery adds only the new raw accepted point; timeout adds one sparse gap at uncertainty onset. Pause/Resume timestamp rebasing, Clear, retention, fractional MIDI, visible-range omission, and the curve's 250 ms safeguard are unchanged.
 
 ## Diagnostics, performance, and accessibility
@@ -28,4 +30,4 @@ Each transition is constant-time at existing publication cadence. There are no a
 
 ## Limitations
 
-Chrome and Safari device testing is still required for breathy/quiet voices, background noise, scheduling delays, sample-rate differences, and octave errors. There is no ML VAD, pitch correction, octave concealment, candidate recovery, target guidance, or browser sniffing. Any threshold change requires measured evidence and separate tests.
+Chrome and Safari device testing is still required for breathy/quiet voices, background noise, scheduling delays, sample-rate differences, and octave errors. There is no ML VAD, pitch correction, octave concealment, candidate recovery, or browser sniffing. Target guidance does not alter these detector or continuity limits. Any threshold change requires measured evidence and separate tests.

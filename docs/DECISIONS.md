@@ -171,3 +171,11 @@ Status: accepted
 Nearest-note raw cents remain the musical measurement and drive numeric text and stable classification. A separate constant-space display value positions only the cents marker with a 150 ms time-aware exponential response. It never feeds detector, continuity, history, curve, drone, or scoring state.
 
 The marker initializes directly, freezes during uncertainty, hides and resets when unvoiced, and snaps to new note-relative cents when nearest MIDI changes. The semantic range remains ±50 cents; a ±5-cent center band is visual guidance only. Reduced motion selects direct marker updates.
+
+## ADR-019 — Selected-target cents are unbounded and do not wrap
+
+Status: accepted
+
+The persistent reference-keyboard selection, not drone sounding state, defines the practice target. Target-relative cents use `(detectedFractionalMidi - targetMidi) × 100`, remain separate from nearest-note cents, and are never rounded, wrapped, or clamped in the musical result. An inclusive ±10-cent tolerance controls only target classification.
+
+The dedicated target meter presents a bounded ±50-cent view with explicit overflow while text retains meaningful unbounded distance. Its independent 180 ms display-only smoother resets on target changes and no pitch, freezes during uncertainty, and is bypassed for reduced motion. Target comparison never enters detector, continuity, history, Canvas, drone, or scoring state.

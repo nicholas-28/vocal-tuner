@@ -13,6 +13,8 @@ import { useReferenceKeyboard } from '../hooks/useReferenceKeyboard';
 import type { MidiRange } from '../types/pitchGrid';
 import type { PitchHistory } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
+import type { MusicalPitch } from '../types/musicalPitch';
+import type { PitchContinuityStatus } from '../types/pitchContinuity';
 import { drawPitchCurve } from '../visualization/drawPitchCurve';
 import { drawPitchGrid } from '../visualization/drawPitchGrid';
 import { DEFAULT_PITCH_CURVE_CONFIG } from '../visualization/pitchCurveConfig';
@@ -30,6 +32,7 @@ import { ReferenceDroneControls } from './ReferenceDroneControls';
 import { ReferenceDroneDiagnostics } from './ReferenceDroneDiagnostics';
 import { ReferenceDroneStatus } from './ReferenceDroneStatus';
 import { ReferenceNoteStatus } from './ReferenceNoteStatus';
+import { TargetPitchGuidance } from './TargetPitchGuidance';
 
 type PitchGridCanvasProps = Partial<MidiRange> & {
   history: PitchHistory;
@@ -39,6 +42,9 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
   toEffectiveTimestamp: (sourceTimestampMs: number) => number | null;
   visibleDurationMs: number;
   presentTimeXRatio?: number;
+  detectedPitch?: MusicalPitch | null;
+  continuityStatus?: PitchContinuityStatus;
+  measurementTimestampMs?: number | null;
 };
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
@@ -51,6 +57,9 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   lowMidi = DEFAULT_PITCH_GRID_RANGE.lowMidi,
   highMidi = DEFAULT_PITCH_GRID_RANGE.highMidi,
   presentTimeXRatio = DEFAULT_PRESENT_TIME_X_RATIO,
+  detectedPitch = null,
+  continuityStatus = 'unvoiced',
+  measurementTimestampMs = null,
 }: PitchGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -202,6 +211,12 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
         onStartSelected={(midiNote) => void referenceDrone.playMidi(midiNote)}
         onStop={() => void referenceDrone.stop()}
         onVolumeChange={referenceDrone.setVolume}
+      />
+      <TargetPitchGuidance
+        selectedMidi={referenceKeyboard.state.selectedMidi}
+        detectedPitch={detectedPitch}
+        continuityStatus={continuityStatus}
+        measurementTimestampMs={measurementTimestampMs}
       />
       {showReferenceDroneDiagnostics && (
         <ReferenceDroneDiagnostics

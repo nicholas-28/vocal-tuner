@@ -162,3 +162,17 @@ Implemented on branch `issue-014-cents-meter-readability`.
 - Frozen uncertainty, hidden/reset no-pitch marker, and clean session initialization
 - Reduced-motion direct updates and accessible descriptions
 - Detector, continuity, history, curve, keyboard, and drone semantics unchanged
+
+## Issue 015 — Target-note comparison and cents guidance
+
+Implemented on branch `issue-015-target-note-guidance`.
+
+- Persistent selected reference MIDI as the target, independent from drone playback
+- Exact unbounded target-relative cents from accepted fractional MIDI with no nearest-note wrapping
+- Inclusive ±10-cent target tolerance and typed on-target/close/far/different-note bands
+- Directionally correct Raise / On target / Lower guidance and meaningful large-distance formatting
+- Dedicated ±50 target meter with ±10 zone and explicit off-scale states
+- Separate 180 ms marker-only smoothing, uncertainty freeze, no-pitch reset, and reduced-motion bypass
+- Target preserved through graph range, microphone, drone, and history transitions
+- Semantic target/detected labels, frequencies, direction, distance, uncertainty, and no-pitch text
+- No scoring, session tracking, recording, replay, target-follow automation, dependency, history, or Canvas change

@@ -96,6 +96,9 @@ export function App() {
         onShiftRangeDown={visiblePitchRange.shiftDownOctave}
         onShiftRangeUp={visiblePitchRange.shiftUpOctave}
         onResetRange={visiblePitchRange.reset}
+        detectedPitch={readoutPitch}
+        continuityStatus={readoutContinuityStatus}
+        measurementTimestampMs={readoutTimestampMs}
       />
       <MicrophoneControls
         state={state}

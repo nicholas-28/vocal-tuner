@@ -42,4 +42,6 @@ Each publication performs one O(1), constant-space scalar transition. There is n
 
 ## Limitations
 
-The ±5-cent zone is visual guidance, not vocal scoring. Raw history still contains natural vibrato. Perceived calmness and lag require physical browser/device testing. This meter does not compare with the reference drone; target-relative guidance remains a future issue.
+The ±5-cent zone is visual guidance, not vocal scoring. Raw history still contains natural vibrato. Perceived calmness and lag require physical browser/device testing.
+
+Issue 015 adds a separate selected-target panel. It does not change this meter: nearest-note cents still wrap at the nearest-note boundary and use this meter's ±5 visual zone and 150 ms marker state. Target-relative cents are explicitly named, unbounded, use a distinct ±10 classification zone and 180 ms marker state, and never enter this hook.
