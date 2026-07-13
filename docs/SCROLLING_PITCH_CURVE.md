@@ -1,5 +1,7 @@
 # Scrolling Pitch Curve
 
+Issue 013 does not change coordinates or the 250 ms connection maximum. Upstream continuity now confirms gaps: recovered short uncertainty has no artificial gap or pitch sample, while uncertainty beyond 160 ms has one explicit gap and remains disconnected. Canvas is not the continuity owner.
+
 Issue 008 renders the bounded pitch history as a live foreground Canvas over the static semitone-grid Canvas. It consumes immutable accepted pitch and gap points directly; it does not read audio samples, detector candidates, or recompute frequency-to-MIDI conversion.
 
 ## Time coordinates and reference time

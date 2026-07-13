@@ -48,6 +48,15 @@ describe('pitch curve segments', () => {
     ).toEqual([[pitch(19_500)], [pitch(19_800)]]);
   });
 
+  it('connects unsampled short uncertainty but never crosses a confirmed gap', () => {
+    expect(segments([pitch(19_800, 60), pitch(19_960, 60.4)])).toEqual([
+      [pitch(19_800, 60), pitch(19_960, 60.4)],
+    ]);
+    expect(
+      segments([pitch(19_500, 60), gap(19_600), pitch(19_760, 60.4)]),
+    ).toEqual([[pitch(19_500, 60)], [pitch(19_760, 60.4)]]);
+  });
+
   it('breaks on null/invalid MIDI, non-monotonic time, and large intervals', () => {
     const invalidMidi = { ...pitch(19_200), midi: Number.NaN };
     expect(

@@ -1,5 +1,7 @@
 # Pitch History Buffer
 
+Issue 013 places continuity before ingestion. A short rejection produces a hold and adds no point. If raw pitch resumes within the inclusive 160 ms grace period, only that new measurement is stored. Beyond the boundary, exactly one sparse gap is inserted at uncertainty onset; continued rejection adds no repeated gaps. No held or synthesized pitch is stored.
+
 ## Point model
 
 Each immutable point contains:

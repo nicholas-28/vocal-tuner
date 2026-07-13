@@ -9,26 +9,32 @@ import { useMicrophone } from '../hooks/useMicrophone';
 import { useMusicalPitchFromDetection } from '../hooks/useMusicalPitch';
 import { usePitchHistory } from '../hooks/usePitchHistory';
 import { usePitchDetection } from '../hooks/usePitchDetection';
+import { usePitchContinuity } from '../hooks/usePitchContinuity';
 import { useVisiblePitchRange } from '../hooks/useVisiblePitchRange';
 
 export function App() {
   const pitch = usePitchDetection();
+  const continuity = usePitchContinuity();
   const history = usePitchHistory();
   const visiblePitchRange = useVisiblePitchRange();
   const { state, inputLevel, start, stop } = useMicrophone(undefined, {
-    onSessionStarted: history.startSession,
+    onSessionStarted: () => {
+      continuity.reset();
+      history.startSession();
+    },
     onDetection: (detection) => {
       pitch.onDetection(detection);
-      history.onDetection(detection);
+      history.onContinuityDecision(continuity.onDetection(detection));
     },
     onAnalysisError: pitch.onError,
     onAnalysisReset: () => {
       pitch.reset();
+      continuity.reset();
       history.stopSession();
     },
   });
   const musicalPitch = useMusicalPitchFromDetection(
-    pitch.diagnostics.detection,
+    continuity.state.lastAcceptedPitch,
   );
 
   return (
@@ -41,10 +47,21 @@ export function App() {
       </header>
 
       <MicrophoneStatus state={state} inputLevel={inputLevel} />
-      <TunerReadout pitch={musicalPitch} />
+      <TunerReadout
+        pitch={musicalPitch}
+        continuityStatus={continuity.state.status}
+        lastAcceptedAgeMs={
+          continuity.state.lastAcceptedAtMs === null ||
+          continuity.state.lastPublicationAtMs === null
+            ? null
+            : continuity.state.lastPublicationAtMs -
+              continuity.state.lastAcceptedAtMs
+        }
+      />
       <PitchDiagnostics
         diagnostics={pitch.diagnostics}
         microphoneState={state}
+        continuity={continuity.state}
       />
       <PitchMonitor
         history={history.history}

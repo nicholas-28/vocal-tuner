@@ -157,3 +157,9 @@ Reference playback uses its own lazily created `AudioContext`, separate from mic
 A completed key activation selects and starts a note. Release removes only pressed feedback; activating the sounding note toggles audio off without clearing selection. Start and Stop remain explicit alternatives. Selection and playback survive visible-range changes, including when the note is not rendered. Operation tokens and shared asynchronous lifecycle promises make newer play/stop intent win over stale context-resume or release work. Disposal stops and disconnects nodes and closes the dedicated context. No audio is recorded, retained, logged, or uploaded.
 
 The initial implementation optimistically published `playing` after `resume()` and `oscillator.start()` returned, without proving the context had reached `running` or tracking graph connections. Manual testing exposed a silent graph with a false playing label. The accepted policy now requires post-resume `running`, destination and voice connection confirmation, successful oscillator start and attack scheduling, valid effective gain, and a current operation token. Context `statechange` invalidates active playback when output leaves `running`. Development-only transition diagnostics expose these invariants. This policy confirms Web Audio readiness but cannot guarantee the physical output route.
+
+## ADR-017 — Temporal continuity owns deferred gap confirmation
+
+Status: accepted
+
+Raw YIN results remain unchanged and inspectable. A pure timestamp-driven continuity layer before live/history state defers a gap for at most 160 ms after an established voice becomes uncertain. Recovery requires a new normally accepted raw pitch and emits no duplicated samples; uncertainty beyond the inclusive boundary emits exactly one gap at uncertainty onset. Entry and continuation keep the same raw thresholds, and candidate recovery remains disabled. Canvas retains its independent 250 ms safeguard.

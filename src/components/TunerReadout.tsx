@@ -5,12 +5,19 @@ import {
 } from '../music/pitchDisplay';
 import { DEFAULT_TUNING_A4_HZ } from '../music/tuning';
 import type { MusicalPitch } from '../types/musicalPitch';
+import type { PitchContinuityStatus } from '../types/pitchContinuity';
 
 type TunerReadoutProps = {
   pitch: MusicalPitch | null;
+  continuityStatus?: PitchContinuityStatus;
+  lastAcceptedAgeMs?: number | null;
 };
 
-export function TunerReadout({ pitch }: TunerReadoutProps) {
+export function TunerReadout({
+  pitch,
+  continuityStatus = pitch ? 'voiced' : 'unvoiced',
+  lastAcceptedAgeMs = null,
+}: TunerReadoutProps) {
   const indicatorPosition = centsToIndicatorPercent(pitch?.cents ?? null);
   const noteLabel = pitch ? `${pitch.noteName}${pitch.octave}` : '—';
   const centsLabel = formatCents(pitch?.cents ?? null);
@@ -20,11 +27,22 @@ export function TunerReadout({ pitch }: TunerReadoutProps) {
       <div
         className="current-note"
         aria-label={
-          pitch ? `Current note: ${noteLabel}` : 'Current note: unavailable'
+          pitch
+            ? `Current note: ${noteLabel}${continuityStatus === 'uncertain' ? ', briefly uncertain' : ''}`
+            : 'Current note: unavailable'
         }
       >
         {noteLabel}
       </div>
+      <p
+        className={`readout__continuity readout__continuity--${continuityStatus}`}
+      >
+        {continuityStatus === 'uncertain'
+          ? `Briefly uncertain · last measured ${Math.round(lastAcceptedAgeMs ?? 0)} ms ago`
+          : continuityStatus === 'voiced'
+            ? 'Stable'
+            : 'No pitch'}
+      </p>
       <div className="pitch-details">
         <p>{formatFrequency(pitch?.frequencyHz ?? null)}</p>
         <span aria-hidden="true" />

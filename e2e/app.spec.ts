@@ -85,6 +85,8 @@ test('loads the initial tuner screen', async ({ page }) => {
     page.getByRole('button', { name: 'Start microphone' }),
   ).toBeVisible();
   await expect(page.getByLabel('Current note: unavailable')).toHaveText('—');
+  await expect(page.getByText('No pitch', { exact: true })).toBeVisible();
+  await expect(page.getByText('unvoiced', { exact: true })).toBeVisible();
   await expect(page.getByText('— Hz')).toBeVisible();
   await expect(page.getByText('— cents')).toBeVisible();
   await expect(

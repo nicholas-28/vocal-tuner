@@ -34,4 +34,20 @@ describe('TunerReadout', () => {
       left: '50%',
     });
   });
+
+  it('marks a retained measurement as briefly uncertain', () => {
+    render(
+      <TunerReadout
+        pitch={frequencyToMusicalPitch(220)}
+        continuityStatus="uncertain"
+        lastAcceptedAgeMs={67}
+      />,
+    );
+    expect(
+      screen.getByText('Briefly uncertain · last measured 67 ms ago'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Current note: A3, briefly uncertain'),
+    ).toBeInTheDocument();
+  });
 });

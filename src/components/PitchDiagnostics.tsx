@@ -5,10 +5,13 @@ import type {
   PitchDiagnostics as Diagnostics,
 } from '../types/pitch';
 import type { PitchRejectionReason } from '../types/pitch';
+import type { PitchContinuityState } from '../types/pitchContinuity';
+import { DEFAULT_PITCH_CONTINUITY_CONFIG } from '../pitch/pitchContinuityConfig';
 
 type PitchDiagnosticsProps = {
   diagnostics: Diagnostics;
   microphoneState: MicrophoneState;
+  continuity?: PitchContinuityState;
 };
 
 const statusLabels: Record<PitchAnalysisState, string> = {
@@ -34,12 +37,32 @@ const rejectionLabels: Record<PitchRejectionReason, string> = {
 export function PitchDiagnostics({
   diagnostics,
   microphoneState,
+  continuity,
 }: PitchDiagnosticsProps) {
   const state =
     microphoneState === 'active' && diagnostics.state === 'inactive'
       ? 'listening'
       : diagnostics.state;
   const detection = diagnostics.detection;
+  const lastAcceptedAgeMs =
+    continuity?.lastAcceptedAtMs != null &&
+    continuity.lastPublicationAtMs != null
+      ? continuity.lastPublicationAtMs - continuity.lastAcceptedAtMs
+      : null;
+  const uncertainDurationMs =
+    continuity?.uncertainSinceMs != null &&
+    continuity.lastPublicationAtMs != null
+      ? continuity.lastPublicationAtMs - continuity.uncertainSinceMs
+      : null;
+  const completedUncertainties = continuity
+    ? continuity.statistics.uncertaintiesRecovered +
+      continuity.statistics.confirmedGaps
+    : 0;
+  const averageUncertaintyMs =
+    continuity && completedUncertainties > 0
+      ? continuity.statistics.totalUncertaintyDurationMs /
+        completedUncertainties
+      : null;
 
   return (
     <section className="diagnostics" aria-label="Pitch detector diagnostics">
@@ -53,6 +76,101 @@ export function PitchDiagnostics({
         <strong>{statusLabels[state]}</strong>
       </div>
       <dl className="diagnostics__grid">
+        {continuity ? (
+          <>
+            <div>
+              <dt>Continuity</dt>
+              <dd>{continuity.status}</dd>
+            </div>
+            <div>
+              <dt>Grace period</dt>
+              <dd>{DEFAULT_PITCH_CONTINUITY_CONFIG.gracePeriodMs} ms</dd>
+            </div>
+            <div>
+              <dt>Threshold profile</dt>
+              <dd>
+                {continuity.status === 'unvoiced' ? 'Entry' : 'Continuation'}
+              </dd>
+            </div>
+            <div>
+              <dt>Last accepted age</dt>
+              <dd>
+                {lastAcceptedAgeMs === null
+                  ? '—'
+                  : `${Math.round(lastAcceptedAgeMs)} ms`}
+              </dd>
+            </div>
+            <div>
+              <dt>Uncertain duration</dt>
+              <dd>
+                {uncertainDurationMs === null
+                  ? '—'
+                  : `${Math.round(uncertainDurationMs)} ms`}
+              </dd>
+            </div>
+            <div>
+              <dt>Last decision</dt>
+              <dd>{continuity.lastDecisionKind ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Recovered / gaps</dt>
+              <dd>
+                {continuity.statistics.uncertaintiesRecovered} /{' '}
+                {continuity.statistics.confirmedGaps}
+              </dd>
+            </div>
+            <div>
+              <dt>Candidate recovery</dt>
+              <dd>Disabled</dd>
+            </div>
+            <div>
+              <dt>Raw accepted / rejected</dt>
+              <dd>
+                {continuity.statistics.rawAcceptedFrames} /{' '}
+                {continuity.statistics.rawRejectedFrames}
+              </dd>
+            </div>
+            <div>
+              <dt>Total publications</dt>
+              <dd>{continuity.statistics.totalDetectorPublications}</dd>
+            </div>
+            <div>
+              <dt>Consecutive accepted / rejected</dt>
+              <dd>
+                {continuity.consecutiveAcceptedCount} /{' '}
+                {continuity.consecutiveRejectedCount}
+              </dd>
+            </div>
+            <div>
+              <dt>Candidate MIDI / distance</dt>
+              <dd>
+                {continuity.rawCandidateMidi?.toFixed(2) ?? '—'} /{' '}
+                {continuity.candidateDistanceSemitones?.toFixed(2) ?? '—'}
+              </dd>
+            </div>
+            <div>
+              <dt>Average / maximum uncertainty</dt>
+              <dd>
+                {averageUncertaintyMs?.toFixed(0) ?? '—'} /{' '}
+                {continuity.statistics.maximumUncertaintyDurationMs.toFixed(0)}{' '}
+                ms
+              </dd>
+            </div>
+            <div>
+              <dt>Rejection counts</dt>
+              <dd>
+                {Object.entries(continuity.statistics.rejectionCounts)
+                  .filter(([, count]) => count > 0)
+                  .map(([reason, count]) => `${reason} ${count}`)
+                  .join(' · ') || '—'}
+              </dd>
+            </div>
+            <div>
+              <dt>Last gap</dt>
+              <dd>{continuity.lastGapReason ?? '—'}</dd>
+            </div>
+          </>
+        ) : null}
         <div>
           <dt>Accepted confidence</dt>
           <dd>

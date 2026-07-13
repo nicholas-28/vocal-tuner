@@ -1,5 +1,7 @@
 # Pitch Detection Spike
 
+Issue 013 leaves raw semantics and thresholds unchanged: RMS `0.005`, YIN/CMND `0.35`, confidence `0.70`, and `65–1200 Hz`. Fixtures distinguish rejection stages, but no retained real-device session establishes which dominates sustained-voice breaks. The proven downstream cause was that every isolated rejection became an immediate gap. Session counters now support measurement without recording audio.
+
 ## Decision
 
 The spike uses a small local TypeScript implementation of YIN. No detector dependency was added, so there is no third-party license obligation or dependency bundle cost. The production bundle increase is limited to the local detector, analysis orchestration, diagnostics hook, and UI.

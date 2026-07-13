@@ -4,6 +4,39 @@ import { createPitchDetection } from '../test/pitchFixture';
 import { usePitchHistory } from './usePitchHistory';
 
 describe('usePitchHistory', () => {
+  it('defers a short uncertainty and inserts exactly one confirmed gap', () => {
+    const { result } = renderHook(() => usePitchHistory());
+    act(() => result.current.startSession());
+    const pitch = (timestampMs: number, gapBeforeTimestampMs: number | null) =>
+      result.current.onContinuityDecision({
+        kind: 'pitch',
+        source: 'raw',
+        detection: createPitchDetection({ timestampMs }),
+        gapBeforeTimestampMs,
+        gapReason: gapBeforeTimestampMs === null ? null : 'continuity-timeout',
+      });
+    act(() => pitch(100, null));
+    act(() =>
+      result.current.onContinuityDecision({
+        kind: 'hold',
+        reason: 'low-confidence',
+        durationMs: 0,
+      }),
+    );
+    act(() => pitch(240, null));
+    expect(result.current.history.points.map((point) => point.kind)).toEqual([
+      'pitch',
+      'pitch',
+    ]);
+    act(() => pitch(500, 300));
+    expect(result.current.history.points.map((point) => point.kind)).toEqual([
+      'pitch',
+      'pitch',
+      'gap',
+      'pitch',
+    ]);
+  });
+
   it('records accepted pitch and sparse rejected gaps only during a session', () => {
     const { result } = renderHook(() => usePitchHistory());
     act(() =>

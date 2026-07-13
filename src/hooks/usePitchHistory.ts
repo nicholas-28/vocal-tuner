@@ -18,6 +18,7 @@ import {
   isValidHistoryDuration,
 } from '../history/pitchHistoryConfig';
 import type { RawPitchDetection } from '../types/pitch';
+import type { PitchContinuityDecision } from '../types/pitchContinuity';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
 import { acceptedDetectionToMusicalPitch } from './useMusicalPitch';
 
@@ -146,6 +147,88 @@ export function usePitchHistory(
     [validDurationMs],
   );
 
+  const onContinuityDecision = useCallback(
+    (decision: PitchContinuityDecision) => {
+      if (decision.kind === 'hold' || decision.kind === 'no-change') return;
+      const currentCaptureState = captureStateRef.current;
+      if (
+        !mountedRef.current ||
+        !sessionActiveRef.current ||
+        !isHistoryIngestionAllowed(currentCaptureState)
+      )
+        return;
+
+      const sourceTimestampMs =
+        decision.kind === 'gap'
+          ? decision.timestampMs
+          : decision.detection.timestampMs;
+      const effectiveTimestampMs = sourceToEffectiveHistoryTimestamp(
+        currentCaptureState,
+        sourceTimestampMs,
+      );
+      if (effectiveTimestampMs === null) return;
+
+      let nextHistory = historyRef.current;
+      let latestTimestampMs = nextHistory.points.at(-1)?.timestampMs ?? null;
+      const appendGap = (timestampMs: number) => {
+        if (latestTimestampMs !== null && timestampMs <= latestTimestampMs)
+          return;
+        nextHistory = appendPitchHistory(
+          nextHistory,
+          { timestampMs, pitch: null, confidence: 0 },
+          validDurationMs,
+        );
+        latestTimestampMs = timestampMs;
+      };
+
+      if (decision.kind === 'gap') {
+        appendGap(effectiveTimestampMs);
+      } else {
+        if (currentCaptureState.resumeBoundaryEffectiveMs !== null) {
+          let boundary = currentCaptureState.resumeBoundaryEffectiveMs;
+          if (
+            latestTimestampMs !== null &&
+            (boundary <= latestTimestampMs || boundary >= effectiveTimestampMs)
+          )
+            boundary =
+              latestTimestampMs +
+              (effectiveTimestampMs - latestTimestampMs) / 2;
+          appendGap(boundary);
+        }
+        if (decision.gapBeforeTimestampMs !== null) {
+          const gapTimestamp = sourceToEffectiveHistoryTimestamp(
+            currentCaptureState,
+            decision.gapBeforeTimestampMs,
+          );
+          if (gapTimestamp !== null) appendGap(gapTimestamp);
+        }
+        if (
+          latestTimestampMs === null ||
+          effectiveTimestampMs > latestTimestampMs
+        ) {
+          nextHistory = appendPitchHistory(
+            nextHistory,
+            {
+              timestampMs: effectiveTimestampMs,
+              pitch: acceptedDetectionToMusicalPitch(decision.detection),
+              confidence: decision.detection.confidence,
+            },
+            validDurationMs,
+          );
+        }
+      }
+
+      historyRef.current = nextHistory;
+      setHistory(nextHistory);
+      const nextCaptureState = consumeResumeBoundary(currentCaptureState);
+      if (nextCaptureState !== currentCaptureState) {
+        captureStateRef.current = nextCaptureState;
+        setCaptureState(nextCaptureState);
+      }
+    },
+    [validDurationMs],
+  );
+
   const clear = useCallback(() => {
     if (!mountedRef.current) return;
     const emptyHistory = clearPitchHistory();
@@ -180,6 +263,7 @@ export function usePitchHistory(
     pause,
     resume,
     onDetection,
+    onContinuityDecision,
     clear,
     toEffectiveTimestamp,
   };

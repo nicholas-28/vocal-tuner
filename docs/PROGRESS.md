@@ -139,3 +139,13 @@ Implemented on branch `issue-012-reference-drone-synthesizer`.
 - No samples, recording, audio upload, backend, target scoring, or new dependency
 - Manual inaudible-output follow-up removed optimistic `playing` and confirms a running context, complete graph, started oscillator, and valid gain first
 - Typed context/graph/start errors, statechange cleanup, realistic Web Audio mocks, Strict Mode ownership tests, and development diagnostics
+
+## Issue 013 — Sustained-voice tracking continuity
+
+Implemented on branch `issue-013-sustained-voice-continuity`.
+
+- Pure `unvoiced` / `voiced` / `uncertain` transitions at detector cadence
+- Inclusive 160 ms grace period and one deferred gap at uncertainty onset
+- No duplicated points, candidate promotion, threshold changes, or vibrato smoothing
+- Truthful `Briefly uncertain` live state and session-local diagnostics
+- Curve, Pause/Resume, Clear, range, keyboard, drone, and microphone cleanup preserved
