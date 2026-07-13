@@ -28,6 +28,7 @@ const defaultRangeProps = {
   detectedPitch: null,
   continuityStatus: 'unvoiced' as const,
   measurementTimestampMs: null,
+  observationTimestampMs: null,
 };
 
 describe('PitchMonitor history diagnostics', () => {
@@ -397,5 +398,107 @@ describe('PitchMonitor history diagnostics', () => {
     ).not.toBeInTheDocument();
     expect(screen.getAllByText('A4 · 440.0 Hz')).toHaveLength(2);
     expect(screen.getByText('On target')).toBeInTheDocument();
+  });
+
+  it('keeps practice independent from history and drone and auto-pauses on microphone Stop', async () => {
+    const onClear = vi.fn();
+    const onPause = vi.fn();
+    const sharedProps = {
+      history: {
+        points: [
+          {
+            timestampMs: 100,
+            midi: 69,
+            frequencyHz: 440,
+            confidence: 0.95,
+            kind: 'pitch' as const,
+          },
+        ],
+      },
+      summary: {
+        ...emptySummary,
+        totalPoints: 1,
+        pitchPoints: 1,
+        oldestTimestampMs: 100,
+        newestTimestampMs: 100,
+        latestKind: 'pitch' as const,
+      },
+      captureState: {
+        status: 'recording' as const,
+        accumulatedPausedDurationMs: 0,
+        resumeBoundaryEffectiveMs: null,
+      },
+      sessionVersion: 1,
+      toEffectiveTimestamp: (timestamp: number) => timestamp,
+      durationMs: 15_000,
+      onClear,
+      onPause,
+      onResume: vi.fn(),
+      ...defaultRangeProps,
+    };
+    const { rerender } = render(<PitchMonitor {...sharedProps} active />);
+    const a4 = screen.getByRole('button', {
+      name: 'Reference note A4, 440.0 hertz',
+    });
+    fireEvent.click(a4);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone playing A4 at 440.0 Hz',
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Stop reference drone' }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone stopped',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start practice' }));
+    expect(screen.getByText('Practice running')).toBeInTheDocument();
+    expect(a4).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reference note C4, 261.6 hertz' }),
+    );
+    expect(a4).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pause history' }));
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(onPause).toHaveBeenCalledOnce();
+    expect(screen.getByText('Practice running')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start selected drone' }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone playing A4 at 440.0 Hz',
+      ),
+    );
+    expect(screen.getByText('Practice running')).toBeInTheDocument();
+
+    rerender(<PitchMonitor {...sharedProps} active={false} />);
+    await waitFor(() =>
+      expect(screen.getByText('Practice paused')).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/microphone stopped/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Resume practice' }),
+    ).toBeDisabled();
+
+    rerender(<PitchMonitor {...sharedProps} active />);
+    expect(screen.getByText('Practice paused')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume practice' }));
+    expect(screen.getByText('Practice running')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish practice' }));
+    expect(screen.getByText('Practice completed')).toBeInTheDocument();
+    expect(screen.getByText(/Not enough measured voice/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice again' }));
+    expect(screen.getByText('Practice ready')).toBeInTheDocument();
+    expect(
+      screen.getByText('Selected target: A4 · 440.0 Hz'),
+    ).toBeInTheDocument();
   });
 });

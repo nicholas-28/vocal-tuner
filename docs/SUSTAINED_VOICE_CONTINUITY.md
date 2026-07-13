@@ -20,6 +20,8 @@ Issue 014 also freezes the cents marker at its last display position during unce
 
 Issue 015 applies the same evidence boundary to selected-target guidance with a separate display state. Brief uncertainty retains the last accepted target comparison, freezes its marker, labels it uncertain, and never evaluates the rejected candidate. Confirmed unvoiced keeps the selected target visible but removes Raise/Lower and the current target distance. Recovery resumes from the next accepted measurement. A target selection change recomputes from the retained accepted pitch and resets target-marker smoothing without changing continuity state.
 
+Issue 016 consumes each continuity publication as practice evidence with a different rule from the frozen visual guidance. `voiced` may create measurable on/off-target time from raw target-relative cents; `uncertain` accumulates only uncertain time; `unvoiced` accumulates only no-pitch time. Each observation supports at most 250 ms before remaining active time becomes unobserved, so stale accepted pitch is never credited indefinitely.
+
 History consumes decisions: holds add nothing; recovery adds only the new raw accepted point; timeout adds one sparse gap at uncertainty onset. Pause/Resume timestamp rebasing, Clear, retention, fractional MIDI, visible-range omission, and the curve's 250 ms safeguard are unchanged.
 
 ## Diagnostics, performance, and accessibility

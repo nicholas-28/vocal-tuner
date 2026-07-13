@@ -176,3 +176,18 @@ Implemented on branch `issue-015-target-note-guidance`.
 - Target preserved through graph range, microphone, drone, and history transitions
 - Semantic target/detected labels, frequencies, direction, distance, uncertainty, and no-pitch text
 - No scoring, session tracking, recording, replay, target-follow automation, dependency, history, or Canvas change
+
+## Issue 016 — Basic target-note practice session
+
+Implemented on branch `issue-016-target-note-practice-session`.
+
+- Typed idle/running/paused/completed practice state machine with immutable target lock
+- Explicit selected-target and active-microphone Start preconditions
+- Previous-observation interval accounting with a centralized 250 ms evidence cap
+- Constant-space active, measured, on-target, off-target, uncertain, no-pitch, and unobserved totals
+- On-target share using measured voice only, with a null zero-voice result
+- Independent practice Pause/Resume, microphone-Stop auto-pause, and explicit restart Resume
+- Compact live panel and immutable neutral summary with Practice again
+- One 4 Hz display-only timer with cleanup and stale-session protection
+- Keyboard activation lock with preserved focus/navigation; optional independent drone
+- No recording, replay, persistence, automatic sequence, backend, or new dependency

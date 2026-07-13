@@ -97,6 +97,13 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     page.getByText(/Select a reference note to enable target guidance/),
   ).toBeVisible();
+  const practicePanel = page.getByRole('region', {
+    name: 'Practice session',
+  });
+  await expect(practicePanel).toBeVisible();
+  await expect(
+    practicePanel.getByRole('button', { name: 'Start practice' }),
+  ).toBeDisabled();
   const centsMeter = page.getByRole('meter', {
     name: 'Nearest-note cents meter',
   });
@@ -109,15 +116,26 @@ test('loads the initial tuner screen', async ({ page }) => {
     frequencyHz: number | null,
     status: 'unvoiced' | 'voiced' | 'uncertain',
     timestampMs: number | null,
+    practiceMicrophoneActive?: boolean,
   ) => {
     await page.evaluate(
-      ({ frequencyHz, status, timestampMs }) =>
+      ({ frequencyHz, status, timestampMs, practiceMicrophoneActive }) =>
         window.dispatchEvent(
           new CustomEvent('vocal-tuner:cents-meter-demo', {
-            detail: { frequencyHz, status, timestampMs },
+            detail: {
+              frequencyHz,
+              status,
+              timestampMs,
+              practiceMicrophoneActive,
+            },
           }),
         ),
-      { frequencyHz, status, timestampMs },
+      {
+        frequencyHz,
+        status,
+        timestampMs,
+        practiceMicrophoneActive,
+      },
     );
   };
   const frequencyAtMidi = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
@@ -210,10 +228,13 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'could not start',
   );
-  await expect(page.getByText('C4 · 261.6 Hz')).toBeVisible();
+  await expect(page.getByText('C4 · 261.6 Hz', { exact: true })).toBeVisible();
   await expect(
     page.getByText('Raise the pitch', { exact: true }),
   ).toBeVisible();
+  await expect(
+    practicePanel.getByRole('button', { name: 'Start practice' }),
+  ).toBeDisabled();
   await expect(
     page.getByLabel('Reference-drone diagnostics values'),
   ).toContainText('suspended');
@@ -305,13 +326,105 @@ test('loads the initial tuner screen', async ({ page }) => {
     ),
   ).toBe(heldTargetMarkerPosition);
   await setCentsMeterDemo(null, 'unvoiced', null);
-  await expect(page.getByText('A4 · 440.0 Hz')).toBeVisible();
+  await expect(page.getByText('A4 · 440.0 Hz', { exact: true })).toBeVisible();
   await expect(
     page
       .getByRole('region', { name: 'Target guidance' })
       .getByText('No pitch detected.'),
   ).toBeVisible();
   await expect(targetMeter).toHaveCount(0);
+  await setCentsMeterDemo(
+    null,
+    'unvoiced',
+    await page.evaluate(() => performance.now()),
+    true,
+  );
+  const startPractice = practicePanel.getByRole('button', {
+    name: 'Start practice',
+  });
+  await expect(startPractice).toBeEnabled();
+  await startPractice.click();
+  await expect(practicePanel.getByText('Practice running')).toBeVisible();
+  await expect(
+    page.getByRole('button', {
+      name: 'Reference note A4, 440.0 hertz, reference drone sounding',
+    }),
+  ).toHaveAttribute('aria-disabled', 'true');
+
+  const publishPracticeObservation = async (
+    frequencyHz: number | null,
+    status: 'unvoiced' | 'voiced' | 'uncertain',
+  ) => {
+    await setCentsMeterDemo(
+      frequencyHz,
+      status,
+      await page.evaluate(() => performance.now()),
+      true,
+    );
+  };
+  const liveMetrics = practicePanel.getByLabel('Live practice metrics');
+  const measuredVoiceValue = liveMetrics
+    .locator('div')
+    .filter({ hasText: 'Measured voice' })
+    .locator('dd');
+  const onTargetValue = liveMetrics
+    .locator('div')
+    .filter({ hasText: 'On target' })
+    .locator('dd');
+  await publishPracticeObservation(frequencyAtMidi(69), 'voiced');
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69), 'voiced');
+  await expect(measuredVoiceValue).not.toHaveText('0.0 s');
+  await expect(onTargetValue).not.toHaveText('0.0 s');
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69.2), 'voiced');
+  await expect(
+    practicePanel.getByText('Current observation: Off target'),
+  ).toBeVisible();
+  const onTargetBeforeOffTarget = await onTargetValue.textContent();
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69.2), 'voiced');
+  await expect(measuredVoiceValue).not.toHaveText('0.0 s');
+  expect(await onTargetValue.textContent()).toBe(onTargetBeforeOffTarget);
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69.2), 'uncertain');
+  await expect(
+    practicePanel.getByText('Current observation: Briefly uncertain'),
+  ).toBeVisible();
+  const measuredBeforeUncertainty = await measuredVoiceValue.textContent();
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69.2), 'uncertain');
+  expect(await measuredVoiceValue.textContent()).toBe(
+    measuredBeforeUncertainty,
+  );
+  await expect(
+    practicePanel.getByText('Current observation: Briefly uncertain'),
+  ).toBeVisible();
+
+  await practicePanel.getByRole('button', { name: 'Pause practice' }).click();
+  const frozenMetrics = await liveMetrics.textContent();
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69), 'voiced');
+  expect(await liveMetrics.textContent()).toBe(frozenMetrics);
+  await practicePanel.getByRole('button', { name: 'Resume practice' }).click();
+  await expect(practicePanel.getByText('Practice running')).toBeVisible();
+  await publishPracticeObservation(frequencyAtMidi(69), 'voiced');
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(frequencyAtMidi(69), 'voiced');
+  await practicePanel.getByRole('button', { name: 'Finish practice' }).click();
+  await expect(practicePanel.getByText('Practice completed')).toBeVisible();
+  await expect(
+    practicePanel.getByLabel('Completed practice summary'),
+  ).toContainText('Measured voice');
+  await expect(practicePanel.getByText(/On-target share:/)).toBeVisible();
+  await expect(practicePanel).not.toContainText(
+    /score|grade|recording|replay/i,
+  );
+  await practicePanel.getByRole('button', { name: 'Practice again' }).click();
+  await expect(practicePanel.getByText('Practice ready')).toBeVisible();
+  await expect(
+    practicePanel.getByRole('button', { name: 'Start practice' }),
+  ).toBeEnabled();
   await expect(
     page.getByText('Start the microphone to begin pitch history.'),
   ).toBeVisible();
@@ -357,7 +470,12 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'Reference drone playing A4 at 440.0 Hz',
   );
-  await expect(page.getByText('A4 · 440.0 Hz')).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Target guidance' })
+      .getByText('A4 · 440.0 Hz', { exact: true })
+      .first(),
+  ).toBeVisible();
   await expect(
     page.getByText('Reference drone A4 is outside the visible graph range.'),
   ).toBeVisible();

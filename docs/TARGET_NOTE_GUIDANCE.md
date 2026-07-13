@@ -51,9 +51,13 @@ The panel uses a semantic heading, real DOM target/detected labels and frequenci
 
 Comparison is O(1) at accepted tuner publication cadence. It uses no arrays, audio-buffer copies, detector reruns, network activity, timers, or animation loops.
 
+## Practice-session integration
+
+Issue 016 reuses the same exact selected MIDI target, raw `targetRelativeCents`, and inclusive ±10 tolerance for measurable practice accounting. Marker-smoothed cents never enter metrics. Start locks the current target; keyboard activation is unavailable while running or paused so target guidance and practice labels remain coherent. Frozen guidance during uncertainty remains useful visually, but practice classifies that interval as uncertain rather than voiced.
+
 ## Known limitations
 
-- No score, time-in-zone tracking, practice session, melody exercise, recording, replay, automatic correction, or target following is included.
+- No melody exercise, recording, replay, automatic correction, or target following is included. The basic practice session reports observed time categories and an on-target share without judgment or weighting.
 - A4 remains fixed at 440 Hz.
 - Target selection is not persisted across refresh and has no explicit clear action.
 - Speaker output can acoustically enter the microphone; singer, room, device, and microphone variability remain.

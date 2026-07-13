@@ -28,6 +28,7 @@ type ReferenceKeyboardProps = {
   onFocusMidi: (midiNote: number) => void;
   onActivateMidi: (midiNote: number) => void;
   activeDroneMidi: number | null;
+  selectionLocked?: boolean;
 };
 
 export function ReferenceKeyboard({
@@ -42,6 +43,7 @@ export function ReferenceKeyboard({
   onFocusMidi,
   onActivateMidi,
   activeDroneMidi,
+  selectionLocked = false,
 }: ReferenceKeyboardProps) {
   const keys = useMemo(() => generateReferenceKeys(range), [range]);
   const keyboardRef = useRef<HTMLDivElement>(null);
@@ -120,6 +122,9 @@ export function ReferenceKeyboard({
       className="reference-keyboard"
       role="group"
       aria-label="Reference keyboard"
+      aria-describedby={
+        selectionLocked ? 'practice-target-lock-message' : undefined
+      }
       onFocusCapture={() => {
         hadFocusWithinRef.current = true;
       }}
@@ -146,6 +151,7 @@ export function ReferenceKeyboard({
               aria-label={`Reference note ${key.label}, ${frequency.replace('Hz', 'hertz')}${sounding ? ', reference drone sounding' : ''}`}
               aria-pressed={state.selectedMidi === key.midiNote}
               aria-current={sounding ? 'true' : undefined}
+              aria-disabled={selectionLocked || undefined}
               data-midi={key.midiNote}
               data-pressed={state.pressedMidi === key.midiNote || undefined}
               data-sounding={sounding || undefined}
@@ -170,7 +176,7 @@ export function ReferenceKeyboard({
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   if (onEndKeyboardPress(key.midiNote)) {
-                    onActivateMidi(key.midiNote);
+                    if (!selectionLocked) onActivateMidi(key.midiNote);
                     suppressCompatibilityClick();
                   }
                 }
@@ -188,6 +194,7 @@ export function ReferenceKeyboard({
                   }
                   return;
                 }
+                if (selectionLocked) return;
                 onActivateMidi(key.midiNote);
               }}
             >

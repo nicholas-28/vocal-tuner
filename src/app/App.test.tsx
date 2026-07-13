@@ -82,6 +82,15 @@ describe('App', () => {
     expect(
       screen.getByText('Start the microphone to begin pitch history.'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Practice session' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Start practice' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText('Start the microphone to begin practice.'),
+    ).toBeInTheDocument();
   });
 
   it('shows an accessible unsupported state', async () => {

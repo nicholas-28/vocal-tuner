@@ -41,6 +41,12 @@ Selecting a reference key reveals a compact panel near the drone controls. It cl
 
 The panel stays useful with the drone stopped and keeps its target through microphone and history controls. Brief uncertainty is subdued and frozen; confirmed no pitch keeps target identity but removes active correction. The panel uses position and words rather than color alone and is not a high-frequency live region.
 
+### Practice session
+
+A second compact panel turns one selected target into an explicit Start, Pause, Resume, Finish, and Practice again flow. Start remains disabled until target selection and microphone activation are both explicit. During the session the target is locked, while reference-drone controls and pitch-history controls remain independent.
+
+Live metrics emphasize measured voice and on-target time without judging silence. The completed summary calls the ratio “On-target share,” reports uncertainty/no-pitch/unobserved context separately, and omits the percentage when no measurable voice exists. Lifecycle changes may be announced politely, but the 4 Hz elapsed display is not a live region.
+
 ## Visual principles
 
 - Calm, minimal, and readable

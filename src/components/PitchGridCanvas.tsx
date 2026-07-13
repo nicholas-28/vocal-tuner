@@ -10,6 +10,7 @@ import { useCanvasViewport } from '../hooks/useCanvasViewport';
 import { usePitchCurveAnimation } from '../hooks/usePitchCurveAnimation';
 import { useReferenceDrone } from '../hooks/useReferenceDrone';
 import { useReferenceKeyboard } from '../hooks/useReferenceKeyboard';
+import { useTargetPracticeSession } from '../hooks/useTargetPracticeSession';
 import type { MidiRange } from '../types/pitchGrid';
 import type { PitchHistory } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
@@ -33,6 +34,7 @@ import { ReferenceDroneDiagnostics } from './ReferenceDroneDiagnostics';
 import { ReferenceDroneStatus } from './ReferenceDroneStatus';
 import { ReferenceNoteStatus } from './ReferenceNoteStatus';
 import { TargetPitchGuidance } from './TargetPitchGuidance';
+import { TargetPracticeSession } from './TargetPracticeSession';
 
 type PitchGridCanvasProps = Partial<MidiRange> & {
   history: PitchHistory;
@@ -45,6 +47,8 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
   detectedPitch?: MusicalPitch | null;
   continuityStatus?: PitchContinuityStatus;
   measurementTimestampMs?: number | null;
+  observationTimestampMs?: number | null;
+  practiceMicrophoneActive?: boolean;
 };
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
@@ -60,6 +64,8 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   detectedPitch = null,
   continuityStatus = 'unvoiced',
   measurementTimestampMs = null,
+  observationTimestampMs = null,
+  practiceMicrophoneActive = active,
 }: PitchGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -70,6 +76,13 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   );
   const referenceKeyboard = useReferenceKeyboard(visibleRange);
   const referenceDrone = useReferenceDrone();
+  const practice = useTargetPracticeSession({
+    selectedMidi: referenceKeyboard.state.selectedMidi,
+    microphoneActive: practiceMicrophoneActive,
+    detectedPitch,
+    continuityStatus,
+    observationTimestampMs,
+  });
   const selectReferenceMidi = referenceKeyboard.selectMidi;
   const toggleReferenceMidi = referenceDrone.toggleMidi;
   const lowLabel = getPitchGridNote(lowMidi)?.label ?? String(lowMidi);
@@ -137,10 +150,11 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
 
   const activateReferenceMidi = useCallback(
     (midiNote: number) => {
+      if (practice.targetSelectionLocked) return;
       selectReferenceMidi(midiNote);
       void toggleReferenceMidi(midiNote);
     },
-    [selectReferenceMidi, toggleReferenceMidi],
+    [practice.targetSelectionLocked, selectReferenceMidi, toggleReferenceMidi],
   );
 
   return (
@@ -166,6 +180,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
           onFocusMidi={referenceKeyboard.setFocusedMidi}
           onActivateMidi={activateReferenceMidi}
           activeDroneMidi={referenceDrone.snapshot.activeMidi}
+          selectionLocked={practice.targetSelectionLocked}
         />
         <figure
           className="pitch-grid"
@@ -218,6 +233,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
         continuityStatus={continuityStatus}
         measurementTimestampMs={measurementTimestampMs}
       />
+      <TargetPracticeSession model={practice} />
       {showReferenceDroneDiagnostics && (
         <ReferenceDroneDiagnostics
           diagnostics={referenceDrone.snapshot.diagnostics}

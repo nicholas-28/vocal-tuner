@@ -33,6 +33,8 @@ type PitchMonitorProps = {
   detectedPitch: MusicalPitch | null;
   continuityStatus: PitchContinuityStatus;
   measurementTimestampMs: number | null;
+  observationTimestampMs: number | null;
+  practiceMicrophoneActive?: boolean;
 };
 
 export function PitchMonitor({
@@ -58,6 +60,8 @@ export function PitchMonitor({
   detectedPitch,
   continuityStatus,
   measurementTimestampMs,
+  observationTimestampMs,
+  practiceMicrophoneActive = active,
 }: PitchMonitorProps) {
   const relativeNewestMs =
     summary.oldestTimestampMs === null || summary.newestTimestampMs === null
@@ -150,6 +154,8 @@ export function PitchMonitor({
         detectedPitch={detectedPitch}
         continuityStatus={continuityStatus}
         measurementTimestampMs={measurementTimestampMs}
+        observationTimestampMs={observationTimestampMs}
+        practiceMicrophoneActive={practiceMicrophoneActive}
       />
     </section>
   );

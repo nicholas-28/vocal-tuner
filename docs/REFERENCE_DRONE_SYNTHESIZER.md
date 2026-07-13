@@ -59,6 +59,8 @@ Reference playback never requests microphone permission and does not start, stop
 
 Issue 015 derives target guidance from persistent keyboard selection, not `activeMidi`. Guidance therefore remains active when playback is stopped, suspended, unavailable, or in error. Starting or stopping the selected drone neither creates nor clears a separate target, while selecting another key updates both selection-driven guidance and the existing drone command through their separate owners.
 
+Issue 016 keeps the drone optional throughout practice. Starting practice never starts audio, and playback Stop, Start, failure, or volume changes never pause, finish, or alter metric accounting. The session locks selected MIDI rather than active drone MIDI. While practice is running or paused the keyboard cannot activate another selection, but the existing Start/Stop and volume controls remain available for that locked note.
+
 Because speaker output can feed back into the microphone and pitch detector, the interface recommends headphones. Echo cancellation settings cannot guarantee acoustic isolation, so users remain responsible for output level and physical routing.
 
 ## Confirmed playback, suspension, errors, and races

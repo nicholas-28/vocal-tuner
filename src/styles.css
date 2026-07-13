@@ -897,6 +897,143 @@ h1 {
   text-align: right;
 }
 
+.practice-session {
+  margin-top: 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid #2d3743;
+  border-radius: 0.8rem;
+  background: #0d1218;
+}
+
+.practice-session__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.practice-session__heading h3 {
+  margin: 0;
+  color: #d9e0e8;
+  font-size: 0.82rem;
+}
+
+.practice-session__heading span {
+  color: #8b98a8;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.practice-session--running .practice-session__heading span {
+  color: #82daca;
+}
+
+.practice-session--paused .practice-session__heading span {
+  color: #d0ad83;
+}
+
+.practice-session__target,
+.practice-session__guidance,
+.practice-session__observation,
+.practice-session__share {
+  margin: 0.55rem 0 0;
+  color: #a8b2bf;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.practice-session__guidance {
+  color: #8490a0;
+}
+
+.practice-session__observation {
+  color: #cbd3dd;
+  font-weight: 650;
+}
+
+.practice-session__share {
+  color: #8ce4d2;
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.practice-session__metrics {
+  margin: 0.7rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.practice-session__metrics div {
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid #27313c;
+  border-radius: 0.55rem;
+  background: #121820;
+}
+
+.practice-session__metrics dt {
+  color: #778393;
+  font-size: 0.6rem;
+}
+
+.practice-session__metrics dd {
+  margin: 0.15rem 0 0;
+  color: #d3dae2;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.practice-session__metrics div[data-emphasized] dd {
+  color: #8ce4d2;
+}
+
+.practice-session__actions {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.practice-button {
+  min-height: 2.75rem;
+  margin-top: 0.7rem;
+  padding: 0.62rem 0.85rem;
+  border: 1px solid #4f9f90;
+  border-radius: 0.65rem;
+  background: #173b35;
+  color: #c9f3eb;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.practice-session__actions .practice-button,
+.practice-session__actions .secondary-button {
+  flex: 1 1 8.5rem;
+  margin-top: 0;
+}
+
+.practice-button:disabled {
+  border-color: #323b46;
+  background: #171d24;
+  color: #66717f;
+  cursor: not-allowed;
+}
+
+.practice-button:focus-visible {
+  outline: 3px solid #9be8d9;
+  outline-offset: 2px;
+}
+
+@media (max-width: 22rem) {
+  .practice-session__metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .reference-drone-diagnostics {
   margin-top: 0.55rem;
   border: 1px solid var(--border-subtle);

@@ -9,10 +9,12 @@ function Harness({
   range,
   activeDroneMidi = null,
   onActivateMidi = () => undefined,
+  selectionLocked = false,
 }: {
   range: VisiblePitchRange;
   activeDroneMidi?: number | null;
   onActivateMidi?: (midiNote: number) => void;
+  selectionLocked?: boolean;
 }) {
   const keyboard = useReferenceKeyboard(range);
   const activateMidi = (midiNote: number) => {
@@ -33,6 +35,7 @@ function Harness({
         onFocusMidi={keyboard.setFocusedMidi}
         onActivateMidi={activateMidi}
         activeDroneMidi={activeDroneMidi}
+        selectionLocked={selectionLocked}
       />
       <ReferenceNoteStatus state={keyboard.state} />
     </>
@@ -162,6 +165,31 @@ describe('ReferenceKeyboard', () => {
     );
     expect(
       screen.getByRole('button', { name: 'Reference note C4, 261.6 hertz' }),
+    ).toHaveFocus();
+  });
+
+  it('keeps focus navigation but blocks target activation while locked', () => {
+    const onActivateMidi = vi.fn();
+    render(
+      <Harness
+        range={middleRange}
+        selectionLocked
+        onActivateMidi={onActivateMidi}
+      />,
+    );
+    const c4 = screen.getByRole('button', {
+      name: 'Reference note C4, 261.6 hertz',
+    });
+    expect(c4).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(c4);
+    expect(onActivateMidi).not.toHaveBeenCalled();
+    expect(c4).toHaveAttribute('aria-pressed', 'false');
+    c4.focus();
+    fireEvent.keyDown(c4, { key: 'ArrowUp' });
+    expect(
+      screen.getByRole('button', {
+        name: 'Reference note C#4, 277.2 hertz',
+      }),
     ).toHaveFocus();
   });
 });

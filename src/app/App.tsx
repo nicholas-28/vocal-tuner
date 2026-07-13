@@ -46,6 +46,12 @@ export function App() {
     centsMeterDemo === null
       ? continuity.state.lastAcceptedAtMs
       : centsMeterDemo.timestampMs;
+  const observationTimestampMs =
+    centsMeterDemo === null
+      ? continuity.state.lastPublicationAtMs
+      : centsMeterDemo.timestampMs;
+  const practiceMicrophoneActive =
+    centsMeterDemo?.practiceMicrophoneActive ?? state === 'active';
 
   return (
     <main className="app-shell">
@@ -99,6 +105,8 @@ export function App() {
         detectedPitch={readoutPitch}
         continuityStatus={readoutContinuityStatus}
         measurementTimestampMs={readoutTimestampMs}
+        observationTimestampMs={observationTimestampMs}
+        practiceMicrophoneActive={practiceMicrophoneActive}
       />
       <MicrophoneControls
         state={state}

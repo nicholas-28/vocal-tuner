@@ -179,3 +179,11 @@ Status: accepted
 The persistent reference-keyboard selection, not drone sounding state, defines the practice target. Target-relative cents use `(detectedFractionalMidi - targetMidi) × 100`, remain separate from nearest-note cents, and are never rounded, wrapped, or clamped in the musical result. An inclusive ±10-cent tolerance controls only target classification.
 
 The dedicated target meter presents a bounded ±50-cent view with explicit overflow while text retains meaningful unbounded distance. Its independent 180 ms display-only smoother resets on target changes and no pitch, freezes during uncertainty, and is bypassed for reduced motion. Target comparison never enters detector, continuity, history, Canvas, drone, or scoring state.
+
+## ADR-020 — Practice accounting uses capped previous-observation evidence
+
+Status: accepted
+
+A practice session locks the persistent selected target and requires an explicitly active microphone. Its discriminated idle/running/paused/completed state uses the detector-compatible `performance.now()` origin. Each interval is attributed to the previous observation for at most 250 ms; excess, initial, and post-resume time becomes explicit unobserved time. Active elapsed reconciles measurable voice, uncertainty, no pitch, and unobserved time in constant space.
+
+Measurable voice uses only stable accepted raw target-relative cents and the existing inclusive ±10 tolerance. On-target share divides on-target time by measurable voice, so silence and uncertainty neither count as off-target voice nor lower the denominator. A zero denominator produces no percentage. Practice Pause, history Pause, microphone capture, and drone playback remain independent; loss of active microphone auto-pauses practice and requires explicit Resume.

@@ -53,6 +53,8 @@ The explicit button label toggles between “Pause history” and “Resume hist
 
 Pause adds no audio work and creates no timer. Detector publications still update the live UI but return early from history ingestion. RAF remains ref-driven with no per-frame React state. Repeated transitions are idempotent and late callbacks cannot reschedule after cancellation.
 
+Issue 016 adds a distinct “Pause practice” control. Practice Pause does not change this capture state or curve RAF, and “Pause history” does not stop practice accounting. Clear and Resume history likewise leave the locked practice target and totals unchanged.
+
 ## Known limitations
 
 - Pause affects history only; it is not audio recording or playback.

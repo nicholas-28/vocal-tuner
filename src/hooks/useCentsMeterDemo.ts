@@ -7,12 +7,14 @@ type CentsMeterDemoState = {
   pitch: MusicalPitch | null;
   status: PitchContinuityStatus;
   timestampMs: number | null;
+  practiceMicrophoneActive: boolean;
 };
 
 type CentsMeterDemoDetail = {
   frequencyHz: number | null;
   status: PitchContinuityStatus;
   timestampMs: number | null;
+  practiceMicrophoneActive?: boolean;
 };
 
 const DEMO_EVENT = 'vocal-tuner:cents-meter-demo';
@@ -23,7 +25,12 @@ export function useCentsMeterDemo(): CentsMeterDemoState | null {
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has('centsMeterDemo'))
       return;
-    setState({ pitch: null, status: 'unvoiced', timestampMs: null });
+    setState({
+      pitch: null,
+      status: 'unvoiced',
+      timestampMs: null,
+      practiceMicrophoneActive: false,
+    });
     const onDemo = (event: Event) => {
       const detail = (event as CustomEvent<CentsMeterDemoDetail>).detail;
       if (!detail || !isContinuityStatus(detail.status)) return;
@@ -34,11 +41,15 @@ export function useCentsMeterDemo(): CentsMeterDemoState | null {
           ? detail.timestampMs
           : null;
       const pitch = frequencyToMusicalPitch(detail.frequencyHz);
-      setState({
+      setState((current) => ({
         pitch: detail.status === 'unvoiced' ? null : pitch,
         status: pitch === null ? 'unvoiced' : detail.status,
         timestampMs,
-      });
+        practiceMicrophoneActive:
+          typeof detail.practiceMicrophoneActive === 'boolean'
+            ? detail.practiceMicrophoneActive
+            : (current?.practiceMicrophoneActive ?? false),
+      }));
     };
     window.addEventListener(DEMO_EVENT, onDemo);
     return () => window.removeEventListener(DEMO_EVENT, onDemo);
