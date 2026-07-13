@@ -146,4 +146,14 @@ Status: accepted
 
 The vertical reference keyboard uses semantic DOM buttons beside the layered Canvas graph. It replaces the Canvas note-label gutter and consumes the same inclusive visible MIDI range. One CSS-grid row represents each semitone, and shared top/bottom padding makes every key center equal to the existing Canvas semitone-center mapping without per-key measurement.
 
-Interaction is monophonic. A press creates transient pressed state and persistent in-page selection; release clears only the pressed state. Pointer cancellation, lost capture, blur, unmount, and range changes clean up safely. Roving tabindex provides semitone arrow navigation. Selection is independent from microphone and history state and clears when it leaves the visible range. No Web Audio object or sound is introduced until Issue 012.
+Interaction is monophonic. A press creates transient pressed state; a completed activation creates persistent in-page selection. Release clears only pressed state. Pointer cancellation, lost capture, blur, unmount, and range changes clean up safely. Roving tabindex provides semitone arrow navigation. As extended in Issue 012, selection is independent from microphone, history, and visible-range state and may remain selected outside the current range.
+
+## ADR-016 — Dedicated lazy monophonic reference-drone engine
+
+Status: accepted
+
+Reference playback uses its own lazily created `AudioContext`, separate from microphone analysis. This keeps speaker-output lifecycle, suspension, errors, and disposal from mutating capture or detector resources. One sine oscillator feeds a per-voice envelope gain, then a protected master-volume gain. The engine retains at most one voice and ramps frequency for note changes rather than overlapping oscillators.
+
+A completed key activation selects and starts a note. Release removes only pressed feedback; activating the sounding note toggles audio off without clearing selection. Start and Stop remain explicit alternatives. Selection and playback survive visible-range changes, including when the note is not rendered. Operation tokens and shared asynchronous lifecycle promises make newer play/stop intent win over stale context-resume or release work. Disposal stops and disconnects nodes and closes the dedicated context. No audio is recorded, retained, logged, or uploaded.
+
+The initial implementation optimistically published `playing` after `resume()` and `oscillator.start()` returned, without proving the context had reached `running` or tracking graph connections. Manual testing exposed a silent graph with a false playing label. The accepted policy now requires post-resume `running`, destination and voice connection confirmation, successful oscillator start and attack scheduling, valid effective gain, and a current operation token. Context `statechange` invalidates active playback when output leaves `running`. Development-only transition diagnostics expose these invariants. This policy confirms Web Audio readiness but cannot guarantee the physical output route.

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { useCanvasViewport } from '../hooks/useCanvasViewport';
 import { usePitchCurveAnimation } from '../hooks/usePitchCurveAnimation';
+import { useReferenceDrone } from '../hooks/useReferenceDrone';
 import { useReferenceKeyboard } from '../hooks/useReferenceKeyboard';
 import type { MidiRange } from '../types/pitchGrid';
 import type { PitchHistory } from '../types/pitchHistory';
@@ -25,6 +26,9 @@ import { createPitchGridViewport } from '../visualization/pitchGridViewport';
 import { sizePitchGridCanvas } from '../visualization/sizePitchGridCanvas';
 import { getPitchGridNote } from '../visualization/pitchGridNotes';
 import { ReferenceKeyboard } from './ReferenceKeyboard';
+import { ReferenceDroneControls } from './ReferenceDroneControls';
+import { ReferenceDroneDiagnostics } from './ReferenceDroneDiagnostics';
+import { ReferenceDroneStatus } from './ReferenceDroneStatus';
 import { ReferenceNoteStatus } from './ReferenceNoteStatus';
 
 type PitchGridCanvasProps = Partial<MidiRange> & {
@@ -56,8 +60,14 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
     [lowMidi, highMidi],
   );
   const referenceKeyboard = useReferenceKeyboard(visibleRange);
+  const referenceDrone = useReferenceDrone();
+  const selectReferenceMidi = referenceKeyboard.selectMidi;
+  const toggleReferenceMidi = referenceDrone.toggleMidi;
   const lowLabel = getPitchGridNote(lowMidi)?.label ?? String(lowMidi);
   const highLabel = getPitchGridNote(highMidi)?.label ?? String(highMidi);
+  const showReferenceDroneDiagnostics =
+    import.meta.env.DEV ||
+    new URLSearchParams(window.location.search).has('droneDiagnostics');
 
   const viewport = useMemo(
     () =>
@@ -116,6 +126,14 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
     draw: drawCurve,
   });
 
+  const activateReferenceMidi = useCallback(
+    (midiNote: number) => {
+      selectReferenceMidi(midiNote);
+      void toggleReferenceMidi(midiNote);
+    },
+    [selectReferenceMidi, toggleReferenceMidi],
+  );
+
   return (
     <div className="pitch-visualization-block">
       <div
@@ -137,6 +155,8 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
           onReleaseAll={referenceKeyboard.releaseAll}
           onMoveFocus={referenceKeyboard.moveFocus}
           onFocusMidi={referenceKeyboard.setFocusedMidi}
+          onActivateMidi={activateReferenceMidi}
+          activeDroneMidi={referenceDrone.snapshot.activeMidi}
         />
         <figure
           className="pitch-grid"
@@ -172,6 +192,22 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
         </figure>
       </div>
       <ReferenceNoteStatus state={referenceKeyboard.state} />
+      <ReferenceDroneStatus
+        snapshot={referenceDrone.snapshot}
+        range={visibleRange}
+      />
+      <ReferenceDroneControls
+        snapshot={referenceDrone.snapshot}
+        selectedMidi={referenceKeyboard.state.selectedMidi}
+        onStartSelected={(midiNote) => void referenceDrone.playMidi(midiNote)}
+        onStop={() => void referenceDrone.stop()}
+        onVolumeChange={referenceDrone.setVolume}
+      />
+      {showReferenceDroneDiagnostics && (
+        <ReferenceDroneDiagnostics
+          diagnostics={referenceDrone.snapshot.diagnostics}
+        />
+      )}
     </div>
   );
 });

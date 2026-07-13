@@ -33,7 +33,7 @@ LocalStorage is intentionally omitted in this first version. The preference cont
 
 Both Canvas layers and the DOM reference keyboard receive the same validated range in one render. A change creates one new shared viewport: the static grid redraws once, the curve redraws from the same immutable retained history, and the keyboard rebuilds its 25 inclusive keys. The active RAF chain continues because range changes update the draw callback rather than its active lifecycle dependency. While paused, the changed callback redraws once at the frozen reference and starts no RAF.
 
-Any active reference-key press is released on a range change. A selected key remains selected only when still visible; otherwise selection clears. Focused MIDI remains when visible and otherwise clamps to the nearest boundary. These changes do not affect microphone or history state.
+Any active reference-key press is released on a range change. Selection and reference-drone playback remain unchanged even when their note is outside the new range; an explicit playback status exposes that hidden state. Focused MIDI remains when visible and otherwise clamps to the nearest boundary. These changes do not affect microphone or history state.
 
 The semitone-center mapping remains unchanged, so all 25 notes have equal height. Grid labels, octave hierarchy, and graph descriptions update from the selected bounds.
 
@@ -55,7 +55,7 @@ Known limitations:
 - graph range is limited to C2–C6 while the detector remains wider;
 - selection resets on refresh;
 - no auto-follow, arbitrary zoom, panning, or semitone picker;
-- the keyboard is silent until reference-tone synthesis is implemented;
+- an active drone may intentionally remain outside the visible keyboard range;
 - physical mobile and Retina verification remains manual.
 
 A future auto-follow mode should update this same range source of truth and preserve the validation, shared-viewport, and no-history-mutation policies.

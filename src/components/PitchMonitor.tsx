@@ -64,6 +64,7 @@ export function PitchMonitor({
           <span
             className="history-capture-status"
             role="status"
+            aria-label="Pitch history status"
             aria-live="polite"
           >
             {active

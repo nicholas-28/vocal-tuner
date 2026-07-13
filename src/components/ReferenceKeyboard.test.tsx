@@ -1,12 +1,24 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useReferenceKeyboard } from '../hooks/useReferenceKeyboard';
 import type { VisiblePitchRange } from '../types/visiblePitchRange';
 import { ReferenceKeyboard } from './ReferenceKeyboard';
 import { ReferenceNoteStatus } from './ReferenceNoteStatus';
 
-function Harness({ range }: { range: VisiblePitchRange }) {
+function Harness({
+  range,
+  activeDroneMidi = null,
+  onActivateMidi = () => undefined,
+}: {
+  range: VisiblePitchRange;
+  activeDroneMidi?: number | null;
+  onActivateMidi?: (midiNote: number) => void;
+}) {
   const keyboard = useReferenceKeyboard(range);
+  const activateMidi = (midiNote: number) => {
+    keyboard.selectMidi(midiNote);
+    onActivateMidi(midiNote);
+  };
   return (
     <>
       <ReferenceKeyboard
@@ -19,6 +31,8 @@ function Harness({ range }: { range: VisiblePitchRange }) {
         onReleaseAll={keyboard.releaseAll}
         onMoveFocus={keyboard.moveFocus}
         onFocusMidi={keyboard.setFocusedMidi}
+        onActivateMidi={activateMidi}
+        activeDroneMidi={activeDroneMidi}
       />
       <ReferenceNoteStatus state={keyboard.state} />
     </>
@@ -44,19 +58,21 @@ describe('ReferenceKeyboard', () => {
     );
   });
 
-  it('selects on pointer press and clears only the pressed state on release', () => {
+  it('selects on completed pointer activation and clears pressed state', () => {
     render(<Harness range={middleRange} />);
     const c4 = screen.getByRole('button', {
       name: 'Reference note C4, 261.6 hertz',
     });
     fireEvent.pointerDown(c4, { pointerId: 7 });
     expect(c4).toHaveAttribute('data-pressed', 'true');
-    expect(c4).toHaveAttribute('aria-pressed', 'true');
+    expect(c4).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByLabelText('Reference note status')).toHaveTextContent(
       'Reference key pressed: C4, 261.6 Hz',
     );
     fireEvent.pointerUp(c4, { pointerId: 7 });
     expect(c4).not.toHaveAttribute('data-pressed');
+    expect(c4).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(c4);
     expect(c4).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Reference note status')).toHaveTextContent(
       'Reference note selected: C4, 261.6 Hz',
@@ -83,6 +99,42 @@ describe('ReferenceKeyboard', () => {
     expect(
       screen.getByRole('button', { name: 'Reference note C5, 523.3 hertz' }),
     ).toHaveFocus();
+  });
+
+  it('activates exactly once and keeps sounding distinct from pressed', () => {
+    const onActivateMidi = vi.fn();
+    const { rerender } = render(
+      <Harness range={middleRange} onActivateMidi={onActivateMidi} />,
+    );
+    const c4 = screen.getByRole('button', {
+      name: 'Reference note C4, 261.6 hertz',
+    });
+    fireEvent.pointerDown(c4, { pointerId: 12 });
+    fireEvent.pointerUp(c4, { pointerId: 12 });
+    fireEvent.click(c4, { detail: 1 });
+    expect(onActivateMidi).toHaveBeenCalledOnce();
+    expect(c4).not.toHaveAttribute('data-pressed');
+
+    rerender(
+      <Harness
+        range={middleRange}
+        activeDroneMidi={60}
+        onActivateMidi={onActivateMidi}
+      />,
+    );
+    const soundingC4 = screen.getByRole('button', {
+      name: 'Reference note C4, 261.6 hertz, reference drone sounding',
+    });
+    expect(soundingC4).toHaveAttribute('data-sounding', 'true');
+    expect(soundingC4).toHaveAttribute('aria-current', 'true');
+    fireEvent.keyDown(soundingC4, { key: 'Enter', repeat: false });
+    fireEvent.keyUp(soundingC4, { key: 'Enter' });
+    fireEvent.click(soundingC4);
+    expect(onActivateMidi).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(soundingC4, { key: ' ', repeat: false });
+    fireEvent.keyUp(soundingC4, { key: ' ' });
+    fireEvent.click(soundingC4);
+    expect(onActivateMidi).toHaveBeenCalledTimes(3);
   });
 
   it('releases on cancellation, lost capture, blur, and range change', () => {

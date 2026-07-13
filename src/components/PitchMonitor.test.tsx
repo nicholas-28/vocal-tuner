@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PitchHistorySummary } from '../types/pitchHistory';
+import { installReferenceDroneAudioMock } from '../test/referenceDroneAudioMock';
 import { PitchMonitor } from './PitchMonitor';
 
 const emptySummary: PitchHistorySummary = {
@@ -27,6 +28,7 @@ const defaultRangeProps = {
 
 describe('PitchMonitor history diagnostics', () => {
   beforeEach(() => {
+    installReferenceDroneAudioMock();
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -65,7 +67,9 @@ describe('PitchMonitor history diagnostics', () => {
     expect(
       screen.getByRole('button', { name: 'Pause history' }),
     ).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('History inactive');
+    expect(screen.getByLabelText('Pitch history status')).toHaveTextContent(
+      'History inactive',
+    );
     expect(
       screen.getByRole('img', {
         name: 'Live pitch history from C3 to C5 over the last 15 seconds.',
@@ -175,7 +179,9 @@ describe('PitchMonitor history diagnostics', () => {
         {...defaultRangeProps}
       />,
     );
-    expect(screen.getByRole('status')).toHaveTextContent('History paused');
+    expect(screen.getByLabelText('Pitch history status')).toHaveTextContent(
+      'History paused',
+    );
     expect(
       screen.getByRole('button', { name: 'Resume history' }),
     ).toBeEnabled();
@@ -225,7 +231,7 @@ describe('PitchMonitor history diagnostics', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('keeps reference selection independent from Clear, Pause, and Stop', () => {
+  it('keeps reference selection independent from Clear, Pause, and Stop', async () => {
     const onClear = vi.fn();
     const history = {
       points: [
@@ -274,9 +280,18 @@ describe('PitchMonitor history diagnostics', () => {
     });
     fireEvent.pointerDown(a4, { pointerId: 9 });
     fireEvent.pointerUp(a4, { pointerId: 9 });
+    fireEvent.click(a4);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone playing A4 at 440.0 Hz',
+      ),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
     expect(onClear).toHaveBeenCalledOnce();
     expect(a4).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+      'Reference drone playing A4 at 440.0 Hz',
+    );
 
     rerender(
       <PitchMonitor
@@ -303,5 +318,8 @@ describe('PitchMonitor history diagnostics', () => {
       />,
     );
     expect(a4).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+      'Reference drone playing A4 at 440.0 Hz',
+    );
   });
 });

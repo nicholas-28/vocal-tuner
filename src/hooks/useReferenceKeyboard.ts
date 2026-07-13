@@ -34,11 +34,7 @@ export function useReferenceKeyboard(range: VisiblePitchRange) {
     keyboardPressedMidiRef.current = null;
     setState((current) => ({
       pressedMidi: null,
-      selectedMidi:
-        current.selectedMidi !== null &&
-        isReferenceKeyVisible(current.selectedMidi, { lowMidi, highMidi })
-          ? current.selectedMidi
-          : null,
+      selectedMidi: current.selectedMidi,
       focusedMidi:
         clampReferenceFocusMidi(current.focusedMidi, { lowMidi, highMidi }) ??
         lowMidi,
@@ -58,7 +54,6 @@ export function useReferenceKeyboard(range: VisiblePitchRange) {
       setState((current) => ({
         ...current,
         pressedMidi: midiNote,
-        selectedMidi: midiNote,
         focusedMidi: midiNote,
       }));
       return true;
@@ -87,7 +82,6 @@ export function useReferenceKeyboard(range: VisiblePitchRange) {
       setState((current) => ({
         ...current,
         pressedMidi: midiNote,
-        selectedMidi: midiNote,
         focusedMidi: midiNote,
       }));
       return true;
@@ -140,6 +134,20 @@ export function useReferenceKeyboard(range: VisiblePitchRange) {
     [range],
   );
 
+  const selectMidi = useCallback(
+    (midiNote: number) => {
+      if (!Number.isInteger(midiNote)) return;
+      setState((current) => ({
+        ...current,
+        selectedMidi: midiNote,
+        focusedMidi: isReferenceKeyVisible(midiNote, range)
+          ? midiNote
+          : current.focusedMidi,
+      }));
+    },
+    [range],
+  );
+
   return {
     state,
     beginPointerPress,
@@ -149,5 +157,6 @@ export function useReferenceKeyboard(range: VisiblePitchRange) {
     releaseAll,
     moveFocus,
     setFocusedMidi,
+    selectMidi,
   };
 }

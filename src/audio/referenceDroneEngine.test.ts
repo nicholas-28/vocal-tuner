@@ -1,0 +1,439 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createReferenceDroneEngine } from './referenceDroneEngine';
+
+class MockAudioParam {
+  value = 0;
+  cancelAndHoldAtTime = vi.fn();
+  cancelScheduledValues = vi.fn();
+  setValueAtTime = vi.fn((value: number) => {
+    this.value = value;
+  });
+  linearRampToValueAtTime = vi.fn((value: number) => {
+    this.value = value;
+  });
+  setTargetAtTime = vi.fn((value: number) => {
+    this.value = value;
+  });
+}
+
+class MockNode {
+  disconnect = vi.fn();
+
+  constructor(
+    readonly context: MockAudioContext,
+    readonly name: string,
+  ) {}
+
+  connect = vi.fn((target: MockNode) => {
+    this.context.events.push(`${this.name}->${target.name}`);
+    if (this.context.failConnectionFrom === this.name) {
+      throw new Error(`cannot connect ${this.name}`);
+    }
+    return target;
+  });
+}
+
+class MockGain extends MockNode {
+  gain = new MockAudioParam();
+}
+
+class MockOscillator extends MockNode {
+  type: OscillatorType = 'sine';
+  frequency = new MockAudioParam();
+  onended: (() => void) | null = null;
+  start = vi.fn(() => {
+    this.context.events.push('oscillator:start');
+    if (this.context.failStart) throw new Error('oscillator blocked');
+  });
+  stop = vi.fn();
+
+  finish() {
+    this.onended?.();
+  }
+}
+
+type ResumeMode = 'running' | 'stays-suspended' | 'reject' | 'deferred';
+
+class MockAudioContext {
+  state: AudioContextState | 'interrupted';
+  currentTime = 10;
+  destination = new MockNode(this, 'destination');
+  gains: MockGain[] = [];
+  oscillators: MockOscillator[] = [];
+  events: string[] = [];
+  failConnectionFrom: string | null = null;
+  failStart = false;
+  failCreateGainAt: number | null = null;
+  resumeMode: ResumeMode = 'running';
+  resolveDeferredResume = () => undefined;
+  private stateListeners = new Set<EventListener>();
+
+  resume = vi.fn(async () => {
+    this.events.push('context:resume');
+    if (this.resumeMode === 'reject') throw new Error('resume rejected');
+    if (this.resumeMode === 'deferred') {
+      await new Promise<void>((resolve) => {
+        this.resolveDeferredResume = () => {
+          this.setState('running');
+          resolve();
+        };
+      });
+      return;
+    }
+    if (this.resumeMode === 'running') this.setState('running');
+  });
+
+  close = vi.fn(async () => {
+    this.setState('closed');
+  });
+
+  createGain = vi.fn(() => {
+    if (this.failCreateGainAt === this.gains.length) {
+      throw new Error('gain creation failed');
+    }
+    const gain = new MockGain(this, `gain-${this.gains.length}`);
+    this.gains.push(gain);
+    return gain as unknown as GainNode;
+  });
+
+  createOscillator = vi.fn(() => {
+    const oscillator = new MockOscillator(
+      this,
+      `oscillator-${this.oscillators.length}`,
+    );
+    this.oscillators.push(oscillator);
+    return oscillator as unknown as OscillatorNode;
+  });
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    if (type === 'statechange' && typeof listener === 'function') {
+      this.stateListeners.add(listener);
+    }
+  }
+
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+  ) {
+    if (type === 'statechange' && typeof listener === 'function') {
+      this.stateListeners.delete(listener);
+    }
+  }
+
+  setState(state: AudioContextState | 'interrupted') {
+    this.state = state;
+    for (const listener of this.stateListeners)
+      listener(new Event('statechange'));
+  }
+
+  get listenerCount() {
+    return this.stateListeners.size;
+  }
+
+  constructor(state: AudioContextState | 'interrupted' = 'running') {
+    this.state = state;
+  }
+}
+
+const asAudioContext = (context: MockAudioContext) =>
+  context as unknown as AudioContext;
+const A4 = { midiNote: 69, frequencyHz: 440 };
+const G4 = { midiNote: 67, frequencyHz: 391.99543598174927 };
+
+describe('reference drone engine', () => {
+  it('confirms a running, fully connected graph before reporting playing', async () => {
+    const context = new MockAudioContext();
+    const factory = vi.fn(() => asAudioContext(context));
+    const engine = createReferenceDroneEngine({ contextFactory: factory });
+
+    expect(factory).not.toHaveBeenCalled();
+    expect((await engine.play(A4)).ok).toBe(true);
+    expect(context.events).toEqual([
+      'gain-0->destination',
+      'oscillator-0->gain-1',
+      'gain-1->gain-0',
+      'oscillator:start',
+    ]);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'playing',
+      diagnostics: {
+        contextState: 'running',
+        voiceState: 'started',
+        graphConnected: true,
+        destinationConnected: true,
+        oscillatorStarted: true,
+        masterGain: 0.04,
+        effectiveGain: 0.04,
+        voiceGainTarget: 1,
+      },
+    });
+    expect(context.gains[1]?.gain.setValueAtTime).toHaveBeenCalledWith(0, 10);
+    expect(context.gains[1]?.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      1,
+      10.05,
+    );
+  });
+
+  it('stays starting until a deferred resume makes the context running', async () => {
+    const context = new MockAudioContext('suspended');
+    context.resumeMode = 'deferred';
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    const starting = engine.play(A4);
+    await Promise.resolve();
+    expect(engine.getSnapshot().status).toBe('starting');
+    expect(context.oscillators).toHaveLength(0);
+    context.resolveDeferredResume();
+    await expect(starting).resolves.toEqual({ ok: true });
+    expect(engine.getSnapshot().status).toBe('playing');
+  });
+
+  it('does not report playing when resume resolves but remains suspended', async () => {
+    const context = new MockAudioContext('suspended');
+    context.resumeMode = 'stays-suspended';
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await expect(engine.play(A4)).resolves.toEqual({
+      ok: false,
+      errorCode: 'context-not-running',
+    });
+    expect(context.oscillators).toHaveLength(0);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'context-not-running',
+      diagnostics: { contextState: 'suspended', oscillatorStarted: false },
+    });
+
+    context.resumeMode = 'running';
+    await expect(engine.play(A4)).resolves.toEqual({ ok: true });
+  });
+
+  it('treats interrupted and rejected resume states as recoverable errors', async () => {
+    const interrupted = new MockAudioContext('interrupted');
+    interrupted.resumeMode = 'stays-suspended';
+    const interruptedEngine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(interrupted),
+    });
+    await interruptedEngine.play(A4);
+    expect(interruptedEngine.getSnapshot().errorCode).toBe(
+      'context-interrupted',
+    );
+
+    const rejected = new MockAudioContext('suspended');
+    rejected.resumeMode = 'reject';
+    const rejectedEngine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(rejected),
+    });
+    await rejectedEngine.play(A4);
+    expect(rejectedEngine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'audio-start-failed',
+    });
+  });
+
+  it('rejects a closed constructed context and retries with a fresh one', async () => {
+    const closed = new MockAudioContext('closed');
+    const running = new MockAudioContext('running');
+    const factory = vi
+      .fn()
+      .mockReturnValueOnce(asAudioContext(closed))
+      .mockReturnValueOnce(asAudioContext(running));
+    const engine = createReferenceDroneEngine({ contextFactory: factory });
+    await engine.play(A4);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'context-closed',
+    });
+    expect(closed.createGain).not.toHaveBeenCalled();
+    await expect(engine.play(A4)).resolves.toEqual({ ok: true });
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it('cleans partial graphs when destination, voice connection, or start fails', async () => {
+    const destinationFailure = new MockAudioContext();
+    destinationFailure.failConnectionFrom = 'gain-0';
+    const destinationEngine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(destinationFailure),
+    });
+    await destinationEngine.play(A4);
+    expect(destinationEngine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'graph-connection-failed',
+    });
+    expect(destinationFailure.gains[0]?.disconnect).toHaveBeenCalled();
+    expect(destinationFailure.close).toHaveBeenCalledOnce();
+
+    const voiceFailure = new MockAudioContext();
+    voiceFailure.failConnectionFrom = 'gain-1';
+    const voiceEngine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(voiceFailure),
+    });
+    await voiceEngine.play(A4);
+    expect(voiceEngine.getSnapshot().errorCode).toBe('graph-connection-failed');
+    expect(voiceFailure.oscillators[0]?.disconnect).toHaveBeenCalled();
+    expect(voiceFailure.gains[1]?.disconnect).toHaveBeenCalled();
+
+    const startFailure = new MockAudioContext();
+    startFailure.failStart = true;
+    const startEngine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(startFailure),
+    });
+    await startEngine.play(A4);
+    expect(startEngine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'oscillator-start-failed',
+    });
+    expect(startFailure.oscillators[0]?.disconnect).toHaveBeenCalled();
+  });
+
+  it('uses one oscillator for smooth confirmed note transitions', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    await engine.play(G4);
+    expect(context.oscillators).toHaveLength(1);
+    expect(
+      context.oscillators[0]?.frequency.linearRampToValueAtTime,
+    ).toHaveBeenCalledWith(G4.frequencyHz, 10.07);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'playing',
+      activeMidi: 67,
+      diagnostics: { frequencyHz: G4.frequencyHz },
+    });
+  });
+
+  it('maps 0%, default, and 100% volume to the active master only', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    expect(engine.getSnapshot().diagnostics.effectiveGain).toBe(0.04);
+    engine.setVolume(1);
+    expect(engine.getSnapshot().diagnostics).toMatchObject({
+      masterGain: 0.16,
+      effectiveGain: 0.16,
+    });
+    expect(context.gains[0]?.gain.setTargetAtTime).toHaveBeenLastCalledWith(
+      0.16,
+      10,
+      0.03,
+    );
+    engine.setVolume(0);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'playing',
+      diagnostics: { masterGain: 0, effectiveGain: 0 },
+    });
+    expect(context.gains[1]?.gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+
+  it('falls back when optional automation methods are unavailable', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    const master = context.gains[0]?.gain;
+    if (!master) throw new Error('missing master');
+    Object.assign(master, {
+      cancelAndHoldAtTime: undefined,
+      setTargetAtTime: undefined,
+    });
+    engine.setVolume(0.5);
+    expect(master.cancelScheduledValues).toHaveBeenCalledWith(10);
+    expect(master.linearRampToValueAtTime).toHaveBeenCalledWith(0.08, 10.03);
+  });
+
+  it('invalidates a suspended start when Stop wins the race', async () => {
+    const context = new MockAudioContext('suspended');
+    context.resumeMode = 'deferred';
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    const starting = engine.play(A4);
+    const stopping = engine.stop();
+    context.resolveDeferredResume();
+    await Promise.all([starting, stopping]);
+    expect(context.oscillators).toHaveLength(0);
+    expect(engine.getSnapshot().status).toBe('stopped');
+  });
+
+  it('turns an unexpected state loss into an error and removes stale listeners', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    expect(context.listenerCount).toBe(1);
+    context.setState('interrupted');
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'context-interrupted',
+      diagnostics: { contextState: 'interrupted', oscillatorStarted: false },
+    });
+    expect(context.oscillators[0]?.disconnect).toHaveBeenCalled();
+    await engine.dispose();
+    expect(context.listenerCount).toBe(0);
+    const disposedSnapshot = engine.getSnapshot();
+    context.setState('running');
+    expect(engine.getSnapshot()).toEqual(disposedSnapshot);
+  });
+
+  it('fades Stop, retains the context, and disconnects ended voice nodes', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    const oscillator = context.oscillators[0];
+    const stopping = engine.stop();
+    expect(oscillator?.stop).toHaveBeenCalledWith(10.12);
+    oscillator?.finish();
+    await stopping;
+    expect(engine.getSnapshot().status).toBe('stopped');
+    expect(context.close).not.toHaveBeenCalled();
+    await engine.play(G4);
+    expect(context.oscillators).toHaveLength(2);
+  });
+
+  it('disposes once, closes the context, and ignores late commands', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    await engine.dispose();
+    await engine.dispose();
+    await engine.play(G4);
+    expect(context.oscillators[0]?.stop).toHaveBeenCalledWith(10);
+    expect(context.gains[0]?.disconnect).toHaveBeenCalled();
+    expect(context.close).toHaveBeenCalledOnce();
+    expect(context.oscillators).toHaveLength(1);
+    expect(engine.getSnapshot().diagnostics.engineState).toBe('disposed');
+  });
+
+  it('rejects invalid notes and unavailable construction without resources', async () => {
+    const factory = vi.fn();
+    const engine = createReferenceDroneEngine({
+      contextFactory: factory as () => AudioContext,
+    });
+    await engine.play({ midiNote: 60.5, frequencyHz: Number.NaN });
+    expect(factory).not.toHaveBeenCalled();
+    expect(engine.getSnapshot().errorCode).toBe('invalid-note');
+
+    const unavailable = createReferenceDroneEngine({
+      contextFactory: () => {
+        throw new DOMException('missing', 'NotSupportedError');
+      },
+    });
+    await unavailable.play(A4);
+    expect(unavailable.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'unavailable',
+    });
+  });
+});

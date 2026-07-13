@@ -83,12 +83,14 @@ These rules must not prevent real octave changes.
 
 ## Reference tone
 
-The initial reference sound may use:
+The initial reference sound uses a dedicated lazy Web Audio engine:
 
-- sine fundamental;
-- quiet second harmonic;
-- soft attack;
-- short release;
-- gain protection.
+- one sine oscillator and no samples;
+- a 50 ms attack and 120 ms release;
+- a 70 ms same-voice frequency transition;
+- a protected master gain with 25% default UI volume and 0.16 maximum linear gain;
+- a 30 ms master-volume ramp.
 
-Avoid clicks at note start and stop.
+Its context, nodes, suspension recovery, errors, and disposal are independent from microphone analysis. The graph is oscillator to voice gain to master gain to destination. Same-note activation toggles playback; a different note ramps the existing voice. Stop retains the context for restart, while unmount disposal stops/disconnects nodes and closes it. Details and interaction policy are in `REFERENCE_DRONE_SYNTHESIZER.md`.
+
+`playing` is a confirmed graph state, not a requested state. A fulfilled resume is followed by an explicit context-state check; only `running` is accepted. Suspended, interrupted, closed, connection-failed, automation-failed, and oscillator-start-failed paths remain errors and clean partial voices. Destination and voice connections precede oscillator start, while the attack ramp follows successful start. Development transition diagnostics make context, graph, frequency, and effective gain auditable without audio-rate updates.

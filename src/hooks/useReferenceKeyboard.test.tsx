@@ -16,29 +16,33 @@ describe('useReferenceKeyboard', () => {
     act(() => expect(result.current.beginPointerPress(60, 1)).toBe(true));
     expect(result.current.state).toMatchObject({
       pressedMidi: 60,
-      selectedMidi: 60,
+      selectedMidi: null,
     });
     act(() => expect(result.current.beginPointerPress(61, 2)).toBe(false));
     act(() => expect(result.current.endPointerPress(2)).toBe(false));
     expect(result.current.state.pressedMidi).toBe(60);
     act(() => expect(result.current.endPointerPress(1)).toBe(true));
+    act(() => result.current.selectMidi(60));
     expect(result.current.state).toMatchObject({
       pressedMidi: null,
       selectedMidi: 60,
     });
   });
 
-  it('clears interaction outside a changed range and clamps focus', () => {
+  it('clears transient interaction, preserves selection, and clamps focus', () => {
     const { result, rerender } = renderHook(
       ({ lowMidi, highMidi }) => useReferenceKeyboard({ lowMidi, highMidi }),
       { initialProps: { lowMidi: 48, highMidi: 72 } },
     );
-    act(() => result.current.beginKeyboardPress(72));
+    act(() => {
+      result.current.beginKeyboardPress(72);
+      result.current.selectMidi(72);
+    });
     expect(result.current.state.pressedMidi).toBe(72);
     rerender({ lowMidi: 36, highMidi: 60 });
     expect(result.current.state).toEqual({
       pressedMidi: null,
-      selectedMidi: null,
+      selectedMidi: 72,
       focusedMidi: 60,
     });
   });

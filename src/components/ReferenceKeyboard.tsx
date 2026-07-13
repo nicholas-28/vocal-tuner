@@ -26,6 +26,8 @@ type ReferenceKeyboardProps = {
   onReleaseAll: () => void;
   onMoveFocus: (command: ReferenceFocusCommand) => void;
   onFocusMidi: (midiNote: number) => void;
+  onActivateMidi: (midiNote: number) => void;
+  activeDroneMidi: number | null;
 };
 
 export function ReferenceKeyboard({
@@ -38,16 +40,35 @@ export function ReferenceKeyboard({
   onReleaseAll,
   onMoveFocus,
   onFocusMidi,
+  onActivateMidi,
+  activeDroneMidi,
 }: ReferenceKeyboardProps) {
   const keys = useMemo(() => generateReferenceKeys(range), [range]);
   const keyboardRef = useRef<HTMLDivElement>(null);
   const keyRefs = useRef(new Map<number, HTMLButtonElement>());
   const hadFocusWithinRef = useRef(false);
+  const suppressCompatibilityClickRef = useRef(false);
+  const suppressCompatibilityClickTimerRef = useRef<number | null>(null);
+
+  const suppressCompatibilityClick = () => {
+    suppressCompatibilityClickRef.current = true;
+    if (suppressCompatibilityClickTimerRef.current !== null) {
+      window.clearTimeout(suppressCompatibilityClickTimerRef.current);
+    }
+    // WebKit may dispatch the compatibility click in a later task.
+    suppressCompatibilityClickTimerRef.current = window.setTimeout(() => {
+      suppressCompatibilityClickRef.current = false;
+      suppressCompatibilityClickTimerRef.current = null;
+    }, 500);
+  };
 
   useEffect(() => {
     window.addEventListener('blur', onReleaseAll);
     return () => {
       window.removeEventListener('blur', onReleaseAll);
+      if (suppressCompatibilityClickTimerRef.current !== null) {
+        window.clearTimeout(suppressCompatibilityClickTimerRef.current);
+      }
       onReleaseAll();
     };
   }, [onReleaseAll]);
@@ -112,6 +133,7 @@ export function ReferenceKeyboard({
       <div className="reference-keyboard__keys">
         {keys.map((key) => {
           const frequency = formatReferenceKeyFrequency(key.idealFrequencyHz);
+          const sounding = activeDroneMidi === key.midiNote;
           return (
             <button
               key={key.midiNote}
@@ -121,14 +143,15 @@ export function ReferenceKeyboard({
               }}
               type="button"
               className={`reference-key reference-key--${key.kind}`}
-              aria-label={`Reference note ${key.label}, ${frequency.replace('Hz', 'hertz')}`}
+              aria-label={`Reference note ${key.label}, ${frequency.replace('Hz', 'hertz')}${sounding ? ', reference drone sounding' : ''}`}
               aria-pressed={state.selectedMidi === key.midiNote}
+              aria-current={sounding ? 'true' : undefined}
               data-midi={key.midiNote}
               data-pressed={state.pressedMidi === key.midiNote || undefined}
+              data-sounding={sounding || undefined}
               tabIndex={state.focusedMidi === key.midiNote ? 0 : -1}
               onFocus={() => onFocusMidi(key.midiNote)}
               onPointerDown={(event) => {
-                event.preventDefault();
                 if (!onBeginPointerPress(key.midiNote, event.pointerId)) return;
                 event.currentTarget.focus();
                 try {
@@ -146,8 +169,26 @@ export function ReferenceKeyboard({
               onKeyUp={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  onEndKeyboardPress(key.midiNote);
+                  if (onEndKeyboardPress(key.midiNote)) {
+                    onActivateMidi(key.midiNote);
+                    suppressCompatibilityClick();
+                  }
                 }
+              }}
+              onClick={() => {
+                // Click is the sole completed pointer activation. Enter/Space
+                // activate on keyup, so consume only their follow-up click.
+                if (suppressCompatibilityClickRef.current) {
+                  suppressCompatibilityClickRef.current = false;
+                  if (suppressCompatibilityClickTimerRef.current !== null) {
+                    window.clearTimeout(
+                      suppressCompatibilityClickTimerRef.current,
+                    );
+                    suppressCompatibilityClickTimerRef.current = null;
+                  }
+                  return;
+                }
+                onActivateMidi(key.midiNote);
               }}
             >
               <span aria-hidden="true">{key.label}</span>

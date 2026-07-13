@@ -123,3 +123,19 @@ Implemented on branch `issue-011-vertical-reference-keyboard`.
 - Range rebuilding with safe press, selection, and focus handling
 - Keyboard remains independent from microphone, detector, history, Pause, and Clear
 - No oscillator, AudioContext, sound, recording, target scoring, or backend
+
+## Issue 012 — Reference drone synthesizer
+
+Implemented on branch `issue-012-reference-drone-synthesizer`.
+
+- Continuous monophonic sine drone activated by completed pointer or keyboard gestures
+- Persistent selected note separated from transient pressed and active sounding state
+- Same-note toggle, different-note frequency ramp, explicit Start/Stop, and protected volume
+- Dedicated lazy Web Audio context independent from microphone analysis
+- Soft attack, release, note-transition, and volume automation without overlapping voices
+- Selection and playback preserved across range, microphone, Pause/Resume, Clear, and Stop changes
+- Retryable audio errors, stale-operation protection, and idempotent node/context disposal
+- Accessible playback status, sounding-key indication, and headphones recommendation
+- No samples, recording, audio upload, backend, target scoring, or new dependency
+- Manual inaudible-output follow-up removed optimistic `playing` and confirms a running context, complete graph, started oscillator, and valid gain first
+- Typed context/graph/start errors, statechange cleanup, realistic Web Audio mocks, Strict Mode ownership tests, and development diagnostics

@@ -1,12 +1,12 @@
 # Vertical Reference Keyboard
 
-Issue 011 adds a silent, interactive piano-style keyboard beside the pitch-history graph. It provides a stable note-selection contract for future reference-tone synthesis without creating audio nodes or requesting microphone permission.
+Issue 011 added the interactive piano-style keyboard beside the pitch-history graph. Issue 012 connects its completed-activation contract to a continuous reference drone without coupling keyboard layout to Web Audio ownership or microphone permission.
 
 ## Scope and key model
 
 Every inclusive visible MIDI note produces one immutable reference-key description containing its integer MIDI note, shared sharp-only note name, octave, label, pitch class, accidental classification, and equal-temperament ideal frequency. Labels reuse the existing MIDI note utilities, and frequencies reuse the existing A4 = 440 Hz note-frequency utility. The model contains no React, DOM, Canvas, or audio objects.
 
-The keyboard is monophonic. Only one pointer or keyboard press can own the transient pressed state. Chords, sustain, MIDI-device input, letter-key musical mapping, and sound are out of scope.
+The keyboard is monophonic. Only one pointer or keyboard press can own transient pressed state, and only one reference note can sound. Chords, sustain, MIDI-device input, and letter-key musical mapping remain out of scope.
 
 ## DOM and Canvas architecture
 
@@ -30,11 +30,11 @@ This is the normalized form of the Canvas semitone-center mapping. Consequently 
 
 Natural notes use the full keyboard width. Accidentals use 66% width and align toward the graph. Every key still occupies exactly one semitone row. Note text and width distinguish the kinds in addition to color. The shared sharp-only convention is retained; flats are not generated.
 
-## Pressed and selected state
+## Pressed, selected, and sounding state
 
-Pointer or Enter/Space press sets both `pressedMidi` and `selectedMidi`. Release clears the stronger pressed highlight while retaining a subtler selected state and stable reference-note status. Pressing another note replaces the selection. Selection is not persisted across refresh.
+Pointer or Enter/Space press sets only `pressedMidi`. A completed activation selects and toggles the note; cancellation never selects or sounds it. Release clears the stronger pressed highlight while a subtler selected state remains. Sounding state is independent: the selected note can be stopped, and a sounding note can remain active while outside the current range. Selection is not persisted across refresh.
 
-The selected note is independent from detected pitch, microphone lifecycle, history Pause/Resume, and Clear. A visible-range change releases any active press. Selection remains only when its MIDI note is still visible; otherwise it is cleared to avoid hidden state.
+The selected note and drone are independent from detected pitch, microphone lifecycle, history Pause/Resume, and Clear. A visible-range change releases any active press but preserves selection and playback. When hidden, an explicit status describes the out-of-range sounding reference.
 
 ## Pointer lifecycle and drag policy
 
@@ -52,13 +52,13 @@ The keyboard uses roving tabindex, leaving one key in the page tab order:
 - Arrow Down moves one semitone lower.
 - Home moves to the highest visible note.
 - End moves to the lowest visible note.
-- Enter and Space press/select on keydown and release on keyup.
+- Enter and Space show pressed state on keydown and activate once on keyup.
 
 Navigation does not wrap. Focused MIDI is preserved across range changes when visible and otherwise moves to the nearest visible boundary. Visible focus, selected, and pressed states do not rely only on color.
 
 ## Reference-note status and accessibility
 
-Each button is named with its note and one-decimal ideal frequency, for example “Reference note C4, 261.6 hertz.” `aria-pressed` exposes persistent selection. A polite real-DOM status distinguishes “Reference key pressed” from “Reference note selected” and never claims that audio is playing.
+Each button is named with its note and one-decimal ideal frequency, for example “Reference note C4, 261.6 hertz.” `aria-pressed` exposes persistent selection, and the active key's name identifies it as sounding. Separate polite DOM statuses distinguish pressed, selected, stopped, starting, playing, changing, stopping, error, and out-of-range playback states.
 
 The detected current note remains separate DOM content. The graph retains its selected-range and duration description. No hidden DOM node is created for Canvas grid lines.
 
@@ -68,17 +68,16 @@ The keyboard uses a stable 56 CSS-pixel column while the Canvas consumes the rem
 
 The keyboard works before microphone permission, while requesting, while active, after Stop, and after denial. It never starts or changes microphone capture.
 
-## No-audio guarantee and limitations
+## Drone integration and limitations
 
-Issue 011 adds no `AudioContext`, oscillator, gain node, media element, audio destination, or sound dependency. No sound is produced.
+Keyboard components own interaction state only. The parent drone hook translates completed MIDI activations into engine commands. See `REFERENCE_DRONE_SYNTHESIZER.md` for the dedicated Web Audio graph and lifecycle.
 
 Known limitations:
 
-- silent interaction only;
 - one note at a time, with no chords or sustain;
 - fixed-note drag policy, with no glissando;
 - selected notes are not persisted;
 - visible ranges remain the three fixed two-octave presets and octave shifts;
 - touch sizing and alignment still require physical iPhone Safari and Android Chrome verification.
 
-Issue 012 can consume the typed pressed-note contract to start and release a reference synthesizer without coupling audio lifetime to the keyboard layout.
+The drone continues after release by design; this keyboard is a selector for a sustained pitch reference rather than a hold-to-play instrument.
