@@ -30,7 +30,7 @@ function mockContext() {
 }
 
 describe('drawPitchGrid', () => {
-  it('clears, resets DPR, draws 25 lines, labels, separator, and one marker', () => {
+  it('clears, resets DPR, and draws 25 lines plus one marker', () => {
     const context = mockContext();
     const viewport = createPitchGridViewport({
       widthCssPx: 500,
@@ -57,12 +57,8 @@ describe('drawPitchGrid', () => {
       0,
     );
     expect(context.clearRect).toHaveBeenCalledWith(0, 0, 750, 624);
-    expect(context.stroke).toHaveBeenCalledTimes(27);
-    expect(context.fillText).toHaveBeenCalledTimes(25);
-    expect(context.fillText).toHaveBeenCalledWith('C3', 35, 400);
-    expect(context.fillText).toHaveBeenCalledWith('C4', 35, 208);
-    expect(context.fillText).toHaveBeenCalledWith('A4', 35, 64);
-    expect(context.fillText).toHaveBeenCalledWith('C5', 35, 16);
+    expect(context.stroke).toHaveBeenCalledTimes(26);
+    expect(context.fillText).not.toHaveBeenCalled();
 
     const verticalLines = vi
       .mocked(context.moveTo)
@@ -70,7 +66,7 @@ describe('drawPitchGrid', () => {
         (call, index) =>
           call[0] === vi.mocked(context.lineTo).mock.calls[index]?.[0],
       );
-    expect(verticalLines).toHaveLength(2);
+    expect(verticalLines).toHaveLength(1);
   });
 
   it('uses each hierarchy style and restores state if drawing throws', () => {

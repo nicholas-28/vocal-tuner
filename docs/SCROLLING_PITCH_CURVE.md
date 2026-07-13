@@ -55,6 +55,6 @@ Changing the visible range creates a shared grid/curve viewport and redraws reta
 
 ## Known limitations and extension path
 
-The range remains fixed to C3–C5. Lines are intentionally straight and unsmoothed; raw vibrato and detector octave errors remain visible. There is no pause, keyboard, reference tone, recording, replay, zoom, or persisted history. Mobile background scheduling and Canvas performance still require physical-device verification.
+The visible range remains a fixed two-octave span selected from C2–C6. Lines are intentionally straight and unsmoothed; raw vibrato and detector octave errors remain visible. The aligned DOM keyboard is silent until reference-tone synthesis is implemented. There is no recording, replay, zoom, or persisted history. Mobile background scheduling and Canvas performance still require physical-device verification.
 
 Future smoothing can transform a separate rendered-pitch representation before segment construction without changing raw history. Recording or replay can provide an explicit playback reference time to the same renderer without changing MIDI or timestamp coordinate utilities.

@@ -74,6 +74,15 @@ describe('PitchMonitor history diagnostics', () => {
     expect(screen.getByTestId('pitch-grid-canvas')).toBeInTheDocument();
     expect(screen.getByTestId('pitch-curve-canvas')).toBeInTheDocument();
     expect(
+      screen.getByRole('group', { name: 'Reference keyboard' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reference note C5, 523.3 hertz' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reference note C3, 130.8 hertz' }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText('Start the microphone to begin pitch history.'),
     ).toBeInTheDocument();
   });
@@ -208,5 +217,91 @@ describe('PitchMonitor history diagnostics', () => {
     expect(screen.getByLabelText('Pitch history summary')).toHaveTextContent(
       'Total0',
     );
+    expect(
+      screen.getByRole('button', { name: 'Reference note C2, 65.4 hertz' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Reference note C5, 523.3 hertz' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps reference selection independent from Clear, Pause, and Stop', () => {
+    const onClear = vi.fn();
+    const history = {
+      points: [
+        {
+          timestampMs: 100,
+          midi: 69,
+          frequencyHz: 440,
+          confidence: 0.95,
+          kind: 'pitch' as const,
+        },
+      ],
+    };
+    const summary = {
+      ...emptySummary,
+      totalPoints: 1,
+      pitchPoints: 1,
+      retainedDurationMs: 0,
+      oldestTimestampMs: 100,
+      newestTimestampMs: 100,
+      latestKind: 'pitch' as const,
+    };
+    const sharedProps = {
+      history,
+      summary,
+      sessionVersion: 1,
+      toEffectiveTimestamp: (timestamp: number) => timestamp,
+      durationMs: 15_000,
+      onClear,
+      onPause: vi.fn(),
+      onResume: vi.fn(),
+      ...defaultRangeProps,
+    };
+    const { rerender } = render(
+      <PitchMonitor
+        {...sharedProps}
+        active
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+      />,
+    );
+    const a4 = screen.getByRole('button', {
+      name: 'Reference note A4, 440.0 hertz',
+    });
+    fireEvent.pointerDown(a4, { pointerId: 9 });
+    fireEvent.pointerUp(a4, { pointerId: 9 });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear history' }));
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(a4).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(
+      <PitchMonitor
+        {...sharedProps}
+        active
+        captureState={{
+          status: 'paused',
+          accumulatedPausedDurationMs: 0,
+          pauseStartedSourceMs: 100,
+          frozenEffectiveTimeMs: 100,
+        }}
+      />,
+    );
+    expect(a4).toHaveAttribute('aria-pressed', 'true');
+    rerender(
+      <PitchMonitor
+        {...sharedProps}
+        active={false}
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+      />,
+    );
+    expect(a4).toHaveAttribute('aria-pressed', 'true');
   });
 });

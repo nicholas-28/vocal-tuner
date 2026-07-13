@@ -27,6 +27,28 @@ test('loads the initial tuner screen', async ({ page }) => {
   const curveCanvasBox = await curveCanvas.boundingBox();
   expect(curveCanvasBox?.width).toBe(canvasBox?.width);
   expect(curveCanvasBox?.height).toBe(canvasBox?.height);
+  const referenceKeyboard = page.getByRole('group', {
+    name: 'Reference keyboard',
+  });
+  await expect(referenceKeyboard).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reference note C5, 523.3 hertz' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reference note C4, 261.6 hertz' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reference note A4, 440.0 hertz' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reference note C3, 130.8 hertz' }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Reference note C4, 261.6 hertz' })
+    .click();
+  await expect(page.getByLabel('Reference note status')).toContainText(
+    'Reference note selected: C4, 261.6 Hz',
+  );
   await expect(
     page.getByText('Start the microphone to begin pitch history.'),
   ).toBeVisible();
@@ -60,6 +82,15 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: 'Shift graph down one octave' }),
   ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Reference note C2, 65.4 hertz' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reference note C4, 261.6 hertz' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reference note C5, 523.3 hertz' }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole('status').filter({ hasText: 'History inactive' }),
   ).toBeVisible();

@@ -413,15 +413,33 @@ h1 {
   color: #d0ad83;
 }
 
+.pitch-visualization-block,
 .pitch-grid {
   min-width: 0;
+}
+
+.pitch-visualization-block {
+  width: 100%;
+}
+
+.pitch-visualization {
+  --pitch-graph-height: clamp(22rem, 55vh, 32rem);
+
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.35rem;
+}
+
+.pitch-grid {
   margin: 0;
 }
 
 .pitch-grid__viewport {
   position: relative;
   width: 100%;
-  height: clamp(22rem, 55vh, 32rem);
+  height: var(--pitch-graph-height);
   min-width: 0;
   overflow: hidden;
 }
@@ -438,6 +456,85 @@ h1 {
   margin-top: 0.45rem;
   color: #667180;
   font-size: 0.68rem;
+  text-align: center;
+}
+
+.reference-keyboard {
+  height: var(--pitch-graph-height);
+  min-width: 0;
+  padding: var(--pitch-grid-top-padding) 0 var(--pitch-grid-bottom-padding);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.reference-keyboard__keys {
+  height: 100%;
+  display: grid;
+  grid-auto-flow: row;
+  grid-auto-rows: 1fr;
+}
+
+.reference-key {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 0.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  border: 1px solid #596574;
+  border-radius: 0.12rem 0 0 0.12rem;
+  color: #26313b;
+  background: #b8c1ca;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reference-key--accidental {
+  width: 66%;
+  justify-self: end;
+  border-color: #657181;
+  color: #d9e0e8;
+  background: #252c36;
+}
+
+.reference-key[aria-pressed='true'] {
+  border-color: #78dfcb;
+  box-shadow: inset 0 0 0 1px #78dfcb;
+}
+
+.reference-key[aria-pressed='true']::before {
+  content: '•';
+  margin-right: auto;
+  color: #08705f;
+}
+
+.reference-key--accidental[aria-pressed='true']::before {
+  color: #78dfcb;
+}
+
+.reference-key[data-pressed='true'] {
+  color: #07110f;
+  background: #78dfcb;
+  box-shadow: inset 0 0 0 2px #e5fff9;
+}
+
+.reference-key:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #f5f7fa;
+  outline-offset: -2px;
+}
+
+.reference-note-status {
+  min-height: 1.1rem;
+  margin: 0.45rem 0 0;
+  color: #8d98a8;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 

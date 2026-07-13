@@ -25,11 +25,11 @@ function viewport(widthCssPx = 500) {
 describe('pitch time coordinates', () => {
   it('maps the 15-second history window to graph-left through present time', () => {
     const view = viewport();
-    expect(getHistoricalWidth(view)).toBe(360);
-    expect(getPixelsPerMs(view, 15_000)).toBe(0.024);
-    expect(timestampToX(20_000, 20_000, view, 15_000)).toBe(402);
-    expect(timestampToX(5000, 20_000, view, 15_000)).toBe(42);
-    expect(timestampToX(12_500, 20_000, view, 15_000)).toBe(222);
+    expect(getHistoricalWidth(view)).toBe(393.6);
+    expect(getPixelsPerMs(view, 15_000)).toBeCloseTo(0.02624);
+    expect(timestampToX(20_000, 20_000, view, 15_000)).toBe(393.6);
+    expect(timestampToX(5000, 20_000, view, 15_000)).toBe(0);
+    expect(timestampToX(12_500, 20_000, view, 15_000)).toBe(196.8);
   });
 
   it('excludes older and future timestamps and rejects invalid inputs', () => {

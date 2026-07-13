@@ -139,3 +139,11 @@ Status: accepted
 The graph range is an App-level visualization preference independent from microphone, detector, musical conversion, and history storage. It uses an inclusive fixed 24-semitone span within MIDI 36–84, with C2–C4, C3–C5, and C4–C6 presets. C3–C5 remains the default. Octave shifts move both bounds by 12 and reject boundary overflow without clamping.
 
 Grid and curve layers consume the same validated range. Out-of-range curve points are omitted and break segments but remain unchanged in retained history and live tuner output. The selection survives in-page history and microphone operations but intentionally resets on refresh; no localStorage is introduced without demonstrated persistence need.
+
+## ADR-015 — DOM reference keyboard on the shared semitone viewport
+
+Status: accepted
+
+The vertical reference keyboard uses semantic DOM buttons beside the layered Canvas graph. It replaces the Canvas note-label gutter and consumes the same inclusive visible MIDI range. One CSS-grid row represents each semitone, and shared top/bottom padding makes every key center equal to the existing Canvas semitone-center mapping without per-key measurement.
+
+Interaction is monophonic. A press creates transient pressed state and persistent in-page selection; release clears only the pressed state. Pointer cancellation, lost capture, blur, unmount, and range changes clean up safely. Roving tabindex provides semitone arrow navigation. Selection is independent from microphone and history state and clears when it leaves the visible range. No Web Audio object or sound is introduced until Issue 012.

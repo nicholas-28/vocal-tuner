@@ -1,6 +1,14 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import {
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+} from 'react';
 import { useCanvasViewport } from '../hooks/useCanvasViewport';
 import { usePitchCurveAnimation } from '../hooks/usePitchCurveAnimation';
+import { useReferenceKeyboard } from '../hooks/useReferenceKeyboard';
 import type { MidiRange } from '../types/pitchGrid';
 import type { PitchHistory } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
@@ -16,6 +24,8 @@ import {
 import { createPitchGridViewport } from '../visualization/pitchGridViewport';
 import { sizePitchGridCanvas } from '../visualization/sizePitchGridCanvas';
 import { getPitchGridNote } from '../visualization/pitchGridNotes';
+import { ReferenceKeyboard } from './ReferenceKeyboard';
+import { ReferenceNoteStatus } from './ReferenceNoteStatus';
 
 type PitchGridCanvasProps = Partial<MidiRange> & {
   history: PitchHistory;
@@ -41,6 +51,11 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
   const { elementRef, size } = useCanvasViewport<HTMLDivElement>();
+  const visibleRange = useMemo(
+    () => ({ lowMidi, highMidi }),
+    [lowMidi, highMidi],
+  );
+  const referenceKeyboard = useReferenceKeyboard(visibleRange);
   const lowLabel = getPitchGridNote(lowMidi)?.label ?? String(lowMidi);
   const highLabel = getPitchGridNote(highMidi)?.label ?? String(highMidi);
 
@@ -102,37 +117,61 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   });
 
   return (
-    <figure
-      className="pitch-grid"
-      role="img"
-      aria-label={
-        captureState.status === 'paused'
-          ? `Pitch history paused. Showing the last captured ${visibleDurationMs / 1000} seconds from ${lowLabel} to ${highLabel}.`
-          : `Live pitch history from ${lowLabel} to ${highLabel} over the last ${visibleDurationMs / 1000} seconds.`
-      }
-    >
-      <div className="pitch-grid__viewport" ref={elementRef}>
-        <canvas
-          ref={canvasRef}
-          data-testid="pitch-grid-canvas"
-          aria-hidden="true"
+    <div className="pitch-visualization-block">
+      <div
+        className="pitch-visualization"
+        style={
+          {
+            '--pitch-grid-top-padding': `${DEFAULT_PITCH_GRID_LAYOUT.topPaddingCssPx}px`,
+            '--pitch-grid-bottom-padding': `${DEFAULT_PITCH_GRID_LAYOUT.bottomPaddingCssPx}px`,
+          } as CSSProperties
+        }
+      >
+        <ReferenceKeyboard
+          range={visibleRange}
+          state={referenceKeyboard.state}
+          onBeginPointerPress={referenceKeyboard.beginPointerPress}
+          onEndPointerPress={referenceKeyboard.endPointerPress}
+          onBeginKeyboardPress={referenceKeyboard.beginKeyboardPress}
+          onEndKeyboardPress={referenceKeyboard.endKeyboardPress}
+          onReleaseAll={referenceKeyboard.releaseAll}
+          onMoveFocus={referenceKeyboard.moveFocus}
+          onFocusMidi={referenceKeyboard.setFocusedMidi}
         />
-        <canvas
-          ref={curveCanvasRef}
-          className="pitch-grid__curve"
-          data-testid="pitch-curve-canvas"
-          aria-hidden="true"
-        />
+        <figure
+          className="pitch-grid"
+          role="img"
+          aria-label={
+            captureState.status === 'paused'
+              ? `Pitch history paused. Showing the last captured ${visibleDurationMs / 1000} seconds from ${lowLabel} to ${highLabel}.`
+              : `Live pitch history from ${lowLabel} to ${highLabel} over the last ${visibleDurationMs / 1000} seconds.`
+          }
+        >
+          <div className="pitch-grid__viewport" ref={elementRef}>
+            <canvas
+              ref={canvasRef}
+              data-testid="pitch-grid-canvas"
+              aria-hidden="true"
+            />
+            <canvas
+              ref={curveCanvasRef}
+              className="pitch-grid__curve"
+              data-testid="pitch-curve-canvas"
+              aria-hidden="true"
+            />
+          </div>
+          {history.points.every((point) => point.kind !== 'pitch') && (
+            <figcaption>
+              {captureState.status === 'paused'
+                ? 'History is paused.'
+                : active
+                  ? 'Sing a sustained note to begin pitch history.'
+                  : 'Start the microphone to begin pitch history.'}
+            </figcaption>
+          )}
+        </figure>
       </div>
-      {history.points.every((point) => point.kind !== 'pitch') && (
-        <figcaption>
-          {captureState.status === 'paused'
-            ? 'History is paused.'
-            : active
-              ? 'Sing a sustained note to begin pitch history.'
-              : 'Start the microphone to begin pitch history.'}
-        </figcaption>
-      )}
-    </figure>
+      <ReferenceNoteStatus state={referenceKeyboard.state} />
+    </div>
   );
 });

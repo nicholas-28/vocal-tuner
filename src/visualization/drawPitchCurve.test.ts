@@ -69,12 +69,12 @@ describe('drawPitchCurve', () => {
       0,
       0,
     );
-    expect(context.rect).toHaveBeenCalledWith(42, 8, 360, 400);
+    expect(context.rect).toHaveBeenCalledWith(0, 8, 393.6, 400);
     expect(context.clip).toHaveBeenCalledOnce();
     expect(context.moveTo).toHaveBeenCalledOnce();
     expect(context.lineTo).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(context.moveTo).mock.calls[0][0]).toBeGreaterThan(42);
-    expect(vi.mocked(context.lineTo).mock.calls.at(-1)?.[0]).toBe(402);
+    expect(vi.mocked(context.moveTo).mock.calls[0][0]).toBeGreaterThan(0);
+    expect(vi.mocked(context.lineTo).mock.calls.at(-1)?.[0]).toBe(393.6);
     expect(vi.mocked(context.lineTo).mock.calls.at(-1)?.[1]).toBe(192);
   });
 

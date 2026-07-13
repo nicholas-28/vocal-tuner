@@ -9,7 +9,7 @@ export const MAX_DEVICE_PIXEL_RATIO = 3;
 export const ALL_LABELS_MIN_SEMITONE_HEIGHT_CSS_PX = 12;
 
 export const DEFAULT_PITCH_GRID_LAYOUT = {
-  labelGutterCssPx: 42,
+  labelGutterCssPx: 0,
   rightPaddingCssPx: 8,
   topPaddingCssPx: 8,
   bottomPaddingCssPx: 8,

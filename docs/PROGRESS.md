@@ -108,3 +108,18 @@ Implemented on branch `issue-010-visible-range-controls`.
 - Range preserved across Pause, Clear, Stop, and new Start; reset on refresh
 - Accessible pressed states, labels, focus behavior, and graph descriptions
 - No persistence, auto-follow, zoom, panning, keyboard, or reference tone
+
+## Issue 011 — Vertical reference keyboard
+
+Implemented on branch `issue-011-vertical-reference-keyboard`.
+
+- Typed reference-key model derived from shared sharp-note and A4 = 440 Hz utilities
+- Twenty-five high-to-low DOM key buttons for every visible range
+- Natural full-width and accidental 66%-width piano geometry
+- Exact CSS-grid alignment with the Canvas semitone-center viewport
+- Monophonic Pointer Events lifecycle with capture and cancellation cleanup
+- Transient pressed state plus persistent in-page selected-note status
+- Roving tabindex with Arrow Up/Down, Home/End, Enter, and Space behavior
+- Range rebuilding with safe press, selection, and focus handling
+- Keyboard remains independent from microphone, detector, history, Pause, and Clear
+- No oscillator, AudioContext, sound, recording, target scoring, or backend

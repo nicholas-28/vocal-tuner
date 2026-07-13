@@ -60,7 +60,7 @@ describe('pitch grid viewport and coordinates', () => {
     expect(result).not.toBeNull();
     if (!result) return;
     expect(result.visibleNoteCount).toBe(25);
-    expect(result.graphLeftX).toBe(42);
+    expect(result.graphLeftX).toBe(0);
     expect(result.graphRightX).toBe(492);
     expect(result.graphTopY).toBe(8);
     expect(result.graphBottomY).toBe(408);
@@ -87,9 +87,9 @@ describe('pitch grid viewport and coordinates', () => {
   });
 
   it.each([
-    [0, 42],
-    [0.5, 267],
-    [DEFAULT_PRESENT_TIME_X_RATIO, 402],
+    [0, 0],
+    [0.5, 246],
+    [DEFAULT_PRESENT_TIME_X_RATIO, 393.6],
     [1, 492],
   ])('places graph-relative ratio %s at %s', (ratio, expected) => {
     expect(viewport(500, 416, ratio)?.presentTimeX).toBe(expected);
@@ -130,7 +130,7 @@ describe('pitch grid viewport and coordinates', () => {
     { widthCssPx: -1, heightCssPx: 100 },
     { widthCssPx: Number.NaN, heightCssPx: 100 },
     { widthCssPx: 100, heightCssPx: 0 },
-    { widthCssPx: 40, heightCssPx: 100 },
+    { widthCssPx: 8, heightCssPx: 100 },
   ])('rejects invalid graph geometry %#', (dimensions) => {
     expect(
       createPitchGridViewport({

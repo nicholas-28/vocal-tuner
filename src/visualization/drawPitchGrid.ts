@@ -129,7 +129,7 @@ export function drawPitchGrid(
       const showLabel =
         viewport.semitoneHeight >= ALL_LABELS_MIN_SEMITONE_HEIGHT_CSS_PX ||
         note.isNatural;
-      if (showLabel) {
+      if (showLabel && viewport.labelGutterCssPx > 0) {
         context.fillStyle = lineStyle.labelColor;
         context.font = lineStyle.labelFont;
         context.textAlign = 'right';
@@ -151,7 +151,11 @@ export function drawPitchGrid(
       style.gutterSeparatorWidthCssPx,
       viewport.devicePixelRatio,
     );
-    if (separatorX !== null && separatorWidth !== null) {
+    if (
+      viewport.labelGutterCssPx > 0 &&
+      separatorX !== null &&
+      separatorWidth !== null
+    ) {
       strokeLine(
         context,
         separatorX,
