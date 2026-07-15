@@ -107,8 +107,16 @@ describe('practice session state machine', () => {
         onTargetShare: 0.5,
       },
     });
-    if (state.status === 'completed')
+    if (state.status === 'completed') {
       expect(practiceMetricsAreCoherent(state.summary)).toBe(true);
+      expect(state.summary.timelineEvents).toEqual([
+        { startTimestamp: 0, endTimestamp: 100, type: 'unobserved' },
+        { startTimestamp: 100, endTimestamp: 167, type: 'on-target' },
+        { startTimestamp: 167, endTimestamp: 234, type: 'off-target' },
+        { startTimestamp: 234, endTimestamp: 301, type: 'uncertain' },
+        { startTimestamp: 301, endTimestamp: 368, type: 'no-pitch' },
+      ]);
+    }
   });
 
   it('caps evidence at 250 ms and makes scheduler excess unobserved', () => {
@@ -127,6 +135,14 @@ describe('practice session state machine', () => {
         unobservedMs: 751,
       },
     });
+    if (state.status === 'completed')
+      expect(state.summary.timelineEvents).toEqual([
+        { startTimestamp: 0, endTimestamp: 100, type: 'unobserved' },
+        { startTimestamp: 100, endTimestamp: 200, type: 'on-target' },
+        { startTimestamp: 200, endTimestamp: 500, type: 'paused' },
+        { startTimestamp: 500, endTimestamp: 600, type: 'unobserved' },
+        { startTimestamp: 600, endTimestamp: 700, type: 'off-target' },
+      ]);
     if (state.status === 'running')
       expect(practiceMetricsAreCoherent(state.session)).toBe(true);
   });
@@ -208,7 +224,49 @@ describe('practice session state machine', () => {
     if (state.status === 'completed') {
       expect(Object.isFrozen(state.summary)).toBe(true);
       expect(Object.isFrozen(state.summary.target)).toBe(true);
+      expect(Object.isFrozen(state.summary.timelineEvents)).toBe(true);
+      expect(Object.isFrozen(state.summary.timelineEvents[0])).toBe(true);
+      expect(state.summary.timelineEvents).toEqual([
+        { startTimestamp: 0, endTimestamp: 100, type: 'unobserved' },
+        { startTimestamp: 100, endTimestamp: 1000, type: 'paused' },
+      ]);
     }
+  });
+
+  it('preserves 100% measurable on-target share without hiding initial evidence gaps', () => {
+    let state = start();
+    state = observe(state, { kind: 'on-target', targetRelativeCents: 0 }, 1);
+    state = finishPracticeSession(state, 101);
+
+    expect(state).toMatchObject({
+      summary: {
+        onTargetMs: 100,
+        offTargetMs: 0,
+        onTargetShare: 1,
+        timelineEvents: [
+          { startTimestamp: 0, endTimestamp: 1, type: 'unobserved' },
+          { startTimestamp: 1, endTimestamp: 101, type: 'on-target' },
+        ],
+      },
+    });
+  });
+
+  it('keeps a silence-only observation as no pitch rather than off target', () => {
+    let state = start();
+    state = observe(state, { kind: 'no-pitch' }, 1);
+    state = finishPracticeSession(state, 101);
+
+    expect(state).toMatchObject({
+      summary: {
+        measurableVoicedMs: 0,
+        noPitchMs: 100,
+        onTargetShare: null,
+        timelineEvents: [
+          { startTimestamp: 0, endTimestamp: 1, type: 'unobserved' },
+          { startTimestamp: 1, endTimestamp: 101, type: 'no-pitch' },
+        ],
+      },
+    });
   });
 
   it('resets only a completed session and allows a fresh target afterward', () => {
@@ -225,7 +283,11 @@ describe('practice session state machine', () => {
     let state = start();
     state = observe(state, { kind: 'on-target', targetRelativeCents: 0 }, 10);
     const preview = previewPracticeSession(state, 110);
-    expect(preview).toMatchObject({ activeElapsedMs: 110, onTargetMs: 100 });
+    expect(preview).toMatchObject({
+      activeElapsedMs: 110,
+      onTargetMs: 100,
+      timelineEvents: [{ startTimestamp: 0, endTimestamp: 10 }],
+    });
     expect(state).toMatchObject({
       session: { activeElapsedMs: 10, onTargetMs: 0 },
     });

@@ -8,6 +8,7 @@ import type {
   ActivePracticeSession,
   PracticeSessionSummary,
 } from '../types/practiceSession';
+import { PracticeSessionTimeline } from './PracticeSessionTimeline';
 
 type TargetPracticeSessionProps = {
   model: TargetPracticeSessionModel;
@@ -212,6 +213,7 @@ function CompletedPractice({
         />
         <Metric label="Pauses" value={String(summary.pauseCount)} />
       </dl>
+      <PracticeSessionTimeline summary={summary} />
       <p className="visually-hidden">
         Active practice {formatPracticeDurationLong(summary.activeElapsedMs)}.
         Measured voice {formatPracticeDurationLong(summary.measurableVoicedMs)}.

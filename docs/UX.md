@@ -47,6 +47,8 @@ A second compact panel turns one selected target into an explicit Start, Pause, 
 
 Live metrics emphasize measured voice and on-target time without judging silence. The completed summary calls the ratio “On-target share,” reports uncertainty/no-pitch/unobserved context separately, and omits the percentage when no measurable voice exists. Lifecycle changes may be announced politely, but the 4 Hz elapsed display is not a live region.
 
+The completed summary also contains a horizontal wall-time timeline. Its DOM segments distinguish on target, off target, uncertain, no pitch, unobserved, and paused without interpolation or animation. Start/Finish text and a wrapping legend prevent color-only meaning. Hover, keyboard focus, or mobile tap reveals the exact state, duration, and percentage for a segment; each segment exposes the same sentence to assistive technology.
+
 ## Visual principles
 
 - Calm, minimal, and readable

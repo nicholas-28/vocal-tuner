@@ -4,7 +4,7 @@
 
 Issue 016 adds a neutral, single-target practice workflow around the selected reference note. It measures only observed timing categories and reports an on-target share, not a grade or judgment. It adds no audio recording, replay, persistence, account, automatic sequence, melody exercise, configurable duration, or backend.
 
-All state and summary data remain local, constant-space, and in memory. Refresh removes the summary. No raw audio, detector sequence, or target-relative sample history is stored.
+All state and summary data remain local and in memory. Issue 017 extends the original constant-space totals with an immutable classification-event journal for the completed timeline; it still stores no raw audio, detector sequence, frequency, MIDI, cents, or target-relative sample history. Refresh removes the summary.
 
 ## Preconditions and target lock
 
@@ -92,7 +92,7 @@ The panel has a semantic heading, textual state, locked target, current observat
 
 All processing remains local. There is no audio capture beyond the existing transient detector buffers, no recording, network request, storage, analytics, or persistence.
 
-Each observation and transition is O(1), constant-space arithmetic. There is one 250 ms display-only interval while running, no RAF, no arrays of samples, no detector rerun, no Canvas work, and no dependency.
+Metric arithmetic remains O(1). Issue 017 appends immutable timestamp/category events from that same settlement operation, so event storage grows with the number of settled intervals. There is one 250 ms display-only interval while running, no timeline rendering until completion, no timeline RAF or timer, no detector rerun, no additional Canvas work, and no dependency. Completed timeline geometry is memoized from the frozen summary.
 
 ## Known limitations
 
@@ -102,4 +102,5 @@ Each observation and transition is O(1), constant-space arithmetic. There is one
 - Background tabs and microphone interruptions become unobserved after the evidence cap but still need device testing.
 - Drone sound may be detected acoustically; no source separation is attempted.
 - Sessions and summaries disappear on refresh.
+- Very long sessions retain more timeline events and require profiling before expanding session scope.
 - Physical iPhone Safari and Android Chrome timing, touch, and layout verification remains manual.

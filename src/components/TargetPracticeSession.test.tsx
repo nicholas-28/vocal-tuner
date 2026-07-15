@@ -24,6 +24,7 @@ const session: ActivePracticeSession = {
   noPitchMs: 500,
   unobservedMs: 200,
   pauseCount: 0,
+  timelineEvents: [],
 };
 
 function model(
@@ -168,6 +169,14 @@ describe('TargetPracticeSession', () => {
       wallElapsedMs: 5000,
       onTargetShare: 0.6,
       pauseCount: 1,
+      timelineEvents: [
+        { startTimestamp: 0, endTimestamp: 1200, type: 'on-target' },
+        { startTimestamp: 1200, endTimestamp: 2000, type: 'off-target' },
+        { startTimestamp: 2000, endTimestamp: 2300, type: 'uncertain' },
+        { startTimestamp: 2300, endTimestamp: 2800, type: 'no-pitch' },
+        { startTimestamp: 2800, endTimestamp: 3000, type: 'unobserved' },
+        { startTimestamp: 3000, endTimestamp: 5000, type: 'paused' },
+      ],
     };
     render(
       <TargetPracticeSession
@@ -195,6 +204,28 @@ describe('TargetPracticeSession', () => {
     expect(document.body).not.toHaveTextContent(
       /score|grade|recording|replay/i,
     );
+    expect(
+      screen.getByRole('heading', { name: 'Session timeline' }),
+    ).toBeVisible();
+    expect(screen.getByLabelText('Practice events').children).toHaveLength(6);
+    expect(
+      screen.getByRole('button', {
+        name: 'On target for 1.2 seconds. 24% of session.',
+      }),
+    ).toHaveTextContent('On target1.2 s24%');
+    const timelineEvent = screen.getByRole('button', {
+      name: 'On target for 1.2 seconds. 24% of session.',
+    });
+    fireEvent.click(timelineEvent);
+    expect(timelineEvent).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      timelineEvent.getElementsByClassName('practice-timeline__tooltip')[0],
+    ).toHaveAttribute('data-visible');
+    fireEvent.click(timelineEvent);
+    expect(timelineEvent).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText('Timeline legend')).toHaveTextContent(
+      'On targetOff targetUncertainNo pitchUnobservedPaused',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Practice again' }));
     expect(reset).toHaveBeenCalledOnce();
   });
@@ -208,6 +239,9 @@ describe('TargetPracticeSession', () => {
       completedAtMs: 1000,
       wallElapsedMs: 1000,
       onTargetShare: null,
+      timelineEvents: [
+        { startTimestamp: 0, endTimestamp: 1000, type: 'no-pitch' },
+      ],
     };
     render(
       <TargetPracticeSession

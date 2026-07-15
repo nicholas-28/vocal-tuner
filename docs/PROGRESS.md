@@ -191,3 +191,16 @@ Implemented on branch `issue-016-target-note-practice-session`.
 - One 4 Hz display-only timer with cleanup and stale-session protection
 - Keyboard activation lock with preserved focus/navigation; optional independent drone
 - No recording, replay, persistence, automatic sequence, backend, or new dependency
+
+## Issue 017 — Practice-session timeline and event markers
+
+Implemented on branch `issue-017-practice-session-timeline`.
+
+- Immutable on-target, off-target, uncertain, no-pitch, unobserved, and paused events
+- Exact event creation inside the existing practice metric-settlement path
+- Full wall-duration proportional positioning with no event-count normalization
+- One-pixel display minimum without accounting changes
+- Completed-session-only semantic DOM timeline with no Canvas or live loop
+- Hover, focus, and mobile-tap tooltips with duration and wall-session percentage
+- Screen-reader event descriptions, Start/Finish context, and wrapping state legend
+- No recording, replay, scrolling, zoom, editing, export, persistence, scoring, or dependency

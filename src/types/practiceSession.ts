@@ -1,4 +1,5 @@
 import type { TargetNote } from './targetPitch';
+import type { PracticeTimelineEvent } from './practiceTimeline';
 
 export type PracticeTarget = Readonly<TargetNote>;
 
@@ -28,6 +29,7 @@ export type ActivePracticeSession = PracticeMetrics &
     lastProcessedAtMs: number;
     currentObservation: PracticeObservation;
     observationStartedAtMs: number;
+    timelineEvents: readonly PracticeTimelineEvent[];
   }>;
 
 export type PracticePauseReason = 'manual' | 'microphone-stopped';
@@ -46,6 +48,7 @@ export type PracticeSessionSummary = PracticeMetrics &
     completedAtMs: number;
     wallElapsedMs: number;
     onTargetShare: number | null;
+    timelineEvents: readonly PracticeTimelineEvent[];
   }>;
 
 export type PracticeSessionState =

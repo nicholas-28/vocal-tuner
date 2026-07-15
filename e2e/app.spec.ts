@@ -400,6 +400,16 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     practicePanel.getByText('Current observation: Briefly uncertain'),
   ).toBeVisible();
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(null, 'unvoiced');
+  await expect(
+    practicePanel.getByText('Current observation: No pitch detected'),
+  ).toBeVisible();
+  await page.waitForTimeout(80);
+  await publishPracticeObservation(null, 'unvoiced');
+  await expect(
+    practicePanel.getByRole('heading', { name: 'Session timeline' }),
+  ).toHaveCount(0);
 
   await practicePanel.getByRole('button', { name: 'Pause practice' }).click();
   const frozenMetrics = await liveMetrics.textContent();
@@ -417,6 +427,49 @@ test('loads the initial tuner screen', async ({ page }) => {
     practicePanel.getByLabel('Completed practice summary'),
   ).toContainText('Measured voice');
   await expect(practicePanel.getByText(/On-target share:/)).toBeVisible();
+  const timeline = practicePanel.getByLabel('Practice events');
+  await expect(
+    practicePanel.getByRole('heading', { name: 'Session timeline' }),
+  ).toBeVisible();
+  for (const type of [
+    'on-target',
+    'off-target',
+    'uncertain',
+    'no-pitch',
+    'unobserved',
+    'paused',
+  ])
+    await expect(
+      timeline.locator(
+        `.practice-timeline__segment[data-event-type="${type}"]`,
+      ),
+    ).not.toHaveCount(0);
+  const firstTimelineEvent = timeline
+    .locator('.practice-timeline__segment[data-event-type="on-target"]')
+    .first();
+  await firstTimelineEvent.click();
+  await expect(firstTimelineEvent).toHaveAttribute('aria-expanded', 'true');
+  await expect(firstTimelineEvent.getByRole('tooltip')).toBeVisible();
+  await expect(firstTimelineEvent).toHaveAttribute(
+    'aria-label',
+    /for .+\. \d+% of session\./,
+  );
+  expect(
+    await firstTimelineEvent.evaluate(
+      (element) => (element.parentElement as HTMLElement).style.width,
+    ),
+  ).toMatch(/^max\(1px, /);
+  await page.setViewportSize({ width: 320, height: 800 });
+  expect(
+    await practicePanel
+      .getByLabel('Timeline legend')
+      .evaluate((element) => getComputedStyle(element).flexWrap),
+  ).toBe('wrap');
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await expect(practicePanel).not.toContainText(
     /score|grade|recording|replay/i,
   );

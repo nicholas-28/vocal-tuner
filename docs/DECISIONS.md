@@ -187,3 +187,11 @@ Status: accepted
 A practice session locks the persistent selected target and requires an explicitly active microphone. Its discriminated idle/running/paused/completed state uses the detector-compatible `performance.now()` origin. Each interval is attributed to the previous observation for at most 250 ms; excess, initial, and post-resume time becomes explicit unobserved time. Active elapsed reconciles measurable voice, uncertainty, no pitch, and unobserved time in constant space.
 
 Measurable voice uses only stable accepted raw target-relative cents and the existing inclusive ±10 tolerance. On-target share divides on-target time by measurable voice, so silence and uncertainty neither count as off-target voice nor lower the denominator. A zero denominator produces no percentage. Practice Pause, history Pause, microphone capture, and drone playback remain independent; loss of active microphone auto-pauses practice and requires explicit Resume.
+
+## ADR-021 — Practice timeline events originate in metric settlement
+
+Status: accepted
+
+The completed practice timeline is an immutable event journal produced by the existing Issue 016 settlement path. Each metric-bearing or unobserved interval appends its exact monotonic start, end, and category at the same point that totals change. Pause boundaries append paused wall-time events on Resume or Finish. The UI never reconstructs chronology from summary totals, pitch history, event count, or interpolated samples.
+
+Completed rendering is DOM-only and memoizes duration and proportional wall-time geometry once from the frozen summary. A one-pixel CSS minimum preserves visibility without changing timestamps, duration, percentage, or neighboring accounting. Segments remain individually focusable for hover, tap, and screen-reader detail. No live timeline, Canvas, animation, timer, persistence, or audio data is added.

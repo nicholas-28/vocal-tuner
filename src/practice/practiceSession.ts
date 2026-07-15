@@ -9,6 +9,10 @@ import type {
   PracticeSessionSummary,
   PracticeTarget,
 } from '../types/practiceSession';
+import type {
+  PracticeTimelineEvent,
+  PracticeTimelineEventType,
+} from '../types/practiceTimeline';
 import { MAX_ACCOUNTABLE_PRACTICE_INTERVAL_MS } from './practiceSessionConfig';
 
 const EMPTY_METRICS: PracticeMetrics = {
@@ -61,6 +65,7 @@ export function startPracticeSession(
       lastProcessedAtMs: timestampMs,
       currentObservation: { kind: 'unobserved' },
       observationStartedAtMs: timestampMs,
+      timelineEvents: Object.freeze([]),
     },
   };
 }
@@ -122,7 +127,12 @@ export function resumePracticeSession(
   return {
     status: 'running',
     session: {
-      ...state.paused.session,
+      ...appendTimelineEvent(
+        state.paused.session,
+        state.paused.pausedAtMs,
+        timestampMs,
+        'paused',
+      ),
       lastProcessedAtMs: timestampMs,
       currentObservation: { kind: 'unobserved' },
       observationStartedAtMs: timestampMs,
@@ -151,9 +161,15 @@ export function finishPracticeSession(
     state.status === 'paused' &&
     isForwardOrEqualTimestamp(state.paused.pausedAtMs, timestampMs)
   ) {
+    const session = appendTimelineEvent(
+      state.paused.session,
+      state.paused.pausedAtMs,
+      timestampMs,
+      'paused',
+    );
     return {
       status: 'completed',
-      summary: createSummary(state.paused.session, timestampMs),
+      summary: createSummary(session, timestampMs),
     };
   }
   return state;
@@ -174,7 +190,7 @@ export function previewPracticeSession(
       state.session.lastProcessedAtMs,
       timestampMs,
     )
-      ? settlePracticeSession(state.session, timestampMs)
+      ? settlePracticeSession(state.session, timestampMs, false)
       : state.session;
   }
   if (state.status === 'paused') return state.paused.session;
@@ -238,6 +254,7 @@ export function practiceMetricsAreCoherent(metrics: PracticeMetrics): boolean {
 function settlePracticeSession(
   session: ActivePracticeSession,
   timestampMs: number,
+  recordTimeline = true,
 ): ActivePracticeSession {
   const deltaMs = timestampMs - session.lastProcessedAtMs;
   if (deltaMs <= 0) return session;
@@ -250,9 +267,26 @@ function settlePracticeSession(
     Math.min(timestampMs, evidenceEndMs) - session.lastProcessedAtMs,
   );
   const unobservedMs = deltaMs - observableMs;
-  const metrics = addObservationDuration(session, observableMs);
+  const observedEndMs = session.lastProcessedAtMs + observableMs;
+  const withObservedEvent = recordTimeline
+    ? appendTimelineEvent(
+        session,
+        session.lastProcessedAtMs,
+        observedEndMs,
+        session.currentObservation.kind,
+      )
+    : session;
+  const withTimeline = recordTimeline
+    ? appendTimelineEvent(
+        withObservedEvent,
+        observedEndMs,
+        timestampMs,
+        'unobserved',
+      )
+    : withObservedEvent;
+  const metrics = addObservationDuration(withTimeline, observableMs);
   return {
-    ...session,
+    ...withTimeline,
     ...metrics,
     activeElapsedMs: session.activeElapsedMs + deltaMs,
     unobservedMs: metrics.unobservedMs + unobservedMs,
@@ -294,6 +328,9 @@ function createSummary(
   session: ActivePracticeSession,
   completedAtMs: number,
 ): PracticeSessionSummary {
+  const timelineEvents = Object.freeze(
+    session.timelineEvents.map((event) => Object.freeze({ ...event })),
+  );
   return Object.freeze({
     sessionId: session.sessionId,
     target: Object.freeze({ ...session.target }),
@@ -312,7 +349,26 @@ function createSummary(
       session.onTargetMs,
       session.measurableVoicedMs,
     ),
+    timelineEvents,
   });
+}
+
+function appendTimelineEvent(
+  session: ActivePracticeSession,
+  startTimestamp: number,
+  endTimestamp: number,
+  type: PracticeTimelineEventType,
+): ActivePracticeSession {
+  if (endTimestamp <= startTimestamp) return session;
+  const event: PracticeTimelineEvent = Object.freeze({
+    startTimestamp,
+    endTimestamp,
+    type,
+  });
+  return {
+    ...session,
+    timelineEvents: Object.freeze([...session.timelineEvents, event]),
+  };
 }
 
 function isValidPracticeTarget(target: PracticeTarget): boolean {
