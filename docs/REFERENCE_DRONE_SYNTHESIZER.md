@@ -28,17 +28,17 @@ The initial timbre is a sine wave because it is predictable, lightweight, and fr
 
 Issue 012 manual testing exposed a false-positive playback defect: the first engine treated a fulfilled `resume()` promise as sufficient and published `playing` without checking that the context had actually reached `running`. A suspended or interrupted context could therefore own a valid-looking but silent graph. The original mocks concealed this by always changing state to `running`.
 
-The repaired construction order is deterministic and transactional:
+Issue 018.1 found a remaining physical-iPhone timing gap: the earlier repair created and resumed the context from `click`, but awaited `resume()` before it created or started the oscillator. WebKit can reject rendering begun asynchronously after the gesture. The hotfix construction order is deterministic and transactional:
 
-1. create the context and master gain;
+1. synchronously create the context and master gain from the explicit activation;
 2. set the protected master gain and connect it once to destination;
-3. resume a suspended or interrupted context and verify its state again;
-4. create oscillator and voice gain;
-5. set voice gain to zero and assign frequency;
-6. connect oscillator to voice gain and voice gain to master gain;
-7. start the oscillator;
-8. schedule the attack to voice gain `1.0`;
-9. confirm the operation is still current and every graph invariant is true;
+3. synchronously request resume when suspended or interrupted;
+4. create oscillator and voice gain, set voice gain to zero, and assign frequency;
+5. connect oscillator to voice gain and voice gain to master gain;
+6. start the zero-gain oscillator before yielding the activation task;
+7. await resume, inspect the actual state, and confirm the rendering clock advances;
+8. schedule attack to voice gain `1.0` only after readiness succeeds;
+9. confirm the current context/voice generations and every graph invariant;
 10. only then publish `playing`.
 
 Any construction, connection, automation, or start failure disconnects all partially created voice nodes. Destination construction failure also disconnects the master output and closes that failed context.
@@ -67,6 +67,8 @@ Because speaker output can feed back into the microphone and pitch detector, the
 
 Every playback path resumes a suspended or runtime-interrupted context before producing or changing audio and then checks the state again. `playing` requires a running, non-closed context; destination connection; both voice connections; successful oscillator start; valid gain values; and a current operation token. This confirms a valid Web Audio output graph, not the physical speaker, OS output route, device mute state, or human audibility.
 
+Unknown future context states remain `unknown` rather than being mislabeled as suspended. Context and voice generations isolate stale `statechange` and `onended` callbacks. A resumed context must also advance `currentTime` during a short confirmation interval; a nominally running but stalled iOS context remains a recoverable error. Visibility and page events never auto-start sound. Hidden/pagehide state invalidates the active voice, and the next foreground playback requires another explicit gesture.
+
 Unsupported Web Audio, invalid notes, contexts that remain suspended, interrupted/closed contexts, graph failures, oscillator-start failures, and other start failures have typed error states. Selection remains available, so a later explicit activation retries. A closed retained context is discarded and a replacement is created only on a later explicit playback command. A `statechange` listener updates diagnostics and invalidates/cleans an active voice if output leaves `running`; disposal removes the listener.
 
 An operation token invalidates stale asynchronous starts and transitions. Shared resume and release promises prevent duplicate lifecycle work. A Stop or newer note request wins over an older pending request, and a failed transition releases the existing voice rather than leaving ambiguous playback. Listener exceptions are isolated from engine state.
@@ -75,7 +77,9 @@ React Strict Mode does not construct audio during its development-only setup cyc
 
 ## Development diagnostics
 
-Development builds include a collapsed **Reference-drone diagnostics** panel. It updates only on commands and engine transitions and exposes context, engine and voice states; graph/destination/start confirmation; MIDI and frequency; oscillator type; voice/master/effective gain; last command; and the last typed error. Preview can expose it explicitly with `?droneDiagnostics=1`. Production omits it and ignores the query flag.
+Development builds include a collapsed **Reference-drone diagnostics** panel. Preview can expose it with `?droneDiagnostics=1`. Production continues to ignore that broad developer flag, but Issue 018.1 temporarily permits the narrower `?audioDiagnostics=1` read-only audio lifecycle panel. It includes constructor identity, context/voice generations, resume result, state and rendering-clock checks, graph/gain invariants, visibility lifecycle, and a bounded 40-event log. It does not unlock fabricated tuner or practice input.
+
+Diagnostic mode also provides an explicit one-second A4 output test through the same protected master path. It does not change keyboard selection, target, microphone, history, or practice state and cannot overlap another test or active drone.
 
 Concise transition logging is available in development and Preview with `?droneDebug=1`; Production ignores the flag. It covers context creation/resume, graph connection, oscillator start, attack, confirmation, transition, Stop, oscillator end, invalidation, disposal, and errors. It contains no microphone samples or personal data.
 

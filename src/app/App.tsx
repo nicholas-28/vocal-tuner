@@ -121,6 +121,7 @@ export function App() {
         showReferenceDroneDiagnostics={
           runtimeFeatures.showReferenceDroneDiagnostics
         }
+        showAudioDiagnostics={runtimeFeatures.showAudioDiagnostics}
       />
       <MicrophoneControls
         state={state}

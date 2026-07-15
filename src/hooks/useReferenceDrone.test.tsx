@@ -22,18 +22,21 @@ function createFakeEngine(initialVolume = 0.25) {
     snapshot = next;
     listeners.forEach((listener) => listener({ ...snapshot }));
   };
+  const activateFromUserGesture = vi.fn(async (note) => {
+    publish({
+      ...snapshot,
+      status: 'starting',
+      activeMidi: note.midiNote,
+      frequencyHz: note.frequencyHz,
+      errorCode: null,
+    });
+    publish({ ...snapshot, status: 'playing' });
+    return { ok: true } as const;
+  });
   const engine: ReferenceDroneEngine = {
-    play: vi.fn(async (note) => {
-      publish({
-        ...snapshot,
-        status: 'starting',
-        activeMidi: note.midiNote,
-        frequencyHz: note.frequencyHz,
-        errorCode: null,
-      });
-      publish({ ...snapshot, status: 'playing' });
-      return { ok: true } as const;
-    }),
+    activateFromUserGesture,
+    play: activateFromUserGesture,
+    playOutputTestFromUserGesture: vi.fn(async () => ({ ok: true }) as const),
     stop: vi.fn(async () => {
       publish({ ...snapshot, status: 'stopping' });
       publish({
@@ -69,7 +72,7 @@ describe('useReferenceDrone', () => {
 
     await act(() => result.current.toggleMidi(60));
     expect(factory).toHaveBeenCalledWith(0.4);
-    expect(engine.play).toHaveBeenCalledWith({
+    expect(engine.activateFromUserGesture).toHaveBeenCalledWith({
       midiNote: 60,
       frequencyHz: 261.6255653005986,
     });
@@ -82,7 +85,7 @@ describe('useReferenceDrone', () => {
     expect(engine.stop).toHaveBeenCalledOnce();
     expect(result.current.snapshot.status).toBe('stopped');
     await act(() => result.current.toggleMidi(60));
-    expect(engine.play).toHaveBeenCalledTimes(2);
+    expect(engine.activateFromUserGesture).toHaveBeenCalledTimes(2);
   });
 
   it('changes notes, forwards volume, and disposes on unmount', async () => {
@@ -91,12 +94,12 @@ describe('useReferenceDrone', () => {
       useReferenceDrone(() => engine),
     );
     await act(() => result.current.playMidi(69));
-    expect(engine.play).toHaveBeenCalledWith({
+    expect(engine.activateFromUserGesture).toHaveBeenCalledWith({
       midiNote: 69,
       frequencyHz: 440,
     });
     await act(() => result.current.toggleMidi(67));
-    expect(engine.play).toHaveBeenLastCalledWith({
+    expect(engine.activateFromUserGesture).toHaveBeenLastCalledWith({
       midiNote: 67,
       frequencyHz: 391.99543598174927,
     });
@@ -140,7 +143,7 @@ describe('useReferenceDrone', () => {
       midiNote: 69,
       frequencyHz: 440,
     });
-    expect(firstEngine.play).toHaveBeenCalledTimes(1);
+    expect(firstEngine.activateFromUserGesture).toHaveBeenCalledTimes(1);
     expect(second.result.current.snapshot).toMatchObject({
       status: 'playing',
       activeMidi: 69,

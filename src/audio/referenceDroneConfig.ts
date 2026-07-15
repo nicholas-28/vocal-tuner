@@ -1,4 +1,5 @@
 import type {
+  ReferenceDroneAudioContextConstructorName,
   ReferenceDroneConfig,
   ReferenceDroneDiagnostics,
 } from '../types/referenceDrone';
@@ -13,21 +14,57 @@ export const DEFAULT_REFERENCE_DRONE_CONFIG: Readonly<ReferenceDroneConfig> = {
   maximumMasterGain: 0.16,
 };
 
-export function createInitialReferenceDroneDiagnostics(): ReferenceDroneDiagnostics {
+export function createInitialReferenceDroneDiagnostics(
+  constructorName: ReferenceDroneAudioContextConstructorName = 'unavailable',
+  engineGenerationId = 0,
+): ReferenceDroneDiagnostics {
   return {
+    userAgentSummary:
+      typeof navigator === 'undefined' ? 'unavailable' : navigator.userAgent,
+    secureContext:
+      typeof window !== 'undefined' && window.isSecureContext === true,
+    constructorAvailable: constructorName !== 'unavailable',
+    constructorName,
+    contextGenerationId: null,
     contextState: 'unavailable',
+    contextSampleRate: null,
+    contextBaseLatency: null,
+    destinationChannelCount: null,
     engineState: 'idle',
     voiceState: 'none',
+    engineGenerationId,
+    voiceGenerationId: null,
+    oscillatorCreated: false,
     oscillatorStarted: false,
+    oscillatorEnded: false,
     graphConnected: false,
+    voiceGainConnected: false,
+    masterGainConnected: false,
     destinationConnected: false,
     midiNote: null,
     frequencyHz: null,
     oscillatorType: DEFAULT_REFERENCE_DRONE_CONFIG.oscillatorType,
     voiceGainTarget: null,
+    voiceGainCurrent: null,
     masterGain: null,
+    masterGainCurrent: null,
     effectiveGain: null,
+    lastUserActivationTimestampMs: null,
     lastCommand: null,
+    resumeRequested: false,
+    resumeResult: 'not-requested',
+    contextStateAfterResume: null,
+    renderingClockAdvanced: null,
+    lastStateChangeTimestampMs: null,
+    lastVisibilityChange: null,
+    documentVisibilityState:
+      typeof document === 'undefined'
+        ? 'unavailable'
+        : document.visibilityState,
+    pageLifecycleState: 'active',
+    requiresExplicitReactivation: false,
+    outputTestStatus: 'idle',
+    lifecycleLog: [],
     errorCode: null,
     errorMessage: null,
   };

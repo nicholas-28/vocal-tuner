@@ -18,8 +18,26 @@ describe('runtime feature policy', () => {
     ).toEqual({
       showDeveloperDiagnostics: false,
       showReferenceDroneDiagnostics: false,
+      showAudioDiagnostics: false,
       enableReferenceDroneDebugLog: false,
       enableCentsMeterDemo: false,
+    });
+  });
+
+  it('allows only read-only audio diagnostics in production', () => {
+    const production = createBuildInfo({
+      mode: 'production',
+      vercelEnvironment: 'production',
+    });
+    expect(
+      createRuntimeFeaturePolicy(
+        '?audioDiagnostics=1&centsMeterDemo=1',
+        production,
+      ),
+    ).toMatchObject({
+      showAudioDiagnostics: true,
+      enableCentsMeterDemo: false,
+      showDeveloperDiagnostics: false,
     });
   });
 
@@ -37,6 +55,7 @@ describe('runtime feature policy', () => {
     ).toEqual({
       showDeveloperDiagnostics: true,
       showReferenceDroneDiagnostics: true,
+      showAudioDiagnostics: false,
       enableReferenceDroneDebugLog: true,
       enableCentsMeterDemo: false,
     });

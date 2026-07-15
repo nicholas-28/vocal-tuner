@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createReferenceDroneEngine } from './referenceDroneEngine';
 
 class MockAudioParam {
@@ -75,16 +75,28 @@ class MockAudioContext {
       await new Promise<void>((resolve) => {
         this.resolveDeferredResume = () => {
           this.setState('running');
+          setTimeout(() => {
+            this.currentTime += 0.05;
+          }, 10);
           resolve();
         };
       });
       return;
     }
-    if (this.resumeMode === 'running') this.setState('running');
+    if (this.resumeMode === 'running') {
+      this.setState('running');
+      setTimeout(() => {
+        this.currentTime += 0.05;
+      }, 10);
+    }
   });
 
   close = vi.fn(async () => {
     this.setState('closed');
+  });
+
+  suspend = vi.fn(async () => {
+    this.setState('suspended');
   });
 
   createGain = vi.fn(() => {
@@ -141,6 +153,11 @@ const A4 = { midiNote: 69, frequencyHz: 440 };
 const G4 = { midiNote: 67, frequencyHz: 391.99543598174927 };
 
 describe('reference drone engine', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('confirms a running, fully connected graph before reporting playing', async () => {
     const context = new MockAudioContext();
     const factory = vi.fn(() => asAudioContext(context));
@@ -181,12 +198,67 @@ describe('reference drone engine', () => {
       contextFactory: () => asAudioContext(context),
     });
     const starting = engine.play(A4);
+    expect(context.events).toEqual([
+      'gain-0->destination',
+      'context:resume',
+      'oscillator-0->gain-1',
+      'gain-1->gain-0',
+      'oscillator:start',
+    ]);
     await Promise.resolve();
     expect(engine.getSnapshot().status).toBe('starting');
-    expect(context.oscillators).toHaveLength(0);
+    expect(context.oscillators).toHaveLength(1);
+    expect(context.oscillators[0]?.start).toHaveBeenCalledOnce();
+    expect(context.gains[1]?.gain.value).toBe(0);
+    expect(engine.getSnapshot().diagnostics).toMatchObject({
+      voiceGainTarget: 0,
+      effectiveGain: 0,
+    });
     context.resolveDeferredResume();
     await expect(starting).resolves.toEqual({ ok: true });
     expect(engine.getSnapshot().status).toBe('playing');
+  });
+
+  it('runs one explicit output test through the protected graph and cleans it', async () => {
+    vi.useFakeTimers();
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    const test = engine.playOutputTestFromUserGesture();
+    await Promise.resolve();
+    expect(engine.getSnapshot()).toMatchObject({
+      activeMidi: null,
+      diagnostics: { outputTestStatus: 'playing', frequencyHz: 440 },
+    });
+    expect(context.gains[0]?.gain.value).toBe(0.04);
+    await vi.advanceTimersByTimeAsync(1000);
+    context.oscillators[0]?.finish();
+    await expect(test).resolves.toEqual({ ok: true });
+    expect(engine.getSnapshot()).toMatchObject({
+      activeMidi: null,
+      diagnostics: { outputTestStatus: 'succeeded' },
+    });
+    expect(context.oscillators[0]?.disconnect).toHaveBeenCalled();
+  });
+
+  it('keeps a failed output test independent from reference selection', async () => {
+    const context = new MockAudioContext('suspended');
+    context.resumeMode = 'stays-suspended';
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await expect(engine.playOutputTestFromUserGesture()).resolves.toEqual({
+      ok: false,
+      errorCode: 'context-not-running',
+    });
+    expect(engine.getSnapshot()).toMatchObject({
+      activeMidi: null,
+      frequencyHz: null,
+      status: 'error',
+      diagnostics: { outputTestStatus: 'failed' },
+    });
+    expect(context.oscillators[0]?.disconnect).toHaveBeenCalled();
   });
 
   it('does not report playing when resume resolves but remains suspended', async () => {
@@ -199,7 +271,8 @@ describe('reference drone engine', () => {
       ok: false,
       errorCode: 'context-not-running',
     });
-    expect(context.oscillators).toHaveLength(0);
+    expect(context.oscillators).toHaveLength(1);
+    expect(context.oscillators[0]?.disconnect).toHaveBeenCalled();
     expect(engine.getSnapshot()).toMatchObject({
       status: 'error',
       errorCode: 'context-not-running',
@@ -230,6 +303,20 @@ describe('reference drone engine', () => {
     expect(rejectedEngine.getSnapshot()).toMatchObject({
       status: 'error',
       errorCode: 'audio-start-failed',
+    });
+  });
+
+  it('reports unknown future context states without mislabeling them', async () => {
+    const context = new MockAudioContext();
+    context.state = 'future-state' as AudioContextState;
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'error',
+      errorCode: 'context-not-running',
+      diagnostics: { contextState: 'unknown' },
     });
   });
 
@@ -358,7 +445,9 @@ describe('reference drone engine', () => {
     const stopping = engine.stop();
     context.resolveDeferredResume();
     await Promise.all([starting, stopping]);
-    expect(context.oscillators).toHaveLength(0);
+    expect(context.oscillators).toHaveLength(1);
+    expect(context.oscillators[0]?.stop).toHaveBeenCalled();
+    expect(context.oscillators[0]?.disconnect).toHaveBeenCalled();
     expect(engine.getSnapshot().status).toBe('stopped');
   });
 
@@ -434,6 +523,59 @@ describe('reference drone engine', () => {
     expect(unavailable.getSnapshot()).toMatchObject({
       status: 'error',
       errorCode: 'unavailable',
+    });
+  });
+
+  it('reports constructor identity and keeps the lifecycle log bounded', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+      contextConstructorName: 'webkitAudioContext',
+    });
+    await engine.play(A4);
+    for (let index = 0; index < 45; index += 1) context.setState('running');
+    const diagnostics = engine.getSnapshot().diagnostics;
+    expect(diagnostics.constructorName).toBe('webkitAudioContext');
+    expect(diagnostics.contextGenerationId).toBe(1);
+    expect(diagnostics.voiceGenerationId).toBe(1);
+    expect(diagnostics.lifecycleLog).toHaveLength(40);
+    expect(diagnostics.lifecycleLog[0]?.sequence).toBeGreaterThan(1);
+  });
+
+  it('does not auto-play after visibility loss and resumes the retained context on the next gesture', async () => {
+    let visibility: DocumentVisibilityState = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(
+      () => visibility,
+    );
+    const first = new MockAudioContext();
+    const factory = vi.fn(() => asAudioContext(first));
+    const engine = createReferenceDroneEngine({ contextFactory: factory });
+    await engine.play(A4);
+
+    visibility = 'hidden';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'error',
+      diagnostics: { requiresExplicitReactivation: true },
+    });
+    visibility = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(factory).toHaveBeenCalledOnce();
+    expect(engine.getSnapshot().status).toBe('error');
+
+    await expect(engine.activateFromUserGesture(A4)).resolves.toEqual({
+      ok: true,
+    });
+    expect(factory).toHaveBeenCalledOnce();
+    expect(first.suspend).toHaveBeenCalledOnce();
+    expect(first.resume).toHaveBeenCalledOnce();
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'playing',
+      diagnostics: {
+        contextGenerationId: 1,
+        requiresExplicitReactivation: false,
+      },
     });
   });
 });

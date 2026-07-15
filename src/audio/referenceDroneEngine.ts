@@ -5,7 +5,9 @@ import {
   mapReferenceDroneVolumeToGain,
   normalizeReferenceDroneVolume,
 } from './referenceDroneConfig';
+import { selectAudioContextConstructor } from './referenceDroneContext';
 import type {
+  ReferenceDroneAudioContextConstructorName,
   ReferenceDroneCommandResult,
   ReferenceDroneConfig,
   ReferenceDroneContextState,
@@ -18,11 +20,13 @@ import { getCurrentRuntimeFeaturePolicy } from '../config/runtimeFeatures';
 
 type ReferenceDroneEngineOptions = {
   contextFactory?: () => AudioContext;
+  contextConstructorName?: ReferenceDroneAudioContextConstructorName;
   config?: ReferenceDroneConfig;
   initialVolume?: number;
 };
 
 type DroneVoice = {
+  generationId: number;
   oscillator: OscillatorNode;
   gain: GainNode;
   note: ReferenceDroneNote;
@@ -45,19 +49,15 @@ class DroneEngineError extends Error {
   }
 }
 
-function defaultContextFactory(): AudioContext {
-  const browserWindow = window as typeof window & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-  const AudioContextClass =
-    browserWindow.AudioContext ?? browserWindow.webkitAudioContext;
-  if (!AudioContextClass) {
+function createDefaultContext(): AudioContext {
+  const selection = selectAudioContextConstructor();
+  if (!selection.constructor) {
     throw new DroneEngineError(
       'unavailable',
       'Web Audio is unavailable in this browser.',
     );
   }
-  return new AudioContextClass();
+  return new selection.constructor();
 }
 
 function isValidNote(note: ReferenceDroneNote): boolean {
@@ -73,8 +73,12 @@ function getContextState(context: AudioContext): ReferenceDroneContextState {
   if (state === 'running' || state === 'suspended' || state === 'closed') {
     return state;
   }
-  return state === 'interrupted' ? 'interrupted' : 'suspended';
+  return state === 'interrupted' ? 'interrupted' : 'unknown';
 }
+
+let nextEngineGenerationId = 1;
+const referenceDronePageStartTime =
+  typeof performance === 'undefined' ? Date.now() : performance.now();
 
 function safeDisconnect(node: AudioNode | null): void {
   try {
@@ -183,8 +187,16 @@ export function createReferenceDroneEngine(
   const config = isValidReferenceDroneConfig(requestedConfig)
     ? requestedConfig
     : DEFAULT_REFERENCE_DRONE_CONFIG;
-  const contextFactory = options.contextFactory ?? defaultContextFactory;
-  const initialDiagnostics = createInitialReferenceDroneDiagnostics();
+  const constructorSelection = selectAudioContextConstructor();
+  const contextFactory = options.contextFactory ?? createDefaultContext;
+  const constructorName =
+    options.contextConstructorName ??
+    (options.contextFactory ? 'AudioContext' : constructorSelection.name);
+  const engineGenerationId = nextEngineGenerationId++;
+  const initialDiagnostics = createInitialReferenceDroneDiagnostics(
+    constructorName,
+    engineGenerationId,
+  );
   initialDiagnostics.oscillatorType = config.oscillatorType;
   let snapshot: ReferenceDroneSnapshot = {
     status: 'stopped',
@@ -206,7 +218,14 @@ export function createReferenceDroneEngine(
   let releaseFinish: (() => void) | null = null;
   let resumePromise: Promise<void> | null = null;
   let operation = 0;
+  let contextGeneration = 0;
+  let voiceGeneration = 0;
+  let lifecycleSequence = 0;
   let disposed = false;
+  let contextStateListener: {
+    context: AudioContext;
+    listener: EventListener;
+  } | null = null;
 
   const publish = (next: ReferenceDroneSnapshot) => {
     snapshot = {
@@ -231,16 +250,41 @@ export function createReferenceDroneEngine(
     });
   };
 
+  const addLifecycleEvent = (name: string, detail: string | null = null) => {
+    const now =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    const event = Object.freeze({
+      sequence: ++lifecycleSequence,
+      relativeTimeMs: Math.max(0, now - referenceDronePageStartTime),
+      name,
+      detail,
+    });
+    updateDiagnostics({
+      lifecycleLog: Object.freeze(
+        [...snapshot.diagnostics.lifecycleLog, event].slice(-40),
+      ),
+    });
+  };
+
   const cleanupVoice = (releasedVoice: DroneVoice, ended = true) => {
     releasedVoice.oscillator.onended = null;
     safeDisconnect(releasedVoice.oscillator);
     safeDisconnect(releasedVoice.gain);
+    const ownsCurrentDiagnostics =
+      voice === releasedVoice ||
+      snapshot.diagnostics.voiceGenerationId === releasedVoice.generationId;
     if (voice === releasedVoice) voice = null;
+    if (!ownsCurrentDiagnostics) return;
+    addLifecycleEvent('node ended', `voice ${releasedVoice.generationId}`);
     updateDiagnostics({
       voiceState: ended ? 'ended' : 'none',
+      oscillatorEnded: ended,
       oscillatorStarted: false,
       graphConnected: false,
+      voiceGainConnected: false,
+      voiceGenerationId: null,
       voiceGainTarget: null,
+      voiceGainCurrent: null,
       effectiveGain: null,
     });
   };
@@ -270,23 +314,43 @@ export function createReferenceDroneEngine(
           : snapshot.diagnostics.contextState,
         engineState: 'error',
         voiceState: 'none',
+        voiceGenerationId: null,
+        oscillatorCreated: false,
         oscillatorStarted: false,
+        oscillatorEnded: false,
         graphConnected: false,
+        voiceGainConnected: false,
         midiNote: null,
         frequencyHz: null,
         voiceGainTarget: null,
+        voiceGainCurrent: null,
         effectiveGain: null,
         lastCommand,
         errorCode: error.code,
         errorMessage: import.meta.env.DEV ? error.message : null,
+        requiresExplicitReactivation:
+          error.code === 'context-interrupted' ||
+          error.code === 'context-not-running' ||
+          error.code === 'context-closed',
       },
     });
     return { ok: false, errorCode: error.code };
   };
 
-  const handleContextStateChange = () => {
-    if (disposed || !context) return;
-    const contextState = getContextState(context);
+  const handleContextStateChange = (
+    ownedContext: AudioContext,
+    ownedGeneration: number,
+  ) => {
+    if (
+      disposed ||
+      context !== ownedContext ||
+      contextGeneration !== ownedGeneration
+    )
+      return;
+    const contextState = getContextState(ownedContext);
+    const timestamp =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    addLifecycleEvent('context statechange', contextState);
     debugLog('context state changed', { state: contextState });
     if (
       snapshot.status === 'playing' ||
@@ -314,14 +378,21 @@ export function createReferenceDroneEngine(
         return;
       }
     }
-    updateDiagnostics({ contextState });
+    updateDiagnostics({
+      contextState,
+      lastStateChangeTimestampMs: timestamp,
+      requiresExplicitReactivation:
+        contextState === 'suspended' || contextState === 'interrupted',
+    });
   };
 
   const detachContextListener = (ownedContext: AudioContext | null) => {
-    ownedContext?.removeEventListener?.(
+    if (!ownedContext || contextStateListener?.context !== ownedContext) return;
+    ownedContext.removeEventListener?.(
       'statechange',
-      handleContextStateChange,
+      contextStateListener.listener,
     );
+    contextStateListener = null;
   };
 
   const discardClosedOutput = () => {
@@ -345,10 +416,19 @@ export function createReferenceDroneEngine(
       let createdContext: AudioContext | null = null;
       let createdMaster: GainNode | null = null;
       try {
+        addLifecycleEvent('context constructor requested', constructorName);
         createdContext = contextFactory();
         context = createdContext;
-        context.addEventListener?.('statechange', handleContextStateChange);
+        const ownedGeneration = ++contextGeneration;
+        const listener = () =>
+          handleContextStateChange(createdContext!, ownedGeneration);
+        contextStateListener = { context, listener };
+        context.addEventListener?.('statechange', listener);
         const contextState = getContextState(context);
+        addLifecycleEvent(
+          'context created',
+          `${ownedGeneration}:${contextState}`,
+        );
         debugLog('context created', { state: contextState });
         if (contextState === 'closed') {
           throw new DroneEngineError(
@@ -367,12 +447,31 @@ export function createReferenceDroneEngine(
         masterGain = createdMaster;
         destinationConnected = true;
         updateDiagnostics({
+          constructorAvailable: true,
+          constructorName,
+          contextGenerationId: ownedGeneration,
           contextState,
+          contextSampleRate: Number.isFinite(context.sampleRate)
+            ? context.sampleRate
+            : null,
+          contextBaseLatency:
+            'baseLatency' in context &&
+            Number.isFinite((context as AudioContext).baseLatency)
+              ? (context as AudioContext).baseLatency
+              : null,
+          destinationChannelCount: Number.isFinite(
+            context.destination.channelCount,
+          )
+            ? context.destination.channelCount
+            : null,
+          masterGainConnected: true,
           destinationConnected: true,
           masterGain: mappedGain,
+          masterGainCurrent: createdMaster.gain.value,
           effectiveGain: null,
         });
         debugLog('destination connected', { masterGain: mappedGain });
+        addLifecycleEvent('nodes connected', 'master->destination');
       } catch (error) {
         safeDisconnect(createdMaster);
         if (createdContext) detachContextListener(createdContext);
@@ -401,25 +500,68 @@ export function createReferenceDroneEngine(
     return { context, masterGain };
   };
 
-  const ensureReady = async (
-    commandOperation: number,
-  ): Promise<OutputGraph | null> => {
-    const graph = ensureOutputGraph();
-    let contextState = getContextState(graph.context);
-    if (contextState === 'suspended' || contextState === 'interrupted') {
+  const beginResumeFromUserGesture = (
+    graph: OutputGraph,
+  ): Promise<void> | null => {
+    const contextState = getContextState(graph.context);
+    if (
+      contextState === 'suspended' ||
+      contextState === 'interrupted' ||
+      snapshot.diagnostics.requiresExplicitReactivation
+    ) {
       debugLog('context resume begin', { state: contextState });
+      addLifecycleEvent('resume requested', contextState);
+      updateDiagnostics({
+        resumeRequested: true,
+        resumeResult: 'pending',
+        contextStateAfterResume: null,
+        renderingClockAdvanced: null,
+      });
       resumePromise ??= graph.context.resume().finally(() => {
         resumePromise = null;
       });
-      await resumePromise;
-      contextState = getContextState(graph.context);
-      debugLog('context resume completed', { state: contextState });
+      return resumePromise;
     }
+    return null;
+  };
+
+  const confirmReady = async (
+    graph: OutputGraph,
+    commandOperation: number,
+    pendingResume: Promise<void> | null,
+  ): Promise<OutputGraph | null> => {
+    if (pendingResume) {
+      try {
+        await pendingResume;
+        const state = getContextState(graph.context);
+        addLifecycleEvent('resume resolved', state);
+        updateDiagnostics({
+          resumeResult: 'resolved',
+          contextStateAfterResume: state,
+        });
+      } catch (error) {
+        addLifecycleEvent(
+          'resume rejected',
+          error instanceof Error ? error.name : 'unknown',
+        );
+        updateDiagnostics({
+          resumeResult: 'rejected',
+          contextStateAfterResume: getContextState(graph.context),
+        });
+        throw error;
+      }
+    }
+    const contextState = getContextState(graph.context);
+    debugLog('context readiness checked', { state: contextState });
     if (disposed || commandOperation !== operation) {
       debugLog('command invalidated', { commandOperation, operation });
       return null;
     }
-    updateDiagnostics({ contextState });
+    updateDiagnostics({
+      contextState,
+      contextStateAfterResume: pendingResume ? contextState : null,
+      requiresExplicitReactivation: contextState !== 'running',
+    });
     if (contextState !== 'running') {
       throw new DroneEngineError(
         contextState === 'interrupted'
@@ -429,6 +571,23 @@ export function createReferenceDroneEngine(
             : 'context-not-running',
         `AudioContext is ${contextState} after resume.`,
       );
+    }
+    if (pendingResume) {
+      const before = graph.context.currentTime;
+      await new Promise<void>((resolve) => setTimeout(resolve, 48));
+      if (disposed || commandOperation !== operation) return null;
+      const advanced = graph.context.currentTime > before;
+      updateDiagnostics({ renderingClockAdvanced: advanced });
+      addLifecycleEvent(
+        'rendering clock checked',
+        advanced ? 'advanced' : 'stalled',
+      );
+      if (!advanced) {
+        throw new DroneEngineError(
+          'context-not-running',
+          'AudioContext reported running but its rendering clock did not advance.',
+        );
+      }
     }
     return graph;
   };
@@ -473,7 +632,7 @@ export function createReferenceDroneEngine(
     return trackedRelease;
   };
 
-  const createAndStartVoice = (
+  const createPreparedVoice = (
     graph: OutputGraph,
     note: ReferenceDroneNote,
   ): DroneVoice => {
@@ -499,6 +658,7 @@ export function createReferenceDroneEngine(
       setParamValue(voiceGain.gain, 0, currentTime);
       setParamValue(oscillator.frequency, note.frequencyHz, currentTime);
       const nextVoice: DroneVoice = {
+        generationId: ++voiceGeneration,
         oscillator,
         gain: voiceGain,
         note: { ...note },
@@ -508,21 +668,34 @@ export function createReferenceDroneEngine(
       };
       updateDiagnostics({
         voiceState: 'created',
+        voiceGenerationId: nextVoice.generationId,
+        oscillatorCreated: true,
+        oscillatorEnded: false,
         midiNote: note.midiNote,
         frequencyHz: note.frequencyHz,
-        voiceGainTarget: 1,
+        voiceGainTarget: 0,
+        voiceGainCurrent: voiceGain.gain.value,
         masterGain: mappedGain,
-        effectiveGain: mappedGain,
+        masterGainCurrent: graph.masterGain.gain.value,
+        effectiveGain: 0,
       });
       oscillator.connect(voiceGain);
       nextVoice.oscillatorConnected = true;
       voiceGain.connect(graph.masterGain);
       nextVoice.gainConnected = true;
       voiceGraphConnected = true;
-      updateDiagnostics({ graphConnected: true });
+      updateDiagnostics({
+        graphConnected: true,
+        voiceGainConnected: true,
+      });
+      addLifecycleEvent('nodes connected', `voice ${nextVoice.generationId}`);
       debugLog('voice graph connected', { frequencyHz: note.frequencyHz });
       oscillator.onended = () => cleanupVoice(nextVoice);
       try {
+        addLifecycleEvent(
+          'oscillator start requested',
+          `voice ${nextVoice.generationId}`,
+        );
         oscillator.start(currentTime);
       } catch (error) {
         throw new DroneEngineError(
@@ -535,12 +708,11 @@ export function createReferenceDroneEngine(
         voiceState: 'started',
         oscillatorStarted: true,
       });
+      addLifecycleEvent(
+        'oscillator started',
+        `voice ${nextVoice.generationId}`,
+      );
       debugLog('oscillator started', { frequencyHz: note.frequencyHz });
-      linearRamp(voiceGain.gain, 1, currentTime + config.attackSeconds);
-      debugLog('attack scheduled', {
-        voiceGainTarget: 1,
-        masterGain: mappedGain,
-      });
       return nextVoice;
     } catch (error) {
       if (oscillator) safeStop(oscillator);
@@ -561,10 +733,36 @@ export function createReferenceDroneEngine(
     }
   };
 
-  const play = async (
+  const scheduleVoiceAttack = (
+    preparedVoice: DroneVoice,
+    graph: OutputGraph,
+  ) => {
+    const currentTime = requireFiniteTime(graph.context);
+    linearRamp(preparedVoice.gain.gain, 1, currentTime + config.attackSeconds);
+    updateDiagnostics({
+      voiceGainTarget: 1,
+      voiceGainCurrent: preparedVoice.gain.gain.value,
+    });
+    addLifecycleEvent(
+      'attack scheduled',
+      `voice ${preparedVoice.generationId}`,
+    );
+    debugLog('attack scheduled', {
+      voiceGainTarget: 1,
+      masterGain: snapshot.diagnostics.masterGain,
+    });
+  };
+
+  const activateFromUserGesture = async (
     note: ReferenceDroneNote,
   ): Promise<ReferenceDroneCommandResult> => {
     if (disposed) return { ok: false, errorCode: 'audio-start-failed' };
+    if (
+      snapshot.diagnostics.outputTestStatus === 'starting' ||
+      snapshot.diagnostics.outputTestStatus === 'playing'
+    ) {
+      return { ok: false, errorCode: 'audio-start-failed' };
+    }
     if (!isValidNote(note)) {
       return publishError(
         new DroneEngineError('invalid-note', 'Invalid reference note.'),
@@ -578,6 +776,9 @@ export function createReferenceDroneEngine(
       ? `change:${note.midiNote}`
       : `play:${note.midiNote}`;
     debugLog('command', { command, operation: commandOperation });
+    const activationTimestamp =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    addLifecycleEvent('activation received', command);
     publish({
       ...snapshot,
       status: changing ? 'changing' : 'starting',
@@ -590,17 +791,30 @@ export function createReferenceDroneEngine(
         midiNote: note.midiNote,
         frequencyHz: note.frequencyHz,
         lastCommand: command,
+        lastUserActivationTimestampMs: activationTimestamp,
         errorCode: null,
         errorMessage: null,
       },
     });
     try {
-      if (!activeVoice && releasePromise) await releasePromise;
+      if (!activeVoice && releasePromise) releaseFinish?.();
       if (disposed || commandOperation !== operation) {
         return { ok: false, errorCode: 'audio-start-failed' };
       }
-      const graph = await ensureReady(commandOperation);
-      if (!graph || disposed || commandOperation !== operation) {
+      const graph = ensureOutputGraph();
+      const pendingResume = beginResumeFromUserGesture(graph);
+      let preparedVoice: DroneVoice | null = null;
+      if (!activeVoice) {
+        preparedVoice = createPreparedVoice(graph, note);
+        voice = preparedVoice;
+      }
+      const readyGraph = await confirmReady(
+        graph,
+        commandOperation,
+        pendingResume,
+      );
+      if (!readyGraph || disposed || commandOperation !== operation) {
+        if (preparedVoice) abortVoice(preparedVoice);
         return { ok: false, errorCode: 'audio-start-failed' };
       }
       if (activeVoice) {
@@ -620,7 +834,7 @@ export function createReferenceDroneEngine(
           activeVoice.note.midiNote !== note.midiNote ||
           activeVoice.note.frequencyHz !== note.frequencyHz
         ) {
-          const currentTime = requireFiniteTime(graph.context);
+          const currentTime = requireFiniteTime(readyGraph.context);
           holdAutomation(activeVoice.oscillator.frequency, currentTime);
           linearRamp(
             activeVoice.oscillator.frequency,
@@ -632,16 +846,11 @@ export function createReferenceDroneEngine(
             frequencyHz: note.frequencyHz,
           });
         }
-      } else {
-        const nextVoice = createAndStartVoice(graph, note);
-        if (disposed || commandOperation !== operation) {
-          abortVoice(nextVoice);
-          return { ok: false, errorCode: 'audio-start-failed' };
-        }
-        voice = nextVoice;
+      } else if (preparedVoice) {
+        scheduleVoiceAttack(preparedVoice, readyGraph);
       }
       if (
-        getContextState(graph.context) !== 'running' ||
+        getContextState(readyGraph.context) !== 'running' ||
         !voice?.started ||
         !voice.oscillatorConnected ||
         !voice.gainConnected ||
@@ -669,14 +878,17 @@ export function createReferenceDroneEngine(
           midiNote: note.midiNote,
           frequencyHz: note.frequencyHz,
           voiceGainTarget: 1,
+          voiceGainCurrent: voice?.gain.gain.value ?? null,
           effectiveGain: mapReferenceDroneVolumeToGain(
             snapshot.volume,
             config.maximumMasterGain,
           ),
           errorCode: null,
           errorMessage: null,
+          requiresExplicitReactivation: false,
         },
       });
+      addLifecycleEvent('playback confirmed', `voice ${voice.generationId}`);
       debugLog('playback confirmed', {
         contextState: 'running',
         frequencyHz: note.frequencyHz,
@@ -687,6 +899,73 @@ export function createReferenceDroneEngine(
       return publishError(toEngineError(error), command);
     }
   };
+
+  const play = activateFromUserGesture;
+
+  const playOutputTestFromUserGesture =
+    async (): Promise<ReferenceDroneCommandResult> => {
+      if (
+        disposed ||
+        voice ||
+        snapshot.diagnostics.outputTestStatus === 'starting' ||
+        snapshot.diagnostics.outputTestStatus === 'playing'
+      ) {
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
+      const commandOperation = ++operation;
+      const activationTimestamp =
+        typeof performance === 'undefined' ? Date.now() : performance.now();
+      addLifecycleEvent('activation received', 'output-test');
+      updateDiagnostics({
+        lastUserActivationTimestampMs: activationTimestamp,
+        lastCommand: 'output-test',
+        outputTestStatus: 'starting',
+        errorCode: null,
+        errorMessage: null,
+      });
+      try {
+        if (releasePromise) releaseFinish?.();
+        const graph = ensureOutputGraph();
+        const pendingResume = beginResumeFromUserGesture(graph);
+        const testVoice = createPreparedVoice(graph, {
+          midiNote: 69,
+          frequencyHz: 440,
+        });
+        voice = testVoice;
+        const readyGraph = await confirmReady(
+          graph,
+          commandOperation,
+          pendingResume,
+        );
+        if (!readyGraph || disposed || commandOperation !== operation) {
+          abortVoice(testVoice);
+          updateDiagnostics({ outputTestStatus: 'failed' });
+          return { ok: false, errorCode: 'audio-start-failed' };
+        }
+        scheduleVoiceAttack(testVoice, readyGraph);
+        updateDiagnostics({ outputTestStatus: 'playing' });
+        addLifecycleEvent('output test started', '440 Hz');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 1000));
+        if (disposed || commandOperation !== operation || voice !== testVoice) {
+          abortVoice(testVoice);
+          updateDiagnostics({ outputTestStatus: 'failed' });
+          return { ok: false, errorCode: 'audio-start-failed' };
+        }
+        await releaseVoice(testVoice);
+        if (!disposed && commandOperation === operation) {
+          updateDiagnostics({
+            engineState: 'stopped',
+            outputTestStatus: 'succeeded',
+            lastCommand: 'output-test-complete',
+          });
+          addLifecycleEvent('output test completed');
+        }
+        return { ok: true };
+      } catch (error) {
+        updateDiagnostics({ outputTestStatus: 'failed' });
+        return publishError(toEngineError(error), 'output-test');
+      }
+    };
 
   const stop = async (): Promise<void> => {
     if (disposed) return;
@@ -711,10 +990,39 @@ export function createReferenceDroneEngine(
             midiNote: null,
             frequencyHz: null,
             voiceGainTarget: null,
+            voiceGainCurrent: null,
             effectiveGain: null,
             lastCommand: 'stop',
             errorCode: null,
             errorMessage: null,
+          },
+        });
+      }
+      return;
+    }
+    if (snapshot.status === 'starting') {
+      abortVoice(activeVoice);
+      if (!disposed && commandOperation === operation) {
+        publish({
+          ...snapshot,
+          status: 'stopped',
+          activeMidi: null,
+          frequencyHz: null,
+          errorCode: null,
+          diagnostics: {
+            ...snapshot.diagnostics,
+            engineState: 'stopped',
+            voiceState: 'none',
+            voiceGenerationId: null,
+            oscillatorCreated: false,
+            oscillatorStarted: false,
+            graphConnected: false,
+            voiceGainConnected: false,
+            midiNote: null,
+            frequencyHz: null,
+            voiceGainTarget: null,
+            effectiveGain: null,
+            lastCommand: 'stop',
           },
         });
       }
@@ -771,6 +1079,7 @@ export function createReferenceDroneEngine(
       diagnostics: {
         ...snapshot.diagnostics,
         masterGain: context ? mappedGain : null,
+        masterGainCurrent: masterGain?.gain.value ?? null,
         effectiveGain: voice?.started ? mappedGain : null,
         lastCommand: `volume:${Math.round(volume * 100)}`,
       },
@@ -800,9 +1109,93 @@ export function createReferenceDroneEngine(
     }
   };
 
+  const markLifecycle = (name: string, state: string) => {
+    if (disposed) return;
+    addLifecycleEvent(name, state);
+    updateDiagnostics({
+      pageLifecycleState: state,
+      documentVisibilityState:
+        typeof document === 'undefined'
+          ? 'unavailable'
+          : document.visibilityState,
+      lastVisibilityChange:
+        name === 'visibilitychange'
+          ? `${Math.round(typeof performance === 'undefined' ? Date.now() : performance.now())}:${state}`
+          : snapshot.diagnostics.lastVisibilityChange,
+      requiresExplicitReactivation:
+        snapshot.diagnostics.requiresExplicitReactivation ||
+        state === 'hidden' ||
+        name === 'pagehide',
+    });
+    if (voice && (state === 'hidden' || name === 'pagehide')) {
+      operation += 1;
+      const outputTestWasActive =
+        snapshot.diagnostics.outputTestStatus === 'starting' ||
+        snapshot.diagnostics.outputTestStatus === 'playing';
+      abortVoice(voice);
+      if (outputTestWasActive)
+        updateDiagnostics({ outputTestStatus: 'failed' });
+      publishError(
+        new DroneEngineError(
+          'context-interrupted',
+          'Page lifecycle interrupted reference audio.',
+        ),
+        name,
+      );
+    }
+    if (
+      context &&
+      (state === 'hidden' || name === 'pagehide') &&
+      getContextState(context) === 'running' &&
+      typeof context.suspend === 'function'
+    ) {
+      const ownedContext = context;
+      addLifecycleEvent('context suspend requested', name);
+      void ownedContext
+        .suspend()
+        .then(() => {
+          if (!disposed && context === ownedContext)
+            addLifecycleEvent(
+              'context suspend resolved',
+              getContextState(ownedContext),
+            );
+        })
+        .catch(() => {
+          if (!disposed && context === ownedContext)
+            addLifecycleEvent('context suspend rejected');
+        });
+    }
+  };
+
+  const onVisibilityChange = () =>
+    markLifecycle('visibilitychange', document.visibilityState);
+  const onPageShow = () => markLifecycle('pageshow', 'visible');
+  const onPageHide = () => markLifecycle('pagehide', 'hidden');
+  const onFocus = () => markLifecycle('focus', 'focused');
+  const onBlur = () => markLifecycle('blur', 'blurred');
+  const attachLifecycleListeners = () => {
+    if (typeof window === 'undefined' || typeof document === 'undefined')
+      return;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
+  };
+  const detachLifecycleListeners = () => {
+    if (typeof window === 'undefined' || typeof document === 'undefined')
+      return;
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('pageshow', onPageShow);
+    window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('focus', onFocus);
+    window.removeEventListener('blur', onBlur);
+  };
+
   const dispose = async (): Promise<void> => {
     if (disposed) return;
     disposed = true;
+    detachLifecycleListeners();
     operation += 1;
     debugLog('dispose');
     const activeVoice = voice;
@@ -833,13 +1226,19 @@ export function createReferenceDroneEngine(
             : snapshot.diagnostics.contextState,
         engineState: 'disposed',
         voiceState: 'none',
+        voiceGenerationId: null,
+        oscillatorCreated: false,
         oscillatorStarted: false,
         graphConnected: false,
+        voiceGainConnected: false,
+        masterGainConnected: false,
         destinationConnected: false,
         midiNote: null,
         frequencyHz: null,
         voiceGainTarget: null,
+        voiceGainCurrent: null,
         masterGain: null,
+        masterGainCurrent: null,
         effectiveGain: null,
         lastCommand: 'dispose',
       },
@@ -854,8 +1253,12 @@ export function createReferenceDroneEngine(
     }
   };
 
+  attachLifecycleListeners();
+
   return {
+    activateFromUserGesture,
     play,
+    playOutputTestFromUserGesture,
     stop,
     setVolume,
     getSnapshot: () => ({

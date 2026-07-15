@@ -205,3 +205,11 @@ Vercel hosts the existing Vite `dist` output through GitHub Preview Deployments 
 Node 22 matches GitHub Actions and is declared in `package.json`. Builds run TypeScript, Vite, then a local deployment validator. Vercel environment and Git values are explicitly selected at build time, validated in one typed module, and shown only in developer diagnostics. Production derives from Vercel build metadata rather than hostname guessing.
 
 Diagnostics and demo query handling use one environment policy. Development and Preview retain intended diagnostics; Production hides them and always rejects fabricated tuner input. Automated Playwright uses an explicit non-production build flag. A React error boundary handles unexpected render failures locally without external reporting or production stack disclosure.
+
+## ADR-023 — Reference output starts inside trusted activation and confirms rendering
+
+Status: accepted pending physical iPhone confirmation
+
+A production iPhone Safari report exposed a timing gap in ADR-016: context construction and resume were synchronous in the semantic click, but oscillator construction and start occurred only after awaiting resume. WebKit applies stricter transient-activation rules to starting Web Audio rendering. Reference activation now synchronously creates/connects a zero-gain voice and starts its oscillator in the trusted activation task, then awaits resume and confirms actual running state plus an advancing rendering clock before scheduling attack or publishing `playing`.
+
+Runtime constructor selection prefers `AudioContext`, falls back to `webkitAudioContext` only when present, and remains lazy. Context/voice generations reject stale events. Visibility loss invalidates output without automatic foreground playback; a later explicit gesture attempts recovery. Production diagnostics remain hidden by default but `audioDiagnostics=1` temporarily exposes read-only lifecycle data, a bounded local log, report copying, and an explicit protected A4 output test. It cannot enable fake microphone or practice data.

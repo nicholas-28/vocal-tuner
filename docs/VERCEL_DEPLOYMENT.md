@@ -71,14 +71,15 @@ Build timestamps are intentionally omitted so ordinary builds do not change sole
 
 Query parameters are convenience switches, never authentication.
 
-| Flag or diagnostic         | Development                           | Preview                               | Production     | Automated test build                               |
-| -------------------------- | ------------------------------------- | ------------------------------------- | -------------- | -------------------------------------------------- |
-| Pitch detector diagnostics | Visible                               | Visible                               | Hidden         | Visible                                            |
-| `droneDiagnostics`         | Diagnostics already visible           | Enables drone detail                  | Ignored        | Enabled                                            |
-| `droneDebug`               | Enables concise console transitions   | Enables concise console transitions   | Ignored        | Available                                          |
-| `centsMeterDemo`           | Requires explicit test-controls build | Requires explicit test-controls build | Always ignored | Enables deterministic injected tuner/practice data |
+| Flag or diagnostic         | Development                           | Preview                               | Production         | Automated test build                               |
+| -------------------------- | ------------------------------------- | ------------------------------------- | ------------------ | -------------------------------------------------- |
+| Pitch detector diagnostics | Visible                               | Visible                               | Hidden             | Visible                                            |
+| `droneDiagnostics`         | Diagnostics already visible           | Enables drone detail                  | Ignored            | Enabled                                            |
+| `droneDebug`               | Enables concise console transitions   | Enables concise console transitions   | Ignored            | Available                                          |
+| `centsMeterDemo`           | Requires explicit test-controls build | Requires explicit test-controls build | Always ignored     | Enables deterministic injected tuner/practice data |
+| `audioDiagnostics`         | Read-only reference-audio lifecycle   | Read-only reference-audio lifecycle   | Explicitly allowed | Read-only reference-audio lifecycle                |
 
-The normal Vercel Preview build does not enable fabricated microphone or practice data. Playwright creates a separate local build with the explicit test flag. Production smoke coverage builds without that flag and verifies ordinary public query parameters cannot activate mock input.
+The normal Vercel Preview build does not enable fabricated microphone or practice data. Playwright creates a separate local build with the explicit test flag. Production smoke coverage builds without that flag and verifies ordinary public query parameters cannot activate mock input. `audioDiagnostics=1` is a temporary, read-only physical-device troubleshooting exception; its tone button synthesizes local output but never fabricates microphone or practice data.
 
 ## Manifest and mobile shell
 
@@ -140,7 +141,7 @@ Confirm the page uses HTTPS, press Start microphone explicitly, inspect site per
 
 ### Reference drone is silent
 
-Activate a reference key through a direct gesture, check device volume and output routing, and use headphones. Preview diagnostics may be enabled with `?droneDiagnostics=1`; Production intentionally ignores that switch.
+Activate a reference key through a direct gesture, check device volume and output routing, and use headphones. Open `?audioDiagnostics=1`, run the one-second output test, copy the report, and follow `IOS_SAFARI_AUDIO_DEBUGGING.md`. Production still ignores the broader `droneDiagnostics` switch.
 
 ## Privacy baseline
 

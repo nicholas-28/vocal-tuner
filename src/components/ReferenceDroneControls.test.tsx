@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialReferenceDroneDiagnostics } from '../audio/referenceDroneConfig';
 import type { ReferenceDroneSnapshot } from '../types/referenceDrone';
@@ -138,5 +138,54 @@ describe('reference drone controls and status', () => {
     expect(values).toHaveTextContent('Oscillator startedyes');
     expect(values).toHaveTextContent('Frequency261.63 Hz');
     expect(values).toHaveTextContent('Effective gain0.040');
+  });
+
+  it('copies the production-safe audio report and offers a fallback', async () => {
+    const writeText = vi.fn(async (report: string) => report.length > 0);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const onPlayOutputTest = vi.fn();
+    const { unmount } = render(
+      <ReferenceDroneDiagnostics
+        diagnostics={createInitialReferenceDroneDiagnostics('AudioContext', 1)}
+        audioDiagnosticMode
+        onPlayOutputTest={onPlayOutputTest}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Play 1-second output test' }),
+    );
+    expect(onPlayOutputTest).toHaveBeenCalledOnce();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy audio diagnostic report' }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0]?.[0]).toContain(
+      'No microphone audio or samples are included.',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('report copied');
+    unmount();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn(async () => Promise.reject(new Error('blocked'))),
+      },
+    });
+    render(
+      <ReferenceDroneDiagnostics
+        diagnostics={createInitialReferenceDroneDiagnostics('AudioContext', 2)}
+        audioDiagnosticMode
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy audio diagnostic report' }),
+    );
+    const fallback = await screen.findByLabelText(
+      'Audio diagnostic report copy fallback',
+    );
+    expect((fallback as HTMLTextAreaElement).value).toContain('Lifecycle log:');
   });
 });

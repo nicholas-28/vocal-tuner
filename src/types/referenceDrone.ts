@@ -12,25 +12,74 @@ export type ReferenceDroneErrorCode =
   | 'audio-start-failed';
 
 export type ReferenceDroneContextState =
-  'unavailable' | 'suspended' | 'running' | 'interrupted' | 'closed';
+  | 'unavailable'
+  | 'suspended'
+  | 'running'
+  | 'interrupted'
+  | 'closed'
+  | 'unknown';
+
+export type ReferenceDroneAudioContextConstructorName =
+  'AudioContext' | 'webkitAudioContext' | 'unavailable';
+
+export type ReferenceDroneResumeResult =
+  'not-requested' | 'pending' | 'resolved' | 'rejected';
+
+export type ReferenceDroneLifecycleEvent = Readonly<{
+  sequence: number;
+  relativeTimeMs: number;
+  name: string;
+  detail: string | null;
+}>;
+
+export type ReferenceDroneOutputTestStatus =
+  'idle' | 'starting' | 'playing' | 'succeeded' | 'failed';
 
 export type ReferenceDroneVoiceState =
   'none' | 'created' | 'started' | 'releasing' | 'ended';
 
 export type ReferenceDroneDiagnostics = {
+  userAgentSummary: string;
+  secureContext: boolean;
+  constructorAvailable: boolean;
+  constructorName: ReferenceDroneAudioContextConstructorName;
+  contextGenerationId: number | null;
   contextState: ReferenceDroneContextState;
+  contextSampleRate: number | null;
+  contextBaseLatency: number | null;
+  destinationChannelCount: number | null;
   engineState: ReferenceDroneStatus | 'idle' | 'disposed';
   voiceState: ReferenceDroneVoiceState;
+  engineGenerationId: number;
+  voiceGenerationId: number | null;
+  oscillatorCreated: boolean;
   oscillatorStarted: boolean;
+  oscillatorEnded: boolean;
   graphConnected: boolean;
+  voiceGainConnected: boolean;
+  masterGainConnected: boolean;
   destinationConnected: boolean;
   midiNote: number | null;
   frequencyHz: number | null;
   oscillatorType: OscillatorType;
   voiceGainTarget: number | null;
+  voiceGainCurrent: number | null;
   masterGain: number | null;
+  masterGainCurrent: number | null;
   effectiveGain: number | null;
+  lastUserActivationTimestampMs: number | null;
   lastCommand: string | null;
+  resumeRequested: boolean;
+  resumeResult: ReferenceDroneResumeResult;
+  contextStateAfterResume: ReferenceDroneContextState | null;
+  renderingClockAdvanced: boolean | null;
+  lastStateChangeTimestampMs: number | null;
+  lastVisibilityChange: string | null;
+  documentVisibilityState: string;
+  pageLifecycleState: string;
+  requiresExplicitReactivation: boolean;
+  outputTestStatus: ReferenceDroneOutputTestStatus;
+  lifecycleLog: readonly ReferenceDroneLifecycleEvent[];
   errorCode: ReferenceDroneErrorCode | null;
   errorMessage: string | null;
 };
@@ -63,7 +112,11 @@ export type ReferenceDroneConfig = {
 };
 
 export type ReferenceDroneEngine = {
+  activateFromUserGesture: (
+    note: ReferenceDroneNote,
+  ) => Promise<ReferenceDroneCommandResult>;
   play: (note: ReferenceDroneNote) => Promise<ReferenceDroneCommandResult>;
+  playOutputTestFromUserGesture: () => Promise<ReferenceDroneCommandResult>;
   stop: () => Promise<void>;
   setVolume: (normalizedVolume: number) => void;
   getSnapshot: () => ReferenceDroneSnapshot;

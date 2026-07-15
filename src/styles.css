@@ -1214,10 +1214,10 @@ h1 {
 
 .reference-drone-diagnostics {
   margin-top: 0.55rem;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle, #343d49);
   border-radius: 0.65rem;
   padding: 0.45rem 0.6rem;
-  color: var(--text-muted);
+  color: var(--text-muted, #a8b2bf);
   font-size: 0.75rem;
 }
 
@@ -1245,6 +1245,47 @@ h1 {
   margin: 0;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+}
+
+.reference-audio-diagnostics__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.reference-audio-diagnostics__actions p,
+.reference-audio-diagnostics__actions textarea {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.reference-audio-diagnostics__actions textarea {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.55rem;
+  border: 1px solid var(--border-subtle, #343d49);
+  border-radius: 0.45rem;
+  color: var(--text-primary, #f5f7fa);
+  background: var(--surface-raised, #12161d);
+  font:
+    0.7rem/1.4 ui-monospace,
+    monospace;
+}
+
+.reference-audio-log {
+  max-height: 14rem;
+  margin: 0.65rem 0 0;
+  padding-left: 1.4rem;
+  overflow: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 420px) {
+  .reference-drone-diagnostics dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .controls {

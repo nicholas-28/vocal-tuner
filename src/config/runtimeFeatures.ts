@@ -21,6 +21,7 @@ export function createRuntimeFeaturePolicy(
         buildInfo.deploymentEnvironment === 'test' ||
         buildInfo.testControlsEnabled ||
         query.has('droneDiagnostics')),
+    showAudioDiagnostics: query.has('audioDiagnostics'),
     enableReferenceDroneDebugLog:
       developerEnvironment && query.has('droneDebug'),
     enableCentsMeterDemo:

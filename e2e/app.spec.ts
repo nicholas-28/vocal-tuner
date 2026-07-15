@@ -63,6 +63,9 @@ test('loads the initial tuner screen', async ({ page }) => {
         if (droneMock.allowResume) {
           this.state = 'running';
           this.dispatchEvent(new Event('statechange'));
+          setTimeout(() => {
+            this.currentTime += 0.05;
+          }, 10);
         }
       }
       async close() {
@@ -250,7 +253,7 @@ test('loads the initial tuner screen', async ({ page }) => {
           }
         ).__droneMock.oscillatorStarts,
     ),
-  ).toBe(0);
+  ).toBe(1);
   await page.evaluate(() => {
     (
       window as Window & {

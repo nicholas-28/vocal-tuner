@@ -26,7 +26,7 @@ test('production deployment loads safely without activating public mock flags', 
   page.on('pageerror', (error) => pageErrors.push(error));
 
   await page.goto(
-    '/deployment/smoke?droneDiagnostics=1&droneDebug=1&centsMeterDemo=1',
+    '/deployment/smoke?droneDiagnostics=1&droneDebug=1&centsMeterDemo=1&audioDiagnostics=1',
   );
 
   await expect(
@@ -44,9 +44,15 @@ test('production deployment loads safely without activating public mock flags', 
   ).toBeVisible();
   await expect(page.getByLabel('Pitch detector diagnostics')).toHaveCount(0);
   await expect(
-    page.getByLabel('Reference-drone diagnostics values'),
+    page.getByText('Reference-drone diagnostics', { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel('Deployment build information')).toHaveCount(0);
+  await expect(
+    page.getByText('Reference audio diagnostics', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Play 1-second output test' }),
+  ).toBeVisible();
 
   await page.evaluate(() =>
     window.dispatchEvent(

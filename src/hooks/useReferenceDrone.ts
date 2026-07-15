@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createReferenceDroneEngine } from '../audio/referenceDroneEngine';
+import { selectAudioContextConstructor } from '../audio/referenceDroneContext';
 import {
   createInitialReferenceDroneDiagnostics,
   DEFAULT_REFERENCE_DRONE_CONFIG,
@@ -12,13 +13,14 @@ import type {
 } from '../types/referenceDrone';
 
 export function createInitialReferenceDroneSnapshot(): ReferenceDroneSnapshot {
+  const constructorName = selectAudioContextConstructor().name;
   return {
     status: 'stopped',
     activeMidi: null,
     frequencyHz: null,
     volume: DEFAULT_REFERENCE_DRONE_CONFIG.defaultVolume,
     errorCode: null,
-    diagnostics: createInitialReferenceDroneDiagnostics(),
+    diagnostics: createInitialReferenceDroneDiagnostics(constructorName),
   };
 }
 
@@ -53,17 +55,19 @@ export function useReferenceDrone(
     return engine;
   }, [updateSnapshot]);
 
-  const playMidi = useCallback(
+  const activateMidiFromUserGesture = useCallback(
     async (midiNote: number) => {
       const key = createReferenceKey(midiNote);
       if (!key) return;
-      await ensureEngine().play({
+      await ensureEngine().activateFromUserGesture({
         midiNote,
         frequencyHz: key.idealFrequencyHz,
       });
     },
     [ensureEngine],
   );
+
+  const playMidi = activateMidiFromUserGesture;
 
   const toggleMidi = useCallback(
     async (midiNote: number) => {
@@ -101,6 +105,10 @@ export function useReferenceDrone(
     [updateSnapshot],
   );
 
+  const playOutputTestFromUserGesture = useCallback(async () => {
+    await ensureEngine().playOutputTestFromUserGesture();
+  }, [ensureEngine]);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -113,5 +121,13 @@ export function useReferenceDrone(
     };
   }, []);
 
-  return { snapshot, toggleMidi, playMidi, stop, setVolume };
+  return {
+    snapshot,
+    activateMidiFromUserGesture,
+    toggleMidi,
+    playMidi,
+    playOutputTestFromUserGesture,
+    stop,
+    setVolume,
+  };
 }

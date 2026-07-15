@@ -219,3 +219,17 @@ Implemented on branch `issue-018-vercel-deployment`.
 - Valid manifest and local icon without a service worker or offline expansion
 - Deterministic deployment validator plus production and test-control WebKit smoke flows
 - No Firebase, backend, Function, authentication, analytics, tracking, or new dependency
+
+## Issue 018.1 — Diagnose and fix iOS Safari reference-drone playback
+
+Implemented on branch `issue-018-1-ios-safari-reference-drone`; physical iPhone acceptance remains pending.
+
+- Moved context resume, zero-gain voice connection, and oscillator start into the trusted activation task
+- Delayed attack and `playing` until actual running state and rendering-clock advancement
+- Standard/prefixed lazy constructor selection with typed unavailable fallback
+- Explicit interrupted, closed, unknown, stale-generation, visibility, and foreground-retry handling
+- Production-hidden-by-default `audioDiagnostics=1` reference-output lifecycle panel
+- Safe report copying with textarea fallback and bounded 40-event local log
+- Explicit one-second protected A4 output test independent from selection and practice
+- Mobile WebKit deterministic coverage without claiming physical audibility
+- No Firebase, backend, recording, analytics, tracking, or new dependency

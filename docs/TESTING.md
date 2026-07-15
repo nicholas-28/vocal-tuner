@@ -43,7 +43,10 @@ Deployment browser coverage runs two separate production bundles:
 
 - `npm run test:e2e:production` builds without test controls and verifies deep-link loading, no automatic permission request, hidden production diagnostics, rejected public mock flags, manifest delivery, and 320 px layout.
 - `npm run test:e2e:demo` builds with the explicit local `VITE_ENABLE_TEST_CONTROLS=true` flag and retains deterministic tuner, target, practice, timeline, drone, and range coverage.
-- `npm run test:e2e` runs both flows. Neither flow contacts Vercel or requires credentials.
+- `npm run test:e2e:ios` builds production and runs a mobile WebKit diagnostic sequence with a prefixed constructor, suspended/running/interrupted recovery, gesture sequencing, output test, copied report, and 320 px layout.
+- `npm run test:e2e` runs all three flows. None contacts Vercel or requires credentials.
+
+Automated WebKit confirms browser integration and state truthfulness but cannot prove physical iPhone audibility, device routing, media volume, mute behavior, or installed-home-screen differences. Issue 018.1 must not merge until the physical checklist in `IOS_SAFARI_AUDIO_DEBUGGING.md` passes on the deployed Preview URL.
 
 `npm run build` finishes with deployment validation. The validator parses `vercel.json` and the manifest, verifies referenced assets in source and `dist`, and rejects obvious localhost endpoints and local filesystem paths in production output.
 

@@ -84,10 +84,18 @@ export class TestReferenceDroneAudioContext extends EventTarget {
   async resume() {
     this.state = 'running';
     this.dispatchEvent(new Event('statechange'));
+    setTimeout(() => {
+      this.currentTime += 0.05;
+    }, 10);
   }
 
   async close() {
     this.state = 'closed';
+    this.dispatchEvent(new Event('statechange'));
+  }
+
+  async suspend() {
+    this.state = 'suspended';
     this.dispatchEvent(new Event('statechange'));
   }
 }

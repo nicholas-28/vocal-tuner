@@ -50,6 +50,7 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
   observationTimestampMs?: number | null;
   practiceMicrophoneActive?: boolean;
   showReferenceDroneDiagnostics?: boolean;
+  showAudioDiagnostics?: boolean;
 };
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
@@ -68,6 +69,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   observationTimestampMs = null,
   practiceMicrophoneActive = active,
   showReferenceDroneDiagnostics = false,
+  showAudioDiagnostics = false,
 }: PitchGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -149,8 +151,9 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   const activateReferenceMidi = useCallback(
     (midiNote: number) => {
       if (practice.targetSelectionLocked) return;
+      const activation = toggleReferenceMidi(midiNote);
       selectReferenceMidi(midiNote);
-      void toggleReferenceMidi(midiNote);
+      void activation;
     },
     [practice.targetSelectionLocked, selectReferenceMidi, toggleReferenceMidi],
   );
@@ -232,9 +235,13 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
         measurementTimestampMs={measurementTimestampMs}
       />
       <TargetPracticeSession model={practice} />
-      {showReferenceDroneDiagnostics && (
+      {(showReferenceDroneDiagnostics || showAudioDiagnostics) && (
         <ReferenceDroneDiagnostics
           diagnostics={referenceDrone.snapshot.diagnostics}
+          audioDiagnosticMode={showAudioDiagnostics}
+          onPlayOutputTest={() =>
+            void referenceDrone.playOutputTestFromUserGesture()
+          }
         />
       )}
     </div>
