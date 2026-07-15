@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Vocal Tuner</title>
+  <rect width="512" height="512" rx="112" fill="#0b0e13" />
+  <path d="M104 278c42 0 42-76 84-76s42 108 84 108 42-142 84-142 42 66 52 66" fill="none" stroke="#78dfcb" stroke-linecap="round" stroke-linejoin="round" stroke-width="34" />
+  <circle cx="104" cy="278" r="24" fill="#f5f7fa" />
+  <circle cx="408" cy="234" r="24" fill="#f5f7fa" />
+</svg>

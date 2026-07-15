@@ -204,3 +204,18 @@ Implemented on branch `issue-017-practice-session-timeline`.
 - Hover, focus, and mobile-tap tooltips with duration and wall-session percentage
 - Screen-reader event descriptions, Start/Finish context, and wrapping state legend
 - No recording, replay, scrolling, zoom, editing, export, persistence, scoring, or dependency
+
+## Issue 018 — Prepare and deploy Vocal Tuner to Vercel
+
+Implemented on branch `issue-018-vercel-deployment`.
+
+- Minimal Vercel SPA fallback with GitHub Preview and `main` Production workflow
+- Node 22 policy aligned with GitHub Actions and Vercel
+- Typed, validated deployment environment and safe Git/version metadata
+- Centralized development, Preview, Production, test, and query-feature policy
+- Production rejection of fabricated tuner/practice input and public debug switches
+- Developer-only compact build metadata and diagnostics
+- Production-safe React error boundary with explicit reload
+- Valid manifest and local icon without a service worker or offline expansion
+- Deterministic deployment validator plus production and test-control WebKit smoke flows
+- No Firebase, backend, Function, authentication, analytics, tracking, or new dependency

@@ -16,6 +16,12 @@ The app helps a singer:
 
 Planning and technical validation.
 
+## Deployment
+
+The application is prepared for Git-connected Vercel deployment as a static Vite SPA. Feature branches and pull requests receive Preview Deployments; merges to `main` produce Production Deployments. Vercel should use Node 22, `npm run build`, and the `dist` output directory. No backend or runtime environment variables are required.
+
+See [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md) for the exact dashboard setup, production-safe diagnostics policy, mobile HTTPS checklist, rollback, and troubleshooting steps.
+
 ## MVP
 
 - Live microphone input

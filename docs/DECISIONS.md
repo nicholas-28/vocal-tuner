@@ -195,3 +195,13 @@ Status: accepted
 The completed practice timeline is an immutable event journal produced by the existing Issue 016 settlement path. Each metric-bearing or unobserved interval appends its exact monotonic start, end, and category at the same point that totals change. Pause boundaries append paused wall-time events on Resume or Finish. The UI never reconstructs chronology from summary totals, pitch history, event count, or interpolated samples.
 
 Completed rendering is DOM-only and memoizes duration and proportional wall-time geometry once from the frozen summary. A one-pixel CSS minimum preserves visibility without changing timestamps, duration, percentage, or neighboring accounting. Segments remain individually focusable for hover, tap, and screen-reader detail. No live timeline, Canvas, animation, timer, persistence, or audio data is added.
+
+## ADR-022 — Git-connected Vercel serves a validated static SPA
+
+Status: accepted
+
+Vercel hosts the existing Vite `dist` output through GitHub Preview Deployments and `main` Production Deployments. A minimal catch-all rewrite supports direct SPA paths while Vercel’s filesystem continues serving hashed assets, the manifest, and icons. There is no custom server, Function, API route, Firebase service, SSR layer, or runtime secret.
+
+Node 22 matches GitHub Actions and is declared in `package.json`. Builds run TypeScript, Vite, then a local deployment validator. Vercel environment and Git values are explicitly selected at build time, validated in one typed module, and shown only in developer diagnostics. Production derives from Vercel build metadata rather than hostname guessing.
+
+Diagnostics and demo query handling use one environment policy. Development and Preview retain intended diagnostics; Production hides them and always rejects fabricated tuner input. Automated Playwright uses an explicit non-production build flag. A React error boundary handles unexpected render failures locally without external reporting or production stack disclosure.

@@ -49,6 +49,7 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
   measurementTimestampMs?: number | null;
   observationTimestampMs?: number | null;
   practiceMicrophoneActive?: boolean;
+  showReferenceDroneDiagnostics?: boolean;
 };
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
@@ -66,6 +67,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   measurementTimestampMs = null,
   observationTimestampMs = null,
   practiceMicrophoneActive = active,
+  showReferenceDroneDiagnostics = false,
 }: PitchGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -87,10 +89,6 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   const toggleReferenceMidi = referenceDrone.toggleMidi;
   const lowLabel = getPitchGridNote(lowMidi)?.label ?? String(lowMidi);
   const highLabel = getPitchGridNote(highMidi)?.label ?? String(highMidi);
-  const showReferenceDroneDiagnostics =
-    import.meta.env.DEV ||
-    new URLSearchParams(window.location.search).has('droneDiagnostics');
-
   const viewport = useMemo(
     () =>
       createPitchGridViewport({

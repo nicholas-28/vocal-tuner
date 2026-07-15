@@ -3,16 +3,23 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run validate:deployment",
+    "build:e2e": "tsc -b && VITE_ENABLE_TEST_CONTROLS=true vite build && npm run validate:deployment",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "npm run test:e2e:production && npm run test:e2e:demo",
+    "test:e2e:production": "npm run build && playwright test e2e/deployment.spec.ts",
+    "test:e2e:demo": "npm run build:e2e && playwright test e2e/app.spec.ts",
+    "validate:deployment": "node scripts/validate-deployment.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

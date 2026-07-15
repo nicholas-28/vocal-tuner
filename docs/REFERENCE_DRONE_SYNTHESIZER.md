@@ -75,9 +75,9 @@ React Strict Mode does not construct audio during its development-only setup cyc
 
 ## Development diagnostics
 
-Development builds include a collapsed **Reference-drone diagnostics** panel. It updates only on commands and engine transitions and exposes context, engine and voice states; graph/destination/start confirmation; MIDI and frequency; oscillator type; voice/master/effective gain; last command; and the last typed error. Normal production UI omits it. A production-like debugging build can expose it explicitly with `?droneDiagnostics=1`.
+Development builds include a collapsed **Reference-drone diagnostics** panel. It updates only on commands and engine transitions and exposes context, engine and voice states; graph/destination/start confirmation; MIDI and frequency; oscillator type; voice/master/effective gain; last command; and the last typed error. Preview can expose it explicitly with `?droneDiagnostics=1`. Production omits it and ignores the query flag.
 
-Concise transition logging is available in development with `?droneDebug=1`. It covers context creation/resume, graph connection, oscillator start, attack, confirmation, transition, Stop, oscillator end, invalidation, disposal, and errors. It contains no microphone samples or personal data.
+Concise transition logging is available in development and Preview with `?droneDebug=1`; Production ignores the flag. It covers context creation/resume, graph connection, oscillator start, attack, confirmation, transition, Stop, oscillator end, invalidation, disposal, and errors. It contains no microphone samples or personal data.
 
 ## Cleanup and privacy
 

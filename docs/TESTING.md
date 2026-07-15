@@ -39,6 +39,14 @@ Playwright should cover:
 - responsive layout;
 - error state when microphone access is denied.
 
+Deployment browser coverage runs two separate production bundles:
+
+- `npm run test:e2e:production` builds without test controls and verifies deep-link loading, no automatic permission request, hidden production diagnostics, rejected public mock flags, manifest delivery, and 320 px layout.
+- `npm run test:e2e:demo` builds with the explicit local `VITE_ENABLE_TEST_CONTROLS=true` flag and retains deterministic tuner, target, practice, timeline, drone, and range coverage.
+- `npm run test:e2e` runs both flows. Neither flow contacts Vercel or requires credentials.
+
+`npm run build` finishes with deployment validation. The validator parses `vercel.json` and the manifest, verifies referenced assets in source and `dist`, and rejects obvious localhost endpoints and local filesystem paths in production output.
+
 ## Manual device matrix
 
 Minimum:

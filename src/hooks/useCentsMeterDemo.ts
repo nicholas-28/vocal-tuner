@@ -19,11 +19,14 @@ type CentsMeterDemoDetail = {
 
 const DEMO_EVENT = 'vocal-tuner:cents-meter-demo';
 
-export function useCentsMeterDemo(): CentsMeterDemoState | null {
+export function useCentsMeterDemo(enabled = false): CentsMeterDemoState | null {
   const [state, setState] = useState<CentsMeterDemoState | null>(null);
 
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has('centsMeterDemo'))
+    if (
+      !enabled ||
+      !new URLSearchParams(window.location.search).has('centsMeterDemo')
+    )
       return;
     setState({
       pitch: null,
@@ -53,7 +56,7 @@ export function useCentsMeterDemo(): CentsMeterDemoState | null {
     };
     window.addEventListener(DEMO_EVENT, onDemo);
     return () => window.removeEventListener(DEMO_EVENT, onDemo);
-  }, []);
+  }, [enabled]);
 
   return state;
 }

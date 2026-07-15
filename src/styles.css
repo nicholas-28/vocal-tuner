@@ -29,6 +29,41 @@ body {
   margin: 0;
 }
 
+.developer-build-info {
+  margin-top: -0.35rem;
+  color: #697586;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.app-error {
+  justify-content: center;
+}
+
+.app-error section {
+  padding: 1rem;
+  border: 1px solid #343d49;
+  border-radius: 0.8rem;
+  background: #12161d;
+}
+
+.app-error p {
+  color: #a8b2bf;
+  line-height: 1.5;
+}
+
+.app-error pre {
+  max-width: 100%;
+  padding: 0.65rem;
+  overflow: auto;
+  border-radius: 0.5rem;
+  color: #d0ad83;
+  background: #0b0e13;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 button {
   font: inherit;
 }

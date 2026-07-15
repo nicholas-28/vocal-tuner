@@ -14,6 +14,7 @@ import type {
   ReferenceDroneNote,
   ReferenceDroneSnapshot,
 } from '../types/referenceDrone';
+import { getCurrentRuntimeFeaturePolicy } from '../config/runtimeFeatures';
 
 type ReferenceDroneEngineOptions = {
   contextFactory?: () => AudioContext;
@@ -167,9 +168,8 @@ function toEngineError(error: unknown): DroneEngineError {
 
 function debugLog(message: string, details?: Record<string, unknown>): void {
   if (
-    !import.meta.env.DEV ||
     typeof window === 'undefined' ||
-    !new URLSearchParams(window.location.search).has('droneDebug')
+    !getCurrentRuntimeFeaturePolicy().enableReferenceDroneDebugLog
   ) {
     return;
   }

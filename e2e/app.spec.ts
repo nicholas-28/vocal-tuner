@@ -81,6 +81,9 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'Vocal Tuner' }),
   ).toBeVisible();
+  await expect(page.getByLabel('Deployment build information')).toContainText(
+    /^v0\.0\.0 · unknown/,
+  );
   await expect(
     page.getByRole('button', { name: 'Start microphone' }),
   ).toBeVisible();
@@ -364,12 +367,12 @@ test('loads the initial tuner screen', async ({ page }) => {
   };
   const liveMetrics = practicePanel.getByLabel('Live practice metrics');
   const measuredVoiceValue = liveMetrics
-    .locator('div')
-    .filter({ hasText: 'Measured voice' })
+    .getByText('Measured voice', { exact: true })
+    .locator('..')
     .locator('dd');
   const onTargetValue = liveMetrics
-    .locator('div')
-    .filter({ hasText: 'On target' })
+    .getByText('On target', { exact: true })
+    .locator('..')
     .locator('dd');
   await publishPracticeObservation(frequencyAtMidi(69), 'voiced');
   await page.waitForTimeout(80);

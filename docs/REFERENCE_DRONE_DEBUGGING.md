@@ -4,7 +4,7 @@ The reference drone can confirm a valid running Web Audio graph, but it cannot i
 
 ## Opening diagnostics
 
-Development builds show **Reference-drone diagnostics** beneath the controls. For a production-like build, append `?droneDiagnostics=1` to the page URL. Append `?droneDebug=1` in development for concise transition logs.
+Development builds show **Reference-drone diagnostics** beneath the controls. Preview builds can show the detail with `?droneDiagnostics=1` and enable concise transition logs with `?droneDebug=1`. Production ignores both flags.
 
 Before activation, context is `unavailable`, engine is `idle`, and no graph or oscillator exists. This means the lazy context has not been created; it does not by itself mean the browser lacks Web Audio.
 

@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { PitchMonitor } from '../components/PitchMonitor';
 import { PitchDiagnostics } from '../components/PitchDiagnostics';
+import { DeveloperBuildInfo } from '../components/DeveloperBuildInfo';
 import {
   MicrophoneControls,
   MicrophoneStatus,
@@ -12,8 +14,13 @@ import { usePitchDetection } from '../hooks/usePitchDetection';
 import { usePitchContinuity } from '../hooks/usePitchContinuity';
 import { useVisiblePitchRange } from '../hooks/useVisiblePitchRange';
 import { useCentsMeterDemo } from '../hooks/useCentsMeterDemo';
+import { createRuntimeFeaturePolicy } from '../config/runtimeFeatures';
 
 export function App() {
+  const runtimeFeatures = useMemo(
+    () => createRuntimeFeaturePolicy(window.location.search),
+    [],
+  );
   const pitch = usePitchDetection();
   const continuity = usePitchContinuity();
   const history = usePitchHistory();
@@ -37,7 +44,9 @@ export function App() {
   const musicalPitch = useMusicalPitchFromDetection(
     continuity.state.lastAcceptedPitch,
   );
-  const centsMeterDemo = useCentsMeterDemo();
+  const centsMeterDemo = useCentsMeterDemo(
+    runtimeFeatures.enableCentsMeterDemo,
+  );
   const readoutPitch =
     centsMeterDemo === null ? musicalPitch : centsMeterDemo.pitch;
   const readoutContinuityStatus =
@@ -77,11 +86,13 @@ export function App() {
         }
         measurementTimestampMs={readoutTimestampMs}
       />
-      <PitchDiagnostics
-        diagnostics={pitch.diagnostics}
-        microphoneState={state}
-        continuity={continuity.state}
-      />
+      {runtimeFeatures.showDeveloperDiagnostics && (
+        <PitchDiagnostics
+          diagnostics={pitch.diagnostics}
+          microphoneState={state}
+          continuity={continuity.state}
+        />
+      )}
       <PitchMonitor
         history={history.history}
         summary={history.summary}
@@ -107,12 +118,16 @@ export function App() {
         measurementTimestampMs={readoutTimestampMs}
         observationTimestampMs={observationTimestampMs}
         practiceMicrophoneActive={practiceMicrophoneActive}
+        showReferenceDroneDiagnostics={
+          runtimeFeatures.showReferenceDroneDiagnostics
+        }
       />
       <MicrophoneControls
         state={state}
         onStart={() => void start()}
         onStop={() => void stop()}
       />
+      {runtimeFeatures.showDeveloperDiagnostics && <DeveloperBuildInfo />}
     </main>
   );
 }

@@ -35,6 +35,7 @@ type PitchMonitorProps = {
   measurementTimestampMs: number | null;
   observationTimestampMs: number | null;
   practiceMicrophoneActive?: boolean;
+  showReferenceDroneDiagnostics?: boolean;
 };
 
 export function PitchMonitor({
@@ -62,6 +63,7 @@ export function PitchMonitor({
   measurementTimestampMs,
   observationTimestampMs,
   practiceMicrophoneActive = active,
+  showReferenceDroneDiagnostics = false,
 }: PitchMonitorProps) {
   const relativeNewestMs =
     summary.oldestTimestampMs === null || summary.newestTimestampMs === null
@@ -156,6 +158,7 @@ export function PitchMonitor({
         measurementTimestampMs={measurementTimestampMs}
         observationTimestampMs={observationTimestampMs}
         practiceMicrophoneActive={practiceMicrophoneActive}
+        showReferenceDroneDiagnostics={showReferenceDroneDiagnostics}
       />
     </section>
   );
