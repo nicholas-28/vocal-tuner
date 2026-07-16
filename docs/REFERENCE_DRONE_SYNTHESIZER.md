@@ -24,6 +24,8 @@ The graph is:
 sine OscillatorNode -> per-voice GainNode -> master GainNode -> destination
 ```
 
+With the explicit `audioDiagnostics=1` mode enabled, one `AnalyserNode` is inserted between master and destination on the actual audible path. It uses a reusable 1,024-sample time-domain buffer at 8 Hz while output is expected. Three consecutive measurements above or below an RMS-or-peak threshold of `0.0001` classify the path as digitally active or silent. This diagnostic node receives no microphone input, makes no recording, changes no gain, and is disconnected with its context.
+
 The initial timbre is a sine wave because it is predictable, lightweight, and free of sample loading or licensing concerns. The engine keeps at most one oscillator voice. It retains the context and master gain after Stop for efficient restart, and closes them only on disposal.
 
 Issue 012 manual testing exposed a false-positive playback defect: the first engine treated a fulfilled `resume()` promise as sufficient and published `playing` without checking that the context had actually reached `running`. A suspended or interrupted context could therefore own a valid-looking but silent graph. The original mocks concealed this by always changing state to `running`.
@@ -79,7 +81,9 @@ React Strict Mode does not construct audio during its development-only setup cyc
 
 Development builds include a collapsed **Reference-drone diagnostics** panel. Preview can expose it with `?droneDiagnostics=1`. Production continues to ignore that broad developer flag, but Issue 018.1 temporarily permits the narrower `?audioDiagnostics=1` read-only audio lifecycle panel. It includes constructor identity, context/voice generations, resume result, state and rendering-clock checks, graph/gain invariants, visibility lifecycle, and a bounded 40-event log. It does not unlock fabricated tuner or practice input.
 
-Diagnostic mode also provides an explicit one-second A4 output test through the same protected master path. It does not change keyboard selection, target, microphone, history, or practice state and cannot overlap another test or active drone.
+Diagnostic mode also provides an explicit one-second A4 output test through the same protected master path. Separate direct ramped-gain and direct constant-gain tests use temporary oscillator/gain/analyser paths to the current destination, bypassing the retained voice and master. A generated local PCM WAV plays through `HTMLAudioElement` without entering Web Audio. An explicit recreation experiment stops and disconnects current output, requests closure, constructs a fresh context in the gesture, and runs the direct constant-gain path. These comparisons do not change keyboard selection, target, microphone, history, or practice state and cannot overlap another test or active drone.
+
+Gain diagnostics record the observed parameter value, application target, automation method, context scheduling time, and whether scheduling occurred after `running`. They describe scheduling assumptions, while analyser RMS/peak describes rendered pre-destination samples. Neither proves the physical speaker route. `navigator.audioSession` capability/type/state are read only when available; no experimental property is written.
 
 Concise transition logging is available in development and Preview with `?droneDebug=1`; Production ignores the flag. It covers context creation/resume, graph connection, oscillator start, attack, confirmation, transition, Stop, oscillator end, invalidation, disposal, and errors. It contains no microphone samples or personal data.
 
@@ -93,7 +97,7 @@ The oscillator is generated locally. No microphone audio or synthesized audio is
 
 Reference keys remain semantic buttons with roving tabindex and visible focus. Selection uses `aria-pressed`; sounding state is exposed in each active key's accessible name and in a polite text status. Start, Stop, and the native range input are keyboard and touch operable, with explicit labels and disabled states.
 
-Playback creates no animation loop and no high-frequency React update. Only lifecycle, note, volume, and range events update UI state. Audio-parameter ramps execute on the audio rendering thread.
+Playback creates no animation loop and no audio-rate React update. Diagnostic sampling uses at most one 8 Hz interval and a reusable typed array, and stops with output, page hiding, context replacement, or disposal. Only lifecycle, note, volume, range, and low-rate diagnostic events update UI state. Audio-parameter ramps execute on the audio rendering thread.
 
 ## Known limitations
 

@@ -1,5 +1,6 @@
 import { formatCompactBuildInfo } from '../config/buildInfo';
 import type { BuildInfo } from '../types/buildInfo';
+import type { AudioDiagnosticReportContext } from '../types/audioDiagnostics';
 import type { ReferenceDroneDiagnostics } from '../types/referenceDrone';
 
 const value = (input: string | number | boolean | null): string =>
@@ -8,10 +9,17 @@ const value = (input: string | number | boolean | null): string =>
 export function formatAudioDiagnosticReport(
   diagnostics: ReferenceDroneDiagnostics,
   buildInfo: BuildInfo,
+  context?: AudioDiagnosticReportContext,
 ): string {
   const rows: Array<[string, string | number | boolean | null]> = [
     ['Deployment', formatCompactBuildInfo(buildInfo)],
+    ['Build SHA', buildInfo.gitCommitSha],
+    ['Build ref', buildInfo.gitRef],
     ['User agent', diagnostics.userAgentSummary],
+    [
+      'Apple mobile browser',
+      summarizeAppleMobileBrowser(diagnostics.userAgentSummary),
+    ],
     ['Secure context', diagnostics.secureContext],
     ['AudioContext available', diagnostics.constructorAvailable],
     ['Constructor', diagnostics.constructorName],
@@ -53,6 +61,43 @@ export function formatAudioDiagnosticReport(
       diagnostics.requiresExplicitReactivation,
     ],
     ['Output test', diagnostics.outputTestStatus],
+    ['Persistent signal', diagnostics.persistentSignal.classification],
+    ['Persistent RMS', diagnostics.persistentSignal.rms],
+    ['Persistent peak', diagnostics.persistentSignal.peak],
+    [
+      'Persistent analyser generation',
+      diagnostics.persistentSignal.analyserGenerationId,
+    ],
+    [
+      'Persistent analyser connected',
+      diagnostics.persistentSignal.analyserConnectedToDestination,
+    ],
+    ...formatTestRows('Engine test', diagnostics.engineOutputTest),
+    ...formatTestRows('Direct test', diagnostics.directOutputTest),
+    ...formatTestRows('Constant-gain test', diagnostics.constantGainOutputTest),
+    ...formatTestRows(
+      'Recreated-context test',
+      diagnostics.recreatedContextOutputTest,
+    ),
+    ['Previous context generation', diagnostics.previousContextGenerationId],
+    ['Context close result', diagnostics.contextCloseResult],
+    ['Voice automation method', diagnostics.voiceAutomation.method],
+    [
+      'Voice automation context time',
+      diagnostics.voiceAutomation.schedulingContextTime,
+    ],
+    [
+      'Voice automation after running',
+      diagnostics.voiceAutomation.scheduledAfterRunning,
+    ],
+    ['Master automation method', diagnostics.masterAutomation.method],
+    [
+      'Master automation context time',
+      diagnostics.masterAutomation.schedulingContextTime,
+    ],
+    ['AudioSession available', diagnostics.audioSession.available],
+    ['AudioSession type', diagnostics.audioSession.type],
+    ['AudioSession state', diagnostics.audioSession.state],
     ['Last error code', diagnostics.errorCode],
     ['Last error message', diagnostics.errorMessage],
   ];
@@ -61,6 +106,29 @@ export function formatAudioDiagnosticReport(
     'No microphone audio or samples are included.',
     '',
     ...rows.map(([label, input]) => `${label}: ${value(input)}`),
+    ...(context
+      ? [
+          '',
+          'Manual audibility:',
+          `Persistent drone: ${context.manualResults.persistentDrone}`,
+          `Direct Web Audio: ${context.manualResults.directWebAudio}`,
+          `Constant-gain Web Audio: ${context.manualResults.constantGainWebAudio}`,
+          `Native audio: ${context.manualResults.nativeAudio}`,
+          `Recreated context: ${context.manualResults.recreatedContext}`,
+          '',
+          'Native media:',
+          `Status: ${context.nativeAudio.status}`,
+          `Play result: ${context.nativeAudio.playResult}`,
+          `Playing event: ${context.nativeAudio.playingEventReceived}`,
+          `Timeupdate: ${context.nativeAudio.timeUpdateReceived}`,
+          `Current time: ${context.nativeAudio.currentTime}`,
+          `Ended event: ${context.nativeAudio.endedEventReceived}`,
+          `Paused: ${context.nativeAudio.paused}`,
+          `Error code: ${value(context.nativeAudio.errorCode)}`,
+          `Error message: ${value(context.nativeAudio.errorMessage)}`,
+          `Events: ${context.nativeAudio.events.join(', ') || 'none'}`,
+        ]
+      : []),
     '',
     'Lifecycle log:',
     ...(diagnostics.lifecycleLog.length
@@ -70,4 +138,32 @@ export function formatAudioDiagnosticReport(
         )
       : ['(empty)']),
   ].join('\n');
+}
+
+function formatTestRows(
+  label: string,
+  test: ReferenceDroneDiagnostics['directOutputTest'],
+): Array<[string, string | number | boolean | null]> {
+  return [
+    [`${label} status`, test.status],
+    [`${label} graph`, test.graphPath],
+    [`${label} RMS`, test.signal.rms],
+    [`${label} peak`, test.signal.peak],
+    [`${label} signal`, test.signal.classification],
+    [`${label} automation`, test.automation.method],
+  ];
+}
+
+export function summarizeAppleMobileBrowser(userAgent: string): string {
+  const ios =
+    /(?:CPU (?:iPhone )?OS|iPhone OS) (\d+)[_.](\d+)(?:[_.](\d+))?/.exec(
+      userAgent,
+    );
+  const safari = /Version\/(\d+(?:\.\d+){0,2})/.exec(userAgent);
+  if (!ios && !safari) return 'not detected';
+  const iosVersion = ios
+    ? `iOS ${ios.slice(1).filter(Boolean).join('.')}`
+    : 'iOS unknown';
+  const safariVersion = safari ? `Safari ${safari[1]}` : 'Safari unknown';
+  return `${iosVersion}; ${safariVersion}`;
 }

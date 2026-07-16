@@ -37,6 +37,15 @@ function createFakeEngine(initialVolume = 0.25) {
     activateFromUserGesture,
     play: activateFromUserGesture,
     playOutputTestFromUserGesture: vi.fn(async () => ({ ok: true }) as const),
+    playDirectOutputTestFromUserGesture: vi.fn(
+      async () => ({ ok: true }) as const,
+    ),
+    playConstantGainOutputTestFromUserGesture: vi.fn(
+      async () => ({ ok: true }) as const,
+    ),
+    recreateContextAndPlayOutputTestFromUserGesture: vi.fn(
+      async () => ({ ok: true }) as const,
+    ),
     stop: vi.fn(async () => {
       publish({ ...snapshot, status: 'stopping' });
       publish({
@@ -71,7 +80,7 @@ describe('useReferenceDrone', () => {
     expect(result.current.snapshot.volume).toBe(0.4);
 
     await act(() => result.current.toggleMidi(60));
-    expect(factory).toHaveBeenCalledWith(0.4);
+    expect(factory).toHaveBeenCalledWith(0.4, false);
     expect(engine.activateFromUserGesture).toHaveBeenCalledWith({
       midiNote: 60,
       frequencyHz: 261.6255653005986,

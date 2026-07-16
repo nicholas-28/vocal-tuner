@@ -24,11 +24,14 @@ export function createInitialReferenceDroneSnapshot(): ReferenceDroneSnapshot {
   };
 }
 
-const defaultEngineFactory: ReferenceDroneEngineFactory = (initialVolume) =>
-  createReferenceDroneEngine({ initialVolume });
+const defaultEngineFactory: ReferenceDroneEngineFactory = (
+  initialVolume,
+  diagnosticsEnabled,
+) => createReferenceDroneEngine({ initialVolume, diagnosticsEnabled });
 
 export function useReferenceDrone(
   engineFactory: ReferenceDroneEngineFactory = defaultEngineFactory,
+  diagnosticsEnabled = false,
 ) {
   const [snapshot, setSnapshot] = useState<ReferenceDroneSnapshot>(
     createInitialReferenceDroneSnapshot,
@@ -47,13 +50,16 @@ export function useReferenceDrone(
 
   const ensureEngine = useCallback(() => {
     if (engineRef.current) return engineRef.current;
-    const engine = factoryRef.current(snapshotRef.current.volume);
+    const engine = factoryRef.current(
+      snapshotRef.current.volume,
+      diagnosticsEnabled,
+    );
     engineRef.current = engine;
     unsubscribeRef.current = engine.subscribe((next) => {
       if (engineRef.current === engine) updateSnapshot(next);
     });
     return engine;
-  }, [updateSnapshot]);
+  }, [diagnosticsEnabled, updateSnapshot]);
 
   const activateMidiFromUserGesture = useCallback(
     async (midiNote: number) => {
@@ -109,6 +115,19 @@ export function useReferenceDrone(
     await ensureEngine().playOutputTestFromUserGesture();
   }, [ensureEngine]);
 
+  const playDirectOutputTestFromUserGesture = useCallback(async () => {
+    await ensureEngine().playDirectOutputTestFromUserGesture();
+  }, [ensureEngine]);
+
+  const playConstantGainOutputTestFromUserGesture = useCallback(async () => {
+    await ensureEngine().playConstantGainOutputTestFromUserGesture();
+  }, [ensureEngine]);
+
+  const recreateContextAndPlayOutputTestFromUserGesture =
+    useCallback(async () => {
+      await ensureEngine().recreateContextAndPlayOutputTestFromUserGesture();
+    }, [ensureEngine]);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -127,6 +146,9 @@ export function useReferenceDrone(
     toggleMidi,
     playMidi,
     playOutputTestFromUserGesture,
+    playDirectOutputTestFromUserGesture,
+    playConstantGainOutputTestFromUserGesture,
+    recreateContextAndPlayOutputTestFromUserGesture,
     stop,
     setVolume,
   };

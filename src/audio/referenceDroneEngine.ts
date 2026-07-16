@@ -1,4 +1,6 @@
 import {
+  createInitialAutomationDiagnostics,
+  createInitialDiagnosticTestResult,
   createInitialReferenceDroneDiagnostics,
   DEFAULT_REFERENCE_DRONE_CONFIG,
   isValidReferenceDroneConfig,
@@ -6,6 +8,12 @@ import {
   normalizeReferenceDroneVolume,
 } from './referenceDroneConfig';
 import { selectAudioContextConstructor } from './referenceDroneContext';
+import {
+  createInitialSignalMeasurement,
+  measureReferenceDroneSignal,
+  REFERENCE_DRONE_ANALYSER_FFT_SIZE,
+  REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
+} from './referenceDroneSignal';
 import type {
   ReferenceDroneAudioContextConstructorName,
   ReferenceDroneCommandResult,
@@ -23,6 +31,7 @@ type ReferenceDroneEngineOptions = {
   contextConstructorName?: ReferenceDroneAudioContextConstructorName;
   config?: ReferenceDroneConfig;
   initialVolume?: number;
+  diagnosticsEnabled?: boolean;
 };
 
 type DroneVoice = {
@@ -38,7 +47,23 @@ type DroneVoice = {
 type OutputGraph = {
   context: AudioContext;
   masterGain: GainNode;
+  analyser: AnalyserNode | null;
 };
+
+type DiagnosticVoice = {
+  oscillator: OscillatorNode;
+  gain: GainNode;
+  analyser: AnalyserNode;
+  samples: Float32Array;
+  generationId: number;
+  started: boolean;
+};
+
+type DiagnosticTestKey =
+  | 'engineOutputTest'
+  | 'directOutputTest'
+  | 'constantGainOutputTest'
+  | 'recreatedContextOutputTest';
 
 class DroneEngineError extends Error {
   constructor(
@@ -188,6 +213,7 @@ export function createReferenceDroneEngine(
     ? requestedConfig
     : DEFAULT_REFERENCE_DRONE_CONFIG;
   const constructorSelection = selectAudioContextConstructor();
+  const diagnosticsEnabled = options.diagnosticsEnabled === true;
   const contextFactory = options.contextFactory ?? createDefaultContext;
   const constructorName =
     options.contextConstructorName ??
@@ -212,6 +238,8 @@ export function createReferenceDroneEngine(
   const listeners = new Set<(value: ReferenceDroneSnapshot) => void>();
   let context: AudioContext | null = null;
   let masterGain: GainNode | null = null;
+  let outputAnalyser: AnalyserNode | null = null;
+  let outputAnalyserSamples: Float32Array | null = null;
   let destinationConnected = false;
   let voice: DroneVoice | null = null;
   let releasePromise: Promise<void> | null = null;
@@ -220,6 +248,10 @@ export function createReferenceDroneEngine(
   let operation = 0;
   let contextGeneration = 0;
   let voiceGeneration = 0;
+  let analyserGeneration = 0;
+  let signalInterval: number | null = null;
+  let diagnosticVoice: DiagnosticVoice | null = null;
+  let persistentSignalOwner: 'drone' | 'engine-test' | null = null;
   let lifecycleSequence = 0;
   let disposed = false;
   let contextStateListener: {
@@ -266,6 +298,110 @@ export function createReferenceDroneEngine(
     });
   };
 
+  const nowMs = () =>
+    typeof performance === 'undefined' ? Date.now() : performance.now();
+
+  const createAutomationRecord = (
+    parameter: AudioParam,
+    target: number,
+    contextTime: number,
+    method: string,
+    fallbackMethod: string | null,
+    ownedContext: AudioContext,
+  ) =>
+    Object.freeze({
+      currentValue: Number.isFinite(parameter.value) ? parameter.value : null,
+      scheduledTarget: target,
+      schedulingContextTime: contextTime,
+      lastAutomationTimestampMs: nowMs(),
+      method,
+      fallbackMethod,
+      scheduledAfterRunning: getContextState(ownedContext) === 'running',
+    });
+
+  const updateDiagnosticTest = (
+    key: DiagnosticTestKey,
+    values: Partial<ReferenceDroneSnapshot['diagnostics'][DiagnosticTestKey]>,
+  ) => {
+    updateDiagnostics({
+      [key]: Object.freeze({
+        ...snapshot.diagnostics[key],
+        ...values,
+      }),
+    });
+  };
+
+  const stopSignalSampling = () => {
+    if (signalInterval !== null && typeof window !== 'undefined') {
+      window.clearInterval(signalInterval);
+    }
+    signalInterval = null;
+    persistentSignalOwner = null;
+  };
+
+  const samplePersistentSignal = (
+    ownedAnalyser: AnalyserNode,
+    ownedContextGeneration: number,
+    ownedAnalyserGeneration: number,
+    ownedVoiceGeneration: number | null,
+  ) => {
+    if (
+      disposed ||
+      outputAnalyser !== ownedAnalyser ||
+      contextGeneration !== ownedContextGeneration ||
+      analyserGeneration !== ownedAnalyserGeneration ||
+      !outputAnalyserSamples
+    )
+      return;
+    ownedAnalyser.getFloatTimeDomainData(outputAnalyserSamples);
+    const signal = measureReferenceDroneSignal(
+      outputAnalyserSamples,
+      snapshot.diagnostics.persistentSignal,
+      nowMs(),
+      {
+        analyserGenerationId: ownedAnalyserGeneration,
+        contextGenerationId: ownedContextGeneration,
+        voiceGenerationId: ownedVoiceGeneration,
+        analyserConnectedToDestination: destinationConnected,
+      },
+    );
+    const values: Partial<ReferenceDroneSnapshot['diagnostics']> = {
+      persistentSignal: signal,
+    };
+    if (persistentSignalOwner === 'engine-test') {
+      values.engineOutputTest = Object.freeze({
+        ...snapshot.diagnostics.engineOutputTest,
+        signal,
+      });
+    }
+    updateDiagnostics(values);
+  };
+
+  const startPersistentSignalSampling = (
+    owner: 'drone' | 'engine-test',
+    ownedVoiceGeneration: number | null,
+  ) => {
+    stopSignalSampling();
+    if (!diagnosticsEnabled || !outputAnalyser || typeof window === 'undefined')
+      return;
+    persistentSignalOwner = owner;
+    const ownedAnalyser = outputAnalyser;
+    const ownedContextGeneration = contextGeneration;
+    const ownedAnalyserGeneration = analyserGeneration;
+    const sample = () =>
+      samplePersistentSignal(
+        ownedAnalyser,
+        ownedContextGeneration,
+        ownedAnalyserGeneration,
+        ownedVoiceGeneration,
+      );
+    sample();
+    signalInterval = window.setInterval(
+      sample,
+      REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
+    );
+  };
+
   const cleanupVoice = (releasedVoice: DroneVoice, ended = true) => {
     releasedVoice.oscillator.onended = null;
     safeDisconnect(releasedVoice.oscillator);
@@ -275,6 +411,7 @@ export function createReferenceDroneEngine(
       snapshot.diagnostics.voiceGenerationId === releasedVoice.generationId;
     if (voice === releasedVoice) voice = null;
     if (!ownsCurrentDiagnostics) return;
+    stopSignalSampling();
     addLifecycleEvent('node ended', `voice ${releasedVoice.generationId}`);
     updateDiagnostics({
       voiceState: ended ? 'ended' : 'none',
@@ -361,7 +498,10 @@ export function createReferenceDroneEngine(
         operation += 1;
         if (contextState === 'closed') {
           safeDisconnect(masterGain);
+          safeDisconnect(outputAnalyser);
           masterGain = null;
+          outputAnalyser = null;
+          outputAnalyserSamples = null;
           destinationConnected = false;
         }
         publishError(
@@ -399,8 +539,11 @@ export function createReferenceDroneEngine(
     if (!context || getContextState(context) !== 'closed') return;
     detachContextListener(context);
     safeDisconnect(masterGain);
+    safeDisconnect(outputAnalyser);
     context = null;
     masterGain = null;
+    outputAnalyser = null;
+    outputAnalyserSamples = null;
     destinationConnected = false;
   };
 
@@ -415,6 +558,7 @@ export function createReferenceDroneEngine(
     if (!context) {
       let createdContext: AudioContext | null = null;
       let createdMaster: GainNode | null = null;
+      let createdAnalyser: AnalyserNode | null = null;
       try {
         addLifecycleEvent('context constructor requested', constructorName);
         createdContext = contextFactory();
@@ -443,7 +587,28 @@ export function createReferenceDroneEngine(
           config.maximumMasterGain,
         );
         setParamValue(createdMaster.gain, mappedGain, currentTime);
-        createdMaster.connect(context.destination);
+        const masterAutomation = createAutomationRecord(
+          createdMaster.gain,
+          mappedGain,
+          currentTime,
+          typeof createdMaster.gain.setValueAtTime === 'function'
+            ? 'setValueAtTime'
+            : 'value-assignment',
+          null,
+          context,
+        );
+        if (diagnosticsEnabled) {
+          createdAnalyser = context.createAnalyser();
+          createdAnalyser.fftSize = REFERENCE_DRONE_ANALYSER_FFT_SIZE;
+          createdAnalyser.smoothingTimeConstant = 0;
+          createdMaster.connect(createdAnalyser);
+          createdAnalyser.connect(context.destination);
+          outputAnalyser = createdAnalyser;
+          outputAnalyserSamples = new Float32Array(createdAnalyser.fftSize);
+          analyserGeneration += 1;
+        } else {
+          createdMaster.connect(context.destination);
+        }
         masterGain = createdMaster;
         destinationConnected = true;
         updateDiagnostics({
@@ -468,15 +633,32 @@ export function createReferenceDroneEngine(
           destinationConnected: true,
           masterGain: mappedGain,
           masterGainCurrent: createdMaster.gain.value,
+          masterAutomation,
           effectiveGain: null,
+          persistentSignal: diagnosticsEnabled
+            ? Object.freeze({
+                ...createInitialSignalMeasurement(),
+                analyserGenerationId: analyserGeneration,
+                contextGenerationId: ownedGeneration,
+                analyserConnectedToDestination: true,
+              })
+            : createInitialSignalMeasurement(),
         });
         debugLog('destination connected', { masterGain: mappedGain });
-        addLifecycleEvent('nodes connected', 'master->destination');
+        addLifecycleEvent(
+          'nodes connected',
+          diagnosticsEnabled
+            ? 'master->output-analyser->destination'
+            : 'master->destination',
+        );
       } catch (error) {
         safeDisconnect(createdMaster);
+        safeDisconnect(createdAnalyser);
         if (createdContext) detachContextListener(createdContext);
         context = null;
         masterGain = null;
+        outputAnalyser = null;
+        outputAnalyserSamples = null;
         destinationConnected = false;
         if (createdContext && getContextState(createdContext) !== 'closed') {
           void createdContext.close().catch(() => undefined);
@@ -497,7 +679,7 @@ export function createReferenceDroneEngine(
         'Reference drone destination is not connected.',
       );
     }
-    return { context, masterGain };
+    return { context, masterGain, analyser: outputAnalyser };
   };
 
   const beginResumeFromUserGesture = (
@@ -675,6 +857,16 @@ export function createReferenceDroneEngine(
         frequencyHz: note.frequencyHz,
         voiceGainTarget: 0,
         voiceGainCurrent: voiceGain.gain.value,
+        voiceAutomation: createAutomationRecord(
+          voiceGain.gain,
+          0,
+          currentTime,
+          typeof voiceGain.gain.setValueAtTime === 'function'
+            ? 'setValueAtTime'
+            : 'value-assignment',
+          null,
+          graph.context,
+        ),
         masterGain: mappedGain,
         masterGainCurrent: graph.masterGain.gain.value,
         effectiveGain: 0,
@@ -739,9 +931,23 @@ export function createReferenceDroneEngine(
   ) => {
     const currentTime = requireFiniteTime(graph.context);
     linearRamp(preparedVoice.gain.gain, 1, currentTime + config.attackSeconds);
+    const method =
+      typeof preparedVoice.gain.gain.linearRampToValueAtTime === 'function'
+        ? 'linearRampToValueAtTime'
+        : typeof preparedVoice.gain.gain.setValueAtTime === 'function'
+          ? 'setValueAtTime'
+          : 'value-assignment';
     updateDiagnostics({
       voiceGainTarget: 1,
       voiceGainCurrent: preparedVoice.gain.gain.value,
+      voiceAutomation: createAutomationRecord(
+        preparedVoice.gain.gain,
+        1,
+        currentTime + config.attackSeconds,
+        method,
+        method === 'linearRampToValueAtTime' ? null : method,
+        graph.context,
+      ),
     });
     addLifecycleEvent(
       'attack scheduled',
@@ -753,11 +959,237 @@ export function createReferenceDroneEngine(
     });
   };
 
+  const cleanupDiagnosticVoice = (ownedVoice: DiagnosticVoice | null) => {
+    if (!ownedVoice) return;
+    safeStop(ownedVoice.oscillator);
+    safeDisconnect(ownedVoice.oscillator);
+    safeDisconnect(ownedVoice.gain);
+    safeDisconnect(ownedVoice.analyser);
+    if (diagnosticVoice === ownedVoice) diagnosticVoice = null;
+    stopSignalSampling();
+  };
+
+  const createDirectDiagnosticVoice = (graph: OutputGraph): DiagnosticVoice => {
+    let oscillator: OscillatorNode | null = null;
+    let gain: GainNode | null = null;
+    let analyser: AnalyserNode | null = null;
+    try {
+      const currentTime = requireFiniteTime(graph.context);
+      oscillator = graph.context.createOscillator();
+      gain = graph.context.createGain();
+      analyser = graph.context.createAnalyser();
+      analyser.fftSize = REFERENCE_DRONE_ANALYSER_FFT_SIZE;
+      analyser.smoothingTimeConstant = 0;
+      oscillator.type = 'sine';
+      setParamValue(oscillator.frequency, 440, currentTime);
+      setParamValue(gain.gain, 0, currentTime);
+      oscillator.connect(gain);
+      gain.connect(analyser);
+      analyser.connect(graph.context.destination);
+      oscillator.start(currentTime);
+      const nextVoice: DiagnosticVoice = {
+        oscillator,
+        gain,
+        analyser,
+        samples: new Float32Array(analyser.fftSize),
+        generationId: ++voiceGeneration,
+        started: true,
+      };
+      analyserGeneration += 1;
+      diagnosticVoice = nextVoice;
+      addLifecycleEvent(
+        'direct oscillator started',
+        `voice ${nextVoice.generationId}`,
+      );
+      return nextVoice;
+    } catch (error) {
+      if (oscillator) safeStop(oscillator);
+      safeDisconnect(oscillator);
+      safeDisconnect(gain);
+      safeDisconnect(analyser);
+      throw error;
+    }
+  };
+
+  const startDirectSignalSampling = (
+    key: DiagnosticTestKey,
+    ownedVoice: DiagnosticVoice,
+  ) => {
+    stopSignalSampling();
+    if (typeof window === 'undefined') return;
+    const ownedContextGeneration = contextGeneration;
+    const ownedAnalyserGeneration = analyserGeneration;
+    const sample = () => {
+      if (
+        disposed ||
+        diagnosticVoice !== ownedVoice ||
+        contextGeneration !== ownedContextGeneration ||
+        analyserGeneration !== ownedAnalyserGeneration
+      )
+        return;
+      ownedVoice.analyser.getFloatTimeDomainData(ownedVoice.samples);
+      const signal = measureReferenceDroneSignal(
+        ownedVoice.samples,
+        snapshot.diagnostics[key].signal,
+        nowMs(),
+        {
+          analyserGenerationId: ownedAnalyserGeneration,
+          contextGenerationId: ownedContextGeneration,
+          voiceGenerationId: ownedVoice.generationId,
+          analyserConnectedToDestination: true,
+        },
+      );
+      updateDiagnosticTest(key, { signal });
+    };
+    sample();
+    signalInterval = window.setInterval(
+      sample,
+      REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
+    );
+  };
+
+  const recreateOutputContextFromUserGesture = () => {
+    const oldContext = context;
+    const oldGeneration = oldContext ? contextGeneration : null;
+    stopSignalSampling();
+    abortVoice(voice);
+    cleanupDiagnosticVoice(diagnosticVoice);
+    safeDisconnect(masterGain);
+    safeDisconnect(outputAnalyser);
+    masterGain = null;
+    outputAnalyser = null;
+    outputAnalyserSamples = null;
+    destinationConnected = false;
+    detachContextListener(oldContext);
+    context = null;
+    updateDiagnostics({
+      previousContextGenerationId: oldGeneration,
+      contextCloseResult: oldContext ? 'pending' : 'no-context',
+      contextGenerationId: null,
+      contextState: 'unavailable',
+      masterGainConnected: false,
+      destinationConnected: false,
+      persistentSignal: createInitialSignalMeasurement(),
+    });
+    if (oldContext) {
+      void oldContext
+        .close()
+        .then(() => {
+          if (!disposed) updateDiagnostics({ contextCloseResult: 'resolved' });
+        })
+        .catch(() => {
+          if (!disposed) updateDiagnostics({ contextCloseResult: 'rejected' });
+        });
+    }
+    addLifecycleEvent('output context recreation requested');
+  };
+
+  const runDirectOutputTestFromUserGesture = async (
+    key: DiagnosticTestKey,
+    constantGain: boolean,
+    recreateContext: boolean,
+  ): Promise<ReferenceDroneCommandResult> => {
+    if (
+      disposed ||
+      voice ||
+      diagnosticVoice ||
+      snapshot.diagnostics.outputTestStatus === 'starting' ||
+      snapshot.diagnostics.outputTestStatus === 'playing'
+    )
+      return { ok: false, errorCode: 'audio-start-failed' };
+    const commandOperation = ++operation;
+    if (recreateContext) recreateOutputContextFromUserGesture();
+    updateDiagnosticTest(key, {
+      status: 'starting',
+      oscillatorStarted: false,
+      signal: createInitialSignalMeasurement(),
+      automation: createInitialAutomationDiagnostics(),
+      errorMessage: null,
+    });
+    addLifecycleEvent(
+      'activation received',
+      recreateContext
+        ? 'recreate-context-test'
+        : constantGain
+          ? 'constant-gain-test'
+          : 'direct-output-test',
+    );
+    try {
+      const graph = ensureOutputGraph();
+      const pendingResume = beginResumeFromUserGesture(graph);
+      const testVoice = createDirectDiagnosticVoice(graph);
+      updateDiagnosticTest(key, { oscillatorStarted: true });
+      const readyGraph = await confirmReady(
+        graph,
+        commandOperation,
+        pendingResume,
+      );
+      if (!readyGraph || disposed || commandOperation !== operation) {
+        cleanupDiagnosticVoice(testVoice);
+        updateDiagnosticTest(key, { status: 'failed' });
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
+      const currentTime = requireFiniteTime(readyGraph.context);
+      const gainValue = 0.12;
+      let method: string;
+      if (constantGain) {
+        setParamValue(testVoice.gain.gain, gainValue, currentTime);
+        method =
+          typeof testVoice.gain.gain.setValueAtTime === 'function'
+            ? 'setValueAtTime'
+            : 'value-assignment';
+      } else {
+        linearRamp(testVoice.gain.gain, gainValue, currentTime + 0.02);
+        method =
+          typeof testVoice.gain.gain.linearRampToValueAtTime === 'function'
+            ? 'linearRampToValueAtTime'
+            : typeof testVoice.gain.gain.setValueAtTime === 'function'
+              ? 'setValueAtTime'
+              : 'value-assignment';
+      }
+      const automation = createAutomationRecord(
+        testVoice.gain.gain,
+        gainValue,
+        constantGain ? currentTime : currentTime + 0.02,
+        method,
+        method === (constantGain ? 'setValueAtTime' : 'linearRampToValueAtTime')
+          ? null
+          : method,
+        readyGraph.context,
+      );
+      updateDiagnosticTest(key, { status: 'playing', automation });
+      startDirectSignalSampling(key, testVoice);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 1000));
+      if (
+        disposed ||
+        commandOperation !== operation ||
+        diagnosticVoice !== testVoice
+      ) {
+        cleanupDiagnosticVoice(testVoice);
+        updateDiagnosticTest(key, { status: 'failed' });
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
+      cleanupDiagnosticVoice(testVoice);
+      updateDiagnosticTest(key, { status: 'succeeded' });
+      addLifecycleEvent('direct output test completed', key);
+      return { ok: true };
+    } catch (error) {
+      cleanupDiagnosticVoice(diagnosticVoice);
+      updateDiagnosticTest(key, {
+        status: 'failed',
+        errorMessage:
+          error instanceof Error ? error.message : 'Unknown output failure.',
+      });
+      return publishError(toEngineError(error), key);
+    }
+  };
+
   const activateFromUserGesture = async (
     note: ReferenceDroneNote,
   ): Promise<ReferenceDroneCommandResult> => {
     if (disposed) return { ok: false, errorCode: 'audio-start-failed' };
     if (
+      diagnosticVoice ||
       snapshot.diagnostics.outputTestStatus === 'starting' ||
       snapshot.diagnostics.outputTestStatus === 'playing'
     ) {
@@ -889,6 +1321,7 @@ export function createReferenceDroneEngine(
         },
       });
       addLifecycleEvent('playback confirmed', `voice ${voice.generationId}`);
+      startPersistentSignalSampling('drone', voice.generationId);
       debugLog('playback confirmed', {
         contextState: 'running',
         frequencyHz: note.frequencyHz,
@@ -920,6 +1353,20 @@ export function createReferenceDroneEngine(
         lastUserActivationTimestampMs: activationTimestamp,
         lastCommand: 'output-test',
         outputTestStatus: 'starting',
+        engineOutputTest: Object.freeze({
+          ...createInitialDiagnosticTestResult(
+            'oscillator → voice gain → master gain → output analyser → destination',
+          ),
+          status: 'starting',
+        }),
+        persistentSignal: outputAnalyser
+          ? Object.freeze({
+              ...createInitialSignalMeasurement(),
+              analyserGenerationId: analyserGeneration,
+              contextGenerationId: contextGeneration,
+              analyserConnectedToDestination: destinationConnected,
+            })
+          : createInitialSignalMeasurement(),
         errorCode: null,
         errorMessage: null,
       });
@@ -944,6 +1391,12 @@ export function createReferenceDroneEngine(
         }
         scheduleVoiceAttack(testVoice, readyGraph);
         updateDiagnostics({ outputTestStatus: 'playing' });
+        updateDiagnosticTest('engineOutputTest', {
+          status: 'playing',
+          oscillatorStarted: true,
+          automation: snapshot.diagnostics.voiceAutomation,
+        });
+        startPersistentSignalSampling('engine-test', testVoice.generationId);
         addLifecycleEvent('output test started', '440 Hz');
         await new Promise<void>((resolve) => window.setTimeout(resolve, 1000));
         if (disposed || commandOperation !== operation || voice !== testVoice) {
@@ -958,14 +1411,33 @@ export function createReferenceDroneEngine(
             outputTestStatus: 'succeeded',
             lastCommand: 'output-test-complete',
           });
+          updateDiagnosticTest('engineOutputTest', { status: 'succeeded' });
           addLifecycleEvent('output test completed');
         }
         return { ok: true };
       } catch (error) {
         updateDiagnostics({ outputTestStatus: 'failed' });
+        updateDiagnosticTest('engineOutputTest', {
+          status: 'failed',
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown output failure.',
+        });
         return publishError(toEngineError(error), 'output-test');
       }
     };
+
+  const playDirectOutputTestFromUserGesture = () =>
+    runDirectOutputTestFromUserGesture('directOutputTest', false, false);
+
+  const playConstantGainOutputTestFromUserGesture = () =>
+    runDirectOutputTestFromUserGesture('constantGainOutputTest', true, false);
+
+  const recreateContextAndPlayOutputTestFromUserGesture = () =>
+    runDirectOutputTestFromUserGesture(
+      'recreatedContextOutputTest',
+      true,
+      true,
+    );
 
   const stop = async (): Promise<void> => {
     if (disposed) return;
@@ -1103,6 +1575,24 @@ export function createReferenceDroneEngine(
           currentTime + config.volumeSmoothingSeconds,
         );
       }
+      const method =
+        typeof masterGain.gain.setTargetAtTime === 'function'
+          ? 'setTargetAtTime'
+          : typeof masterGain.gain.linearRampToValueAtTime === 'function'
+            ? 'linearRampToValueAtTime'
+            : typeof masterGain.gain.setValueAtTime === 'function'
+              ? 'setValueAtTime'
+              : 'value-assignment';
+      updateDiagnostics({
+        masterAutomation: createAutomationRecord(
+          masterGain.gain,
+          mappedGain,
+          currentTime,
+          method,
+          method === 'setTargetAtTime' ? null : method,
+          context,
+        ),
+      });
       debugLog('volume scheduled', { masterGain: mappedGain });
     } catch (error) {
       publishError(toEngineError(error), 'volume');
@@ -1142,6 +1632,24 @@ export function createReferenceDroneEngine(
         ),
         name,
       );
+    }
+    if (diagnosticVoice && (state === 'hidden' || name === 'pagehide')) {
+      operation += 1;
+      cleanupDiagnosticVoice(diagnosticVoice);
+      for (const key of [
+        'directOutputTest',
+        'constantGainOutputTest',
+        'recreatedContextOutputTest',
+      ] as const) {
+        if (
+          snapshot.diagnostics[key].status === 'starting' ||
+          snapshot.diagnostics[key].status === 'playing'
+        )
+          updateDiagnosticTest(key, {
+            status: 'failed',
+            errorMessage: 'Page lifecycle interrupted the test.',
+          });
+      }
     }
     if (
       context &&
@@ -1197,6 +1705,8 @@ export function createReferenceDroneEngine(
     disposed = true;
     detachLifecycleListeners();
     operation += 1;
+    stopSignalSampling();
+    cleanupDiagnosticVoice(diagnosticVoice);
     debugLog('dispose');
     const activeVoice = voice;
     voice = null;
@@ -1207,7 +1717,10 @@ export function createReferenceDroneEngine(
     releaseFinish?.();
     releaseFinish = null;
     safeDisconnect(masterGain);
+    safeDisconnect(outputAnalyser);
     masterGain = null;
+    outputAnalyser = null;
+    outputAnalyserSamples = null;
     destinationConnected = false;
     const ownedContext = context;
     context = null;
@@ -1259,6 +1772,9 @@ export function createReferenceDroneEngine(
     activateFromUserGesture,
     play,
     playOutputTestFromUserGesture,
+    playDirectOutputTestFromUserGesture,
+    playConstantGainOutputTestFromUserGesture,
+    recreateContextAndPlayOutputTestFromUserGesture,
     stop,
     setVolume,
     getSnapshot: () => ({

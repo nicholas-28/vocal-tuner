@@ -231,5 +231,9 @@ Implemented on branch `issue-018-1-ios-safari-reference-drone`; physical iPhone 
 - Production-hidden-by-default `audioDiagnostics=1` reference-output lifecycle panel
 - Safe report copying with textarea fallback and bounded 40-event local log
 - Explicit one-second protected A4 output test independent from selection and practice
+- Physical iOS 18.4.1 evidence recorded: running context and advancing clock still produced no audible drone or engine test
+- Diagnostic-only pre-destination analyser with 8 Hz constant-memory RMS/peak classification
+- Isolated ramped and constant-gain Web Audio tests, generated native-WAV media comparison, and explicit context recreation
+- Compact mobile comparison UI with local audibility annotations and expanded plain-text report
 - Mobile WebKit deterministic coverage without claiming physical audibility
 - No Firebase, backend, recording, analytics, tracking, or new dependency

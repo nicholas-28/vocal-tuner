@@ -213,3 +213,13 @@ Status: accepted pending physical iPhone confirmation
 A production iPhone Safari report exposed a timing gap in ADR-016: context construction and resume were synchronous in the semantic click, but oscillator construction and start occurred only after awaiting resume. WebKit applies stricter transient-activation rules to starting Web Audio rendering. Reference activation now synchronously creates/connects a zero-gain voice and starts its oscillator in the trusted activation task, then awaits resume and confirms actual running state plus an advancing rendering clock before scheduling attack or publishing `playing`.
 
 Runtime constructor selection prefers `AudioContext`, falls back to `webkitAudioContext` only when present, and remains lazy. Context/voice generations reject stale events. Visibility loss invalidates output without automatic foreground playback; a later explicit gesture attempts recovery. Production diagnostics remain hidden by default but `audioDiagnostics=1` temporarily exposes read-only lifecycle data, a bounded local log, report copying, and an explicit protected A4 output test. It cannot enable fake microphone or practice data.
+
+## ADR-024 — Diagnose physical output with pre-destination samples and isolated comparisons
+
+Status: accepted pending physical iPhone confirmation
+
+Physical Safari 18.4 testing on iOS 18.4.1 showed that ADR-023's activation and rendering checks can all pass while both the persistent drone and same-engine output test remain inaudible. Control-node connections, an advancing context clock, and `AudioParam.value` do not prove that rendered buffers contain signal or that `AudioDestinationNode` reaches the physical route.
+
+The temporary `audioDiagnostics=1` surface therefore inserts a time-domain analyser on the actual persistent path immediately before destination. It classifies RMS/peak only after three consecutive 1,024-sample buffers at 8 Hz cross a `0.0001` threshold, using one interval and reusable memory. It also provides isolated ramped and constant-gain Web Audio paths, generated native HTML media, and explicit fresh-context comparison. Manual audibility annotations remain local and all paths avoid microphone data.
+
+These experiments are diagnostics rather than an automatic recovery policy. Active pre-destination samples do not prove speaker output; native media and physical observations determine the interpretation branch. Experimental `navigator.audioSession` information is capability-detected and read-only. No production envelope, output routing, or automatic context-recreation behavior changes until physical A/B evidence identifies the smallest safe repair.

@@ -79,7 +79,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
     [lowMidi, highMidi],
   );
   const referenceKeyboard = useReferenceKeyboard(visibleRange);
-  const referenceDrone = useReferenceDrone();
+  const referenceDrone = useReferenceDrone(undefined, showAudioDiagnostics);
   const practice = useTargetPracticeSession({
     selectedMidi: referenceKeyboard.state.selectedMidi,
     microphoneActive: practiceMicrophoneActive,
@@ -241,6 +241,15 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
           audioDiagnosticMode={showAudioDiagnostics}
           onPlayOutputTest={() =>
             void referenceDrone.playOutputTestFromUserGesture()
+          }
+          onPlayDirectOutputTest={() =>
+            void referenceDrone.playDirectOutputTestFromUserGesture()
+          }
+          onPlayConstantGainOutputTest={() =>
+            void referenceDrone.playConstantGainOutputTestFromUserGesture()
+          }
+          onRecreateContext={() =>
+            void referenceDrone.recreateContextAndPlayOutputTestFromUserGesture()
           }
         />
       )}

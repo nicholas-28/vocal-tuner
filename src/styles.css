@@ -1247,20 +1247,83 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-.reference-audio-diagnostics__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.reference-audio-section {
   margin-top: 0.65rem;
+  padding: 0.6rem;
+  border: 1px solid #2b333e;
+  border-radius: 0.55rem;
+  background: #0e1218;
 }
 
-.reference-audio-diagnostics__actions p,
-.reference-audio-diagnostics__actions textarea {
-  flex-basis: 100%;
+.reference-audio-section h3,
+.reference-audio-section p {
+  margin: 0 0 0.55rem;
+}
+
+.reference-audio-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.reference-audio-action-grid button,
+.reference-audio-manual-results button,
+.reference-audio-section > button {
+  min-height: 44px;
+}
+
+.reference-audio-manual-results {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.reference-audio-manual-results fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid #343d49;
+  border-radius: 0.45rem;
+}
+
+.reference-audio-manual-results legend {
+  padding: 0 0.25rem;
+  font-weight: 700;
+}
+
+.reference-audio-manual-results button {
+  flex: 1 1 6rem;
+}
+
+.reference-audio-signal,
+.reference-audio-test-result {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.45rem;
+  background: #151b23;
+  overflow-wrap: anywhere;
+}
+
+.reference-audio-test-result p {
   margin: 0;
 }
 
-.reference-audio-diagnostics__actions textarea {
+.reference-audio-caution {
+  margin-top: 0.65rem !important;
+  color: #d0ad83;
+}
+
+.reference-audio-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.75rem;
+}
+
+.reference-audio-section textarea {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
@@ -1283,7 +1346,9 @@ h1 {
 }
 
 @media (max-width: 420px) {
-  .reference-drone-diagnostics dl {
+  .reference-drone-diagnostics dl,
+  .reference-audio-action-grid,
+  .reference-audio-diagnostic-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

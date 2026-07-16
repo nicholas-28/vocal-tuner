@@ -1,8 +1,11 @@
 import type {
   ReferenceDroneAudioContextConstructorName,
+  ReferenceDroneAutomationDiagnostics,
   ReferenceDroneConfig,
+  ReferenceDroneDiagnosticTestResult,
   ReferenceDroneDiagnostics,
 } from '../types/referenceDrone';
+import { createInitialSignalMeasurement } from './referenceDroneSignal';
 
 export const DEFAULT_REFERENCE_DRONE_CONFIG: Readonly<ReferenceDroneConfig> = {
   oscillatorType: 'sine',
@@ -13,6 +16,47 @@ export const DEFAULT_REFERENCE_DRONE_CONFIG: Readonly<ReferenceDroneConfig> = {
   defaultVolume: 0.25,
   maximumMasterGain: 0.16,
 };
+
+export function createInitialAutomationDiagnostics(): ReferenceDroneAutomationDiagnostics {
+  return Object.freeze({
+    currentValue: null,
+    scheduledTarget: null,
+    schedulingContextTime: null,
+    lastAutomationTimestampMs: null,
+    method: 'none',
+    fallbackMethod: null,
+    scheduledAfterRunning: null,
+  });
+}
+
+export function createInitialDiagnosticTestResult(
+  graphPath: string,
+): ReferenceDroneDiagnosticTestResult {
+  return Object.freeze({
+    status: 'idle',
+    graphPath,
+    oscillatorStarted: false,
+    automation: createInitialAutomationDiagnostics(),
+    signal: createInitialSignalMeasurement(),
+    errorMessage: null,
+  });
+}
+
+function getAudioSessionDiagnostics() {
+  const audioSession =
+    typeof navigator === 'undefined'
+      ? undefined
+      : (
+          navigator as Navigator & {
+            audioSession?: { type?: unknown; state?: unknown };
+          }
+        ).audioSession;
+  return Object.freeze({
+    available: Boolean(audioSession),
+    type: typeof audioSession?.type === 'string' ? audioSession.type : null,
+    state: typeof audioSession?.state === 'string' ? audioSession.state : null,
+  });
+}
 
 export function createInitialReferenceDroneDiagnostics(
   constructorName: ReferenceDroneAudioContextConstructorName = 'unavailable',
@@ -64,6 +108,24 @@ export function createInitialReferenceDroneDiagnostics(
     pageLifecycleState: 'active',
     requiresExplicitReactivation: false,
     outputTestStatus: 'idle',
+    persistentSignal: createInitialSignalMeasurement(),
+    engineOutputTest: createInitialDiagnosticTestResult(
+      'oscillator → voice gain → master gain → output analyser → destination',
+    ),
+    directOutputTest: createInitialDiagnosticTestResult(
+      'temporary oscillator → temporary gain → temporary analyser → destination',
+    ),
+    constantGainOutputTest: createInitialDiagnosticTestResult(
+      'temporary oscillator → constant gain → temporary analyser → destination',
+    ),
+    recreatedContextOutputTest: createInitialDiagnosticTestResult(
+      'new context → temporary oscillator → constant gain → temporary analyser → destination',
+    ),
+    contextCloseResult: 'not-requested',
+    previousContextGenerationId: null,
+    voiceAutomation: createInitialAutomationDiagnostics(),
+    masterAutomation: createInitialAutomationDiagnostics(),
+    audioSession: getAudioSessionDiagnostics(),
     lifecycleLog: [],
     errorCode: null,
     errorMessage: null,

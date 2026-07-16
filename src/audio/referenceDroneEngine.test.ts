@@ -37,6 +37,19 @@ class MockGain extends MockNode {
   gain = new MockAudioParam();
 }
 
+class MockAnalyser extends MockNode {
+  fftSize = 1024;
+  smoothingTimeConstant = 0;
+  buffers: Float32Array[] = [];
+
+  getFloatTimeDomainData(buffer: Float32Array) {
+    this.buffers.push(buffer);
+    for (let index = 0; index < buffer.length; index += 1)
+      buffer[index] =
+        this.context.waveform[index % this.context.waveform.length] ?? 0;
+  }
+}
+
 class MockOscillator extends MockNode {
   type: OscillatorType = 'sine';
   frequency = new MockAudioParam();
@@ -60,6 +73,8 @@ class MockAudioContext {
   destination = new MockNode(this, 'destination');
   gains: MockGain[] = [];
   oscillators: MockOscillator[] = [];
+  analysers: MockAnalyser[] = [];
+  waveform = new Float32Array([0.1, -0.1]);
   events: string[] = [];
   failConnectionFrom: string | null = null;
   failStart = false;
@@ -115,6 +130,15 @@ class MockAudioContext {
     );
     this.oscillators.push(oscillator);
     return oscillator as unknown as OscillatorNode;
+  });
+
+  createAnalyser = vi.fn(() => {
+    const analyser = new MockAnalyser(
+      this,
+      `analyser-${this.analysers.length}`,
+    );
+    this.analysers.push(analyser);
+    return analyser as unknown as AnalyserNode;
   });
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
@@ -189,6 +213,129 @@ describe('reference drone engine', () => {
       1,
       10.05,
     );
+  });
+
+  it('inserts one analyser on the real persistent path and classifies active samples', async () => {
+    vi.useFakeTimers();
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+      diagnosticsEnabled: true,
+    });
+    await engine.play(A4);
+    expect(context.events).toEqual([
+      'gain-0->analyser-0',
+      'analyser-0->destination',
+      'oscillator-0->gain-1',
+      'gain-1->gain-0',
+      'oscillator:start',
+    ]);
+    await vi.advanceTimersByTimeAsync(375);
+    expect(engine.getSnapshot().diagnostics.persistentSignal).toMatchObject({
+      classification: 'digitally-active',
+      analyserGenerationId: 1,
+      contextGenerationId: 1,
+      voiceGenerationId: 1,
+      analyserConnectedToDestination: true,
+    });
+    expect(engine.getSnapshot().diagnostics.persistentSignal.rms).toBeCloseTo(
+      0.1,
+    );
+    expect(engine.getSnapshot().diagnostics.persistentSignal.peak).toBeCloseTo(
+      0.1,
+    );
+    expect(new Set(context.analysers[0]?.buffers).size).toBe(1);
+    await engine.dispose();
+    expect(context.analysers[0]?.disconnect).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('classifies persistent zero samples as digitally silent', async () => {
+    vi.useFakeTimers();
+    const context = new MockAudioContext();
+    context.waveform = new Float32Array([0, 0]);
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+      diagnosticsEnabled: true,
+    });
+    await engine.play(A4);
+    await vi.advanceTimersByTimeAsync(375);
+    expect(
+      engine.getSnapshot().diagnostics.persistentSignal.classification,
+    ).toBe('digitally-silent');
+  });
+
+  it('runs measured direct and constant-gain paths without the persistent master', async () => {
+    vi.useFakeTimers();
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+      diagnosticsEnabled: true,
+    });
+    const direct = engine.playDirectOutputTestFromUserGesture();
+    await expect(engine.play(A4)).resolves.toEqual({
+      ok: false,
+      errorCode: 'audio-start-failed',
+    });
+    expect(context.oscillators).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(direct).resolves.toEqual({ ok: true });
+    expect(engine.getSnapshot().diagnostics.directOutputTest).toMatchObject({
+      status: 'succeeded',
+      oscillatorStarted: true,
+      automation: { method: 'linearRampToValueAtTime' },
+      signal: { classification: 'digitally-active' },
+    });
+    expect(context.events).toContain('gain-1->analyser-1');
+    expect(context.events).toContain('analyser-1->destination');
+
+    const constant = engine.playConstantGainOutputTestFromUserGesture();
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(constant).resolves.toEqual({ ok: true });
+    expect(
+      engine.getSnapshot().diagnostics.constantGainOutputTest,
+    ).toMatchObject({
+      status: 'succeeded',
+      automation: {
+        method: 'setValueAtTime',
+        scheduledAfterRunning: true,
+      },
+      signal: { classification: 'digitally-active' },
+    });
+  });
+
+  it('recreates the context and starts a measured direct test under the same command', async () => {
+    vi.useFakeTimers();
+    const first = new MockAudioContext();
+    const second = new MockAudioContext();
+    const factory = vi
+      .fn()
+      .mockReturnValueOnce(asAudioContext(first))
+      .mockReturnValueOnce(asAudioContext(second));
+    const engine = createReferenceDroneEngine({
+      contextFactory: factory,
+      diagnosticsEnabled: true,
+    });
+    await engine.play(A4);
+    const stopping = engine.stop();
+    first.oscillators[0]?.finish();
+    await stopping;
+    const recreated = engine.recreateContextAndPlayOutputTestFromUserGesture();
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(recreated).resolves.toEqual({ ok: true });
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(
+      engine.getSnapshot().diagnostics.recreatedContextOutputTest,
+    ).toMatchObject({
+      status: 'succeeded',
+      signal: { contextGenerationId: 2, classification: 'digitally-active' },
+    });
+    expect(engine.getSnapshot().diagnostics).toMatchObject({
+      previousContextGenerationId: 1,
+      contextGenerationId: 2,
+      contextCloseResult: 'resolved',
+    });
   });
 
   it('stays starting until a deferred resume makes the context running', async () => {

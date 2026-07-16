@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialReferenceDroneDiagnostics } from '../audio/referenceDroneConfig';
 import type { ReferenceDroneSnapshot } from '../types/referenceDrone';
@@ -147,11 +153,17 @@ describe('reference drone controls and status', () => {
       value: { writeText },
     });
     const onPlayOutputTest = vi.fn();
+    const onPlayDirectOutputTest = vi.fn();
+    const onPlayConstantGainOutputTest = vi.fn();
+    const onRecreateContext = vi.fn();
     const { unmount } = render(
       <ReferenceDroneDiagnostics
         diagnostics={createInitialReferenceDroneDiagnostics('AudioContext', 1)}
         audioDiagnosticMode
         onPlayOutputTest={onPlayOutputTest}
+        onPlayDirectOutputTest={onPlayDirectOutputTest}
+        onPlayConstantGainOutputTest={onPlayConstantGainOutputTest}
+        onRecreateContext={onRecreateContext}
       />,
     );
     fireEvent.click(
@@ -159,12 +171,22 @@ describe('reference drone controls and status', () => {
     );
     expect(onPlayOutputTest).toHaveBeenCalledOnce();
     fireEvent.click(
+      screen.getByRole('button', { name: 'Play direct Web Audio test' }),
+    );
+    expect(onPlayDirectOutputTest).toHaveBeenCalledOnce();
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: 'Direct Web Audio audible' }),
+      ).getByRole('button', { name: 'No' }),
+    );
+    fireEvent.click(
       screen.getByRole('button', { name: 'Copy audio diagnostic report' }),
     );
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText.mock.calls[0]?.[0]).toContain(
       'No microphone audio or samples are included.',
     );
+    expect(writeText.mock.calls[0]?.[0]).toContain('Direct Web Audio: no');
     expect(screen.getByRole('status')).toHaveTextContent('report copied');
     unmount();
 

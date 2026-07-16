@@ -7,6 +7,7 @@ type AudioProbeWindow = Window & {
     oscillatorStarts: number;
     allowResume: boolean;
     copiedReport: string;
+    waveform: 'active' | 'silent';
     context: { interrupt: () => void } | null;
   };
 };
@@ -21,6 +22,7 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       oscillatorStarts: 0,
       allowResume: false,
       copiedReport: '',
+      waveform: 'active',
       context: null as MockAudioContext | null,
     };
     class MockAudioParam {
@@ -46,6 +48,15 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
     }
     class MockGain extends MockNode {
       gain = new MockAudioParam();
+    }
+    class MockAnalyser extends MockNode {
+      fftSize = 1024;
+      smoothingTimeConstant = 0;
+      getFloatTimeDomainData(buffer: Float32Array) {
+        for (let index = 0; index < buffer.length; index += 1)
+          buffer[index] =
+            probe.waveform === 'active' ? (index % 2 === 0 ? 0.1 : -0.1) : 0;
+      }
     }
     class MockOscillator extends MockNode {
       type = 'sine';
@@ -79,6 +90,9 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       }
       createOscillator() {
         return new MockOscillator();
+      }
+      createAnalyser() {
+        return new MockAnalyser();
       }
       async resume() {
         probe.resumes += 1;
@@ -117,6 +131,43 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
         },
       },
     });
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: () => 'blob:local-native-a4',
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: () => undefined,
+    });
+    class MockNativeAudio extends EventTarget {
+      currentTime = 0;
+      paused = true;
+      preload = '';
+      error = null;
+      constructor(readonly src: string) {
+        super();
+      }
+      async play() {
+        this.paused = false;
+        setTimeout(() => {
+          this.dispatchEvent(new Event('playing'));
+          this.currentTime = 0.5;
+          this.dispatchEvent(new Event('timeupdate'));
+          this.currentTime = 1;
+          this.paused = true;
+          this.dispatchEvent(new Event('ended'));
+        }, 20);
+      }
+      pause() {
+        this.paused = true;
+      }
+      removeAttribute() {}
+      load() {}
+    }
+    Object.defineProperty(window, 'Audio', {
+      configurable: true,
+      value: MockNativeAudio,
+    });
     Object.defineProperty(window, '__audioProbe', {
       configurable: true,
       value: probe,
@@ -126,8 +177,10 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   page.on('pageerror', (error) => pageErrors.push(error));
   await page.goto('/?audioDiagnostics=1');
 
-  const diagnostics = page.getByLabel('Reference-drone diagnostics values');
-  await expect(diagnostics).toContainText('ConstructorwebkitAudioContext');
+  const panel = page
+    .getByText('Reference audio diagnostics', { exact: true })
+    .locator('..');
+  await expect(panel).toContainText('ConstructorwebkitAudioContext');
   expect(
     await page.evaluate(
       () => (window as AudioProbeWindow).__audioProbe.contexts,
@@ -161,7 +214,10 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'Reference drone playing C4',
   );
-  await expect(diagnostics).toContainText('Rendering clockadvanced');
+  await expect(panel).toContainText('Rendering clockadvanced');
+  await expect(
+    page.getByLabel('Persistent drone path signal result'),
+  ).toContainText('Digital signal before destination: Active');
 
   await page.evaluate(() =>
     (window as AudioProbeWindow).__audioProbe.context?.interrupt(),
@@ -169,7 +225,7 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'interrupted',
   );
-  await expect(diagnostics).toContainText('Explicit reactivationrequired');
+  await expect(panel).toContainText('Explicit reactivationrequired');
   await c4.click();
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'Reference drone playing C4',
@@ -179,11 +235,71 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
     'stopped',
   );
 
-  await page.getByRole('button', { name: 'Play 1-second output test' }).click();
-  await expect(diagnostics).toContainText('Output testplaying');
-  await expect(diagnostics).toContainText('Output testsucceeded', {
+  const engineTestButton = page.getByRole('button', {
+    name: 'Play 1-second output test',
+  });
+  await engineTestButton.click();
+  await expect(
+    page.getByLabel('Engine output test signal result'),
+  ).toContainText('Digital signal before destination: Active');
+  await expect(engineTestButton).toBeEnabled({ timeout: 2500 });
+
+  await page.evaluate(() => {
+    (window as AudioProbeWindow).__audioProbe.waveform = 'silent';
+  });
+  const directButton = page.getByRole('button', {
+    name: 'Play direct Web Audio test',
+  });
+  await directButton.click();
+  await expect(page.getByLabel('Direct Web Audio signal result')).toContainText(
+    'Digital signal before destination: Silent',
+    { timeout: 2500 },
+  );
+  await expect(directButton).toBeEnabled({ timeout: 2500 });
+  await page.evaluate(() => {
+    (window as AudioProbeWindow).__audioProbe.waveform = 'active';
+  });
+  const constantButton = page.getByRole('button', {
+    name: 'Play Web Audio test with constant gain',
+  });
+  await constantButton.click();
+  await expect(page.getByLabel('Constant gain signal result')).toContainText(
+    'Digital signal before destination: Active',
+    { timeout: 2500 },
+  );
+  await expect(constantButton).toBeEnabled({ timeout: 2500 });
+
+  await page.getByRole('button', { name: 'Play native audio test' }).click();
+  const nativeSection = page
+    .getByText('Native media comparison', { exact: true })
+    .locator('..');
+  await expect(nativeSection).toContainText('Statussucceeded');
+
+  const generationBefore = await panel.textContent();
+  const recreateButton = page.getByRole('button', {
+    name: 'Recreate audio output context',
+  });
+  await recreateButton.click();
+  await expect(
+    page.getByLabel('Recreated context signal result'),
+  ).toContainText('Digital signal before destination: Active', {
     timeout: 2500,
   });
+  await expect(recreateButton).toBeEnabled({ timeout: 2500 });
+  expect(await panel.textContent()).not.toBe(generationBefore);
+
+  await page
+    .getByRole('group', { name: 'Persistent drone audible' })
+    .getByRole('button', { name: 'No', exact: true })
+    .click();
+  await page
+    .getByRole('group', { name: 'Direct Web Audio audible' })
+    .getByRole('button', { name: 'No', exact: true })
+    .click();
+  await page
+    .getByRole('group', { name: 'Native audio audible' })
+    .getByRole('button', { name: 'Yes', exact: true })
+    .click();
   await page
     .getByRole('button', { name: 'Copy audio diagnostic report' })
     .click();
@@ -195,6 +311,11 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       () => (window as AudioProbeWindow).__audioProbe.copiedReport,
     ),
   ).toContain('Constructor: webkitAudioContext');
+  expect(
+    await page.evaluate(
+      () => (window as AudioProbeWindow).__audioProbe.copiedReport,
+    ),
+  ).toContain('Persistent drone: no');
   await page.setViewportSize({ width: 320, height: 800 });
   expect(
     await page.evaluate(

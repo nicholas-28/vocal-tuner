@@ -35,6 +35,49 @@ export type ReferenceDroneLifecycleEvent = Readonly<{
 export type ReferenceDroneOutputTestStatus =
   'idle' | 'starting' | 'playing' | 'succeeded' | 'failed';
 
+export type ReferenceDroneSignalClassification =
+  'unknown' | 'digitally-silent' | 'digitally-active';
+
+export type ReferenceDroneSignalMeasurement = Readonly<{
+  classification: ReferenceDroneSignalClassification;
+  rms: number | null;
+  peak: number | null;
+  latestSampledTimestampMs: number | null;
+  samplesInspected: number;
+  consecutiveActiveMeasurements: number;
+  consecutiveSilentMeasurements: number;
+  lastDigitallyActiveTimestampMs: number | null;
+  analyserGenerationId: number | null;
+  contextGenerationId: number | null;
+  voiceGenerationId: number | null;
+  analyserConnectedToDestination: boolean;
+}>;
+
+export type ReferenceDroneAutomationDiagnostics = Readonly<{
+  currentValue: number | null;
+  scheduledTarget: number | null;
+  schedulingContextTime: number | null;
+  lastAutomationTimestampMs: number | null;
+  method: string;
+  fallbackMethod: string | null;
+  scheduledAfterRunning: boolean | null;
+}>;
+
+export type ReferenceDroneDiagnosticTestResult = Readonly<{
+  status: ReferenceDroneOutputTestStatus;
+  graphPath: string;
+  oscillatorStarted: boolean;
+  automation: ReferenceDroneAutomationDiagnostics;
+  signal: ReferenceDroneSignalMeasurement;
+  errorMessage: string | null;
+}>;
+
+export type ReferenceDroneAudioSessionDiagnostics = Readonly<{
+  available: boolean;
+  type: string | null;
+  state: string | null;
+}>;
+
 export type ReferenceDroneVoiceState =
   'none' | 'created' | 'started' | 'releasing' | 'ended';
 
@@ -79,6 +122,16 @@ export type ReferenceDroneDiagnostics = {
   pageLifecycleState: string;
   requiresExplicitReactivation: boolean;
   outputTestStatus: ReferenceDroneOutputTestStatus;
+  persistentSignal: ReferenceDroneSignalMeasurement;
+  engineOutputTest: ReferenceDroneDiagnosticTestResult;
+  directOutputTest: ReferenceDroneDiagnosticTestResult;
+  constantGainOutputTest: ReferenceDroneDiagnosticTestResult;
+  recreatedContextOutputTest: ReferenceDroneDiagnosticTestResult;
+  contextCloseResult: string;
+  previousContextGenerationId: number | null;
+  voiceAutomation: ReferenceDroneAutomationDiagnostics;
+  masterAutomation: ReferenceDroneAutomationDiagnostics;
+  audioSession: ReferenceDroneAudioSessionDiagnostics;
   lifecycleLog: readonly ReferenceDroneLifecycleEvent[];
   errorCode: ReferenceDroneErrorCode | null;
   errorMessage: string | null;
@@ -117,6 +170,9 @@ export type ReferenceDroneEngine = {
   ) => Promise<ReferenceDroneCommandResult>;
   play: (note: ReferenceDroneNote) => Promise<ReferenceDroneCommandResult>;
   playOutputTestFromUserGesture: () => Promise<ReferenceDroneCommandResult>;
+  playDirectOutputTestFromUserGesture: () => Promise<ReferenceDroneCommandResult>;
+  playConstantGainOutputTestFromUserGesture: () => Promise<ReferenceDroneCommandResult>;
+  recreateContextAndPlayOutputTestFromUserGesture: () => Promise<ReferenceDroneCommandResult>;
   stop: () => Promise<void>;
   setVolume: (normalizedVolume: number) => void;
   getSnapshot: () => ReferenceDroneSnapshot;
@@ -128,4 +184,5 @@ export type ReferenceDroneEngine = {
 
 export type ReferenceDroneEngineFactory = (
   initialVolume: number,
+  diagnosticsEnabled?: boolean,
 ) => ReferenceDroneEngine;
