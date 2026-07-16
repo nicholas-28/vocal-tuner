@@ -223,3 +223,13 @@ Physical Safari 18.4 testing on iOS 18.4.1 showed that ADR-023's activation and 
 The temporary `audioDiagnostics=1` surface therefore inserts a time-domain analyser on the actual persistent path immediately before destination. It classifies RMS/peak only after three consecutive 1,024-sample buffers at 8 Hz cross a `0.0001` threshold, using one interval and reusable memory. It also provides isolated ramped and constant-gain Web Audio paths, generated native HTML media, and explicit fresh-context comparison. Manual audibility annotations remain local and all paths avoid microphone data.
 
 These experiments are diagnostics rather than an automatic recovery policy. Active pre-destination samples do not prove speaker output; native media and physical observations determine the interpretation branch. Experimental `navigator.audioSession` information is capability-detected and read-only. No production envelope, output routing, or automatic context-recreation behavior changes until physical A/B evidence identifies the smallest safe repair.
+
+## ADR-025 — Preserve Web Audio ownership while measuring session transitions and improving harmonic audibility
+
+Status: accepted pending physical iPhone confirmation
+
+Physical iOS 18.4.1 testing showed that microphone capture can make an already digitally active reference drone physically audible. The microphone and drone use separate contexts, capture creates its context only after permission, and its source/analyser graph has no destination connection. The strongest supported explanation is therefore an implicit iOS audio-session/category or route transition caused by `getUserMedia`, rather than a dependency in the application graph.
+
+The temporary audio diagnostic mode now records a bounded cross-context timeline and permits explicit, capability-detected `playback` and `play-and-record` assignments with prior-value restoration. These assignments are not used in normal mode: the Audio Session API remains a Working Draft, and WebKit has documented microphone-capture failures when `playback` is left active. Web Audio remains the only production backend; neither microphone permission nor native-media fallback is selected without a successful physical A/B result.
+
+Mobile audibility is improved independently with one deterministic `PeriodicWave`. The selected note stays harmonic 1, all upper partials are integer multiples, and low/middle/high profiles reduce harmonic support as MIDI rises. Coefficients are normalized by their absolute sum with Web Audio normalization disabled. The existing 0.16 maximum master gain and volume semantics remain unchanged, so the conservative predicted peak cannot exceed 0.16. Unsupported periodic-wave construction falls back to the exact sine fundamental.

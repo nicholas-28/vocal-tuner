@@ -9,6 +9,7 @@ import { createReferenceKey } from '../reference/referenceKeyboard';
 import type {
   ReferenceDroneEngine,
   ReferenceDroneEngineFactory,
+  ReferenceDroneDiagnosticObserver,
   ReferenceDroneSnapshot,
 } from '../types/referenceDrone';
 
@@ -27,11 +28,18 @@ export function createInitialReferenceDroneSnapshot(): ReferenceDroneSnapshot {
 const defaultEngineFactory: ReferenceDroneEngineFactory = (
   initialVolume,
   diagnosticsEnabled,
-) => createReferenceDroneEngine({ initialVolume, diagnosticsEnabled });
+  diagnosticObserver,
+) =>
+  createReferenceDroneEngine({
+    initialVolume,
+    diagnosticsEnabled,
+    diagnosticObserver,
+  });
 
 export function useReferenceDrone(
   engineFactory: ReferenceDroneEngineFactory = defaultEngineFactory,
   diagnosticsEnabled = false,
+  diagnosticObserver?: ReferenceDroneDiagnosticObserver,
 ) {
   const [snapshot, setSnapshot] = useState<ReferenceDroneSnapshot>(
     createInitialReferenceDroneSnapshot,
@@ -53,13 +61,14 @@ export function useReferenceDrone(
     const engine = factoryRef.current(
       snapshotRef.current.volume,
       diagnosticsEnabled,
+      diagnosticObserver,
     );
     engineRef.current = engine;
     unsubscribeRef.current = engine.subscribe((next) => {
       if (engineRef.current === engine) updateSnapshot(next);
     });
     return engine;
-  }, [diagnosticsEnabled, updateSnapshot]);
+  }, [diagnosticObserver, diagnosticsEnabled, updateSnapshot]);
 
   const activateMidiFromUserGesture = useCallback(
     async (midiNote: number) => {

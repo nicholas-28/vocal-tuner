@@ -50,6 +50,10 @@ class TestOscillatorNode extends TestAudioNode {
   stop() {
     queueMicrotask(() => this.onended?.());
   }
+
+  setPeriodicWave() {
+    this.type = 'custom';
+  }
 }
 
 export class TestReferenceDroneAudioContext extends EventTarget {
@@ -79,6 +83,10 @@ export class TestReferenceDroneAudioContext extends EventTarget {
     );
     this.oscillators.push(oscillator);
     return oscillator;
+  }
+
+  createPeriodicWave() {
+    return {} as PeriodicWave;
   }
 
   async resume() {

@@ -235,5 +235,10 @@ Implemented on branch `issue-018-1-ios-safari-reference-drone`; physical iPhone 
 - Diagnostic-only pre-destination analyser with 8 Hz constant-memory RMS/peak classification
 - Isolated ramped and constant-gain Web Audio tests, generated native-WAV media comparison, and explicit context recreation
 - Compact mobile comparison UI with local audibility annotations and expanded plain-text report
+- Physical iOS evidence now isolates a microphone-triggered audio-session/output-route wake-up while the contexts remain separate
+- Bounded pre/post `getUserMedia`, microphone-context, Stop, drone-retry, focus, session, track, and signal snapshots
+- Diagnostic-only `playback` / `play-and-record` preparation with prior-type restoration and fresh-context comparison
+- Default pitch-preserving, normalized range-aware harmonic timbre with exact sine fallback and unchanged 0.16 gain ceiling
+- Production backend remains Web Audio; no microphone requirement or unproven native-media fallback
 - Mobile WebKit deterministic coverage without claiming physical audibility
 - No Firebase, backend, recording, analytics, tracking, or new dependency

@@ -108,6 +108,16 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: 'Start microphone' }),
     ).toBeEnabled();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Reference note A4, 440.0 hertz',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'Reference drone playing A4',
+      ),
+    );
   });
 
   it('disables the control and changes its label while requesting', async () => {

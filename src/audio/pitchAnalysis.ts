@@ -9,6 +9,12 @@ export const pitchAnalysisConfig = {
 
 export type PitchAnalysisHandle = {
   stop: () => Promise<void>;
+  diagnostics: Readonly<{
+    contextState: string;
+    sampleRate: number | null;
+    destinationChannelCount: number | null;
+    destinationConnected: false;
+  }>;
 };
 
 type AudioContextConstructor = new () => AudioContext;
@@ -90,7 +96,19 @@ export function startPitchAnalysis(
   };
 
   animationFrame = requestAnimationFrame(analyze);
-  return { stop };
+  return {
+    stop,
+    diagnostics: Object.freeze({
+      contextState: String(context.state),
+      sampleRate: Number.isFinite(context.sampleRate)
+        ? context.sampleRate
+        : null,
+      destinationChannelCount: Number.isFinite(context.destination.channelCount)
+        ? context.destination.channelCount
+        : null,
+      destinationConnected: false,
+    }),
+  };
 }
 
 function getAudioContextConstructor(): AudioContextConstructor {

@@ -10,6 +10,7 @@ import {
 } from '../audio/pitchAnalysis';
 import type { MicrophoneState } from '../types/microphone';
 import type { RawPitchDetection } from '../types/pitch';
+import type { MicrophoneAudioDiagnosticEvent } from '../types/audioDiagnostics';
 
 export type MicrophoneServices = {
   isSupported: () => boolean;
@@ -26,6 +27,7 @@ type MicrophoneAnalysisCallbacks = {
   onDetection?: (detection: RawPitchDetection) => void;
   onAnalysisError?: () => void;
   onAnalysisReset?: () => void;
+  onAudioDiagnosticEvent?: (event: MicrophoneAudioDiagnosticEvent) => void;
 };
 
 const defaultServices: MicrophoneServices = {
@@ -74,6 +76,16 @@ export function useMicrophone(
     if (state !== 'active') return;
     setState('stopping');
     await cleanup();
+    callbacksRef.current.onAudioDiagnosticEvent?.({
+      label: 'after microphone Stop',
+      microphoneState: 'idle',
+      contextState: 'closed',
+      sampleRate: null,
+      destinationChannelCount: null,
+      destinationConnected: false,
+      activeTrackCount: 0,
+      trackReadyState: 'none',
+    });
     if (mountedRef.current) setState('idle');
   }, [cleanup, state]);
 
@@ -92,6 +104,16 @@ export function useMicrophone(
 
     const operation = operationRef.current;
     setState('requesting');
+    callbacksRef.current.onAudioDiagnosticEvent?.({
+      label: 'before getUserMedia',
+      microphoneState: 'requesting',
+      contextState: 'unavailable',
+      sampleRate: null,
+      destinationChannelCount: null,
+      destinationConnected: false,
+      activeTrackCount: 0,
+      trackReadyState: 'none',
+    });
 
     try {
       const stream = await services.requestStream();
@@ -101,6 +123,20 @@ export function useMicrophone(
       }
 
       streamRef.current = stream;
+      const tracks = stream.getTracks();
+      callbacksRef.current.onAudioDiagnosticEvent?.({
+        label: 'after getUserMedia resolved',
+        microphoneState: 'requesting',
+        contextState: 'unavailable',
+        sampleRate: null,
+        destinationChannelCount: null,
+        destinationConnected: false,
+        activeTrackCount: tracks.filter((track) => track.readyState !== 'ended')
+          .length,
+        trackReadyState:
+          tracks.map((track) => track.readyState || 'unknown').join(', ') ||
+          'none',
+      });
       const handleEnded = () => {
         void cleanup().then(() => {
           if (mountedRef.current) setState('no-device');
@@ -122,8 +158,33 @@ export function useMicrophone(
         },
         () => callbacksRef.current.onAnalysisError?.(),
       );
+      callbacksRef.current.onAudioDiagnosticEvent?.({
+        label: 'after microphone AudioContext starts',
+        microphoneState: 'active',
+        contextState: monitorRef.current.diagnostics.contextState,
+        sampleRate: monitorRef.current.diagnostics.sampleRate,
+        destinationChannelCount:
+          monitorRef.current.diagnostics.destinationChannelCount,
+        destinationConnected:
+          monitorRef.current.diagnostics.destinationConnected,
+        activeTrackCount: tracks.filter((track) => track.readyState !== 'ended')
+          .length,
+        trackReadyState:
+          tracks.map((track) => track.readyState || 'unknown').join(', ') ||
+          'none',
+      });
       setState('active');
     } catch (error) {
+      callbacksRef.current.onAudioDiagnosticEvent?.({
+        label: 'getUserMedia or microphone start failed',
+        microphoneState: 'error',
+        contextState: 'unavailable',
+        sampleRate: null,
+        destinationChannelCount: null,
+        destinationConnected: false,
+        activeTrackCount: 0,
+        trackReadyState: 'none',
+      });
       await cleanup();
       if (import.meta.env.DEV) console.error('Microphone start failed', error);
       if (mountedRef.current) setState(mapMicrophoneError(error));

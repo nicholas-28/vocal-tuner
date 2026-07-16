@@ -33,6 +33,12 @@ In audio diagnostic mode the real path includes one analyser immediately before 
 
 The engine output test shares the persistent master path. The direct ramped and direct constant-gain A4 tests use temporary analyser paths to destination, isolating the retained master and automation. Native media uses a generated local WAV and `HTMLAudioElement`, isolating Web Audio. Context recreation disposes the retained chain and runs a direct test on a new generation. See `IOS_SAFARI_AUDIO_DEBUGGING.md` for the comparison matrix.
 
+Physical iOS 18.4.1 testing added a stronger branch: starting microphone capture makes the existing drone audible, though quiet on the built-in speaker. The microphone uses a separate post-permission analysis context and connects only `MediaStreamAudioSourceNode → AnalyserNode`, never destination. Use the **Microphone dependency A/B** sequence and copied snapshot timeline to compare `audioSession`, both contexts, tracks, visibility, and pre-destination signal before capture, after capture, and after Stop.
+
+The diagnostic-only session controls try `playback` and `play-and-record` through capability detection and can restore the prior value. Restore before testing microphone capture. Normal reference playback neither writes `navigator.audioSession` nor calls `getUserMedia`.
+
+Current reference diagnostics also report backend `web-audio`, the selected harmonic profile, every exact partial frequency/amplitude, predicted worst-case peak, and observed analyser peak. Low notes below C3 use the strongest upper-harmonic support; the gain ceiling remains unchanged.
+
 For iPhone remote inspection, report copying, output-test interpretation, and the complete physical acceptance sequence, see `IOS_SAFARI_AUDIO_DEBUGGING.md`.
 
 ## Safe lifecycle expectations

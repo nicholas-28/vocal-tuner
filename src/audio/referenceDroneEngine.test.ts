@@ -59,6 +59,9 @@ class MockOscillator extends MockNode {
     if (this.context.failStart) throw new Error('oscillator blocked');
   });
   stop = vi.fn();
+  setPeriodicWave = vi.fn(() => {
+    this.type = 'custom';
+  });
 
   finish() {
     this.onended?.();
@@ -141,6 +144,8 @@ class MockAudioContext {
     return analyser as unknown as AnalyserNode;
   });
 
+  createPeriodicWave = vi.fn(() => ({}) as PeriodicWave);
+
   addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
     if (type === 'statechange' && typeof listener === 'function') {
       this.stateListeners.add(listener);
@@ -206,8 +211,13 @@ describe('reference drone engine', () => {
         masterGain: 0.04,
         effectiveGain: 0.04,
         voiceGainTarget: 1,
+        backend: 'web-audio',
+        timbreProfile: 'light-harmonic-support',
       },
     });
+    expect(engine.getSnapshot().diagnostics.predictedPeak).toBeCloseTo(0.04);
+    expect(context.oscillators[0]?.setPeriodicWave).toHaveBeenCalledOnce();
+    expect(engine.getSnapshot().diagnostics.partials).toHaveLength(3);
     expect(context.gains[1]?.gain.setValueAtTime).toHaveBeenCalledWith(0, 10);
     expect(context.gains[1]?.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
       1,
@@ -538,6 +548,49 @@ describe('reference drone engine', () => {
       activeMidi: 67,
       diagnostics: { frequencyHz: G4.frequencyHz },
     });
+  });
+
+  it('updates every reported partial on a low-note transition and preserves headroom', async () => {
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    await engine.play({ midiNote: 47, frequencyHz: 123.47082531403103 });
+    expect(context.oscillators).toHaveLength(1);
+    expect(context.oscillators[0]?.setPeriodicWave).toHaveBeenCalledTimes(2);
+    expect(engine.getSnapshot().diagnostics).toMatchObject({
+      timbreProfile: 'low-harmonic-support',
+      predictedPeak: 0.04,
+    });
+    expect(
+      engine
+        .getSnapshot()
+        .diagnostics.partials.map((partial) => partial.frequencyHz),
+    ).toEqual([
+      123.47082531403103, 246.94165062806206, 370.4124759420931,
+      493.8833012561241,
+    ]);
+    engine.setVolume(1);
+    expect(engine.getSnapshot().diagnostics.predictedPeak).toBeCloseTo(0.16);
+  });
+
+  it('falls back to an exact sine when PeriodicWave construction fails', async () => {
+    const context = new MockAudioContext();
+    context.createPeriodicWave.mockImplementation(() => {
+      throw new Error('unsupported');
+    });
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    await engine.play(A4);
+    expect(context.oscillators[0]?.type).toBe('sine');
+    expect(engine.getSnapshot().diagnostics).toMatchObject({
+      timbreProfile: 'pure-sine-fallback',
+      predictedPeak: 0.04,
+    });
+    expect(engine.getSnapshot().diagnostics.partials).toHaveLength(1);
+    expect(engine.getSnapshot().diagnostics.partials[0]?.frequencyHz).toBe(440);
   });
 
   it('maps 0%, default, and 100% volume to the active master only', async () => {

@@ -80,7 +80,7 @@ describe('useReferenceDrone', () => {
     expect(result.current.snapshot.volume).toBe(0.4);
 
     await act(() => result.current.toggleMidi(60));
-    expect(factory).toHaveBeenCalledWith(0.4, false);
+    expect(factory).toHaveBeenCalledWith(0.4, false, undefined);
     expect(engine.activateFromUserGesture).toHaveBeenCalledWith({
       midiNote: 60,
       frequencyHz: 261.6255653005986,

@@ -68,6 +68,10 @@ export function ReferenceDroneControls({
         Headphones are recommended so the microphone does not detect the
         reference drone.
       </p>
+      <p className="reference-drone-headphones">
+        Low notes use gentle upper harmonics so they remain audible on small
+        speakers.
+      </p>
     </div>
   );
 }

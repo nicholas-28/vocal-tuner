@@ -78,6 +78,21 @@ export type ReferenceDroneAudioSessionDiagnostics = Readonly<{
   state: string | null;
 }>;
 
+export type ReferenceDroneBackend = 'web-audio';
+
+export type ReferenceDroneTimbreProfileId =
+  | 'pure-sine-fallback'
+  | 'low-harmonic-support'
+  | 'middle-harmonic-support'
+  | 'light-harmonic-support';
+
+export type ReferenceDronePartialDiagnostics = Readonly<{
+  harmonic: number;
+  frequencyHz: number;
+  relativeAmplitude: number;
+  normalizedAmplitude: number;
+}>;
+
 export type ReferenceDroneVoiceState =
   'none' | 'created' | 'started' | 'releasing' | 'ended';
 
@@ -132,6 +147,10 @@ export type ReferenceDroneDiagnostics = {
   voiceAutomation: ReferenceDroneAutomationDiagnostics;
   masterAutomation: ReferenceDroneAutomationDiagnostics;
   audioSession: ReferenceDroneAudioSessionDiagnostics;
+  backend: ReferenceDroneBackend;
+  timbreProfile: ReferenceDroneTimbreProfileId;
+  partials: readonly ReferenceDronePartialDiagnostics[];
+  predictedPeak: number | null;
   lifecycleLog: readonly ReferenceDroneLifecycleEvent[];
   errorCode: ReferenceDroneErrorCode | null;
   errorMessage: string | null;
@@ -182,7 +201,13 @@ export type ReferenceDroneEngine = {
   dispose: () => Promise<void>;
 };
 
+export type ReferenceDroneDiagnosticObserver = (
+  label: string,
+  diagnostics: ReferenceDroneDiagnostics,
+) => void;
+
 export type ReferenceDroneEngineFactory = (
   initialVolume: number,
   diagnosticsEnabled?: boolean,
+  diagnosticObserver?: ReferenceDroneDiagnosticObserver,
 ) => ReferenceDroneEngine;

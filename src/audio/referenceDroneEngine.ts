@@ -14,11 +14,16 @@ import {
   REFERENCE_DRONE_ANALYSER_FFT_SIZE,
   REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
 } from './referenceDroneSignal';
+import {
+  createReferenceDroneTimbre,
+  type ReferenceDroneTimbre,
+} from './referenceDroneTimbre';
 import type {
   ReferenceDroneAudioContextConstructorName,
   ReferenceDroneCommandResult,
   ReferenceDroneConfig,
   ReferenceDroneContextState,
+  ReferenceDroneDiagnosticObserver,
   ReferenceDroneEngine,
   ReferenceDroneErrorCode,
   ReferenceDroneNote,
@@ -32,6 +37,7 @@ type ReferenceDroneEngineOptions = {
   config?: ReferenceDroneConfig;
   initialVolume?: number;
   diagnosticsEnabled?: boolean;
+  diagnosticObserver?: ReferenceDroneDiagnosticObserver;
 };
 
 type DroneVoice = {
@@ -42,6 +48,8 @@ type DroneVoice = {
   oscillatorConnected: boolean;
   gainConnected: boolean;
   started: boolean;
+  timbre: ReferenceDroneTimbre;
+  customTimbreApplied: boolean;
 };
 
 type OutputGraph = {
@@ -214,6 +222,7 @@ export function createReferenceDroneEngine(
     : DEFAULT_REFERENCE_DRONE_CONFIG;
   const constructorSelection = selectAudioContextConstructor();
   const diagnosticsEnabled = options.diagnosticsEnabled === true;
+  const diagnosticObserver = options.diagnosticObserver;
   const contextFactory = options.contextFactory ?? createDefaultContext;
   const constructorName =
     options.contextConstructorName ??
@@ -280,6 +289,11 @@ export function createReferenceDroneEngine(
       ...snapshot,
       diagnostics: { ...snapshot.diagnostics, ...values },
     });
+  };
+
+  const notifyDiagnosticObserver = (label: string) => {
+    if (!diagnosticsEnabled || !diagnosticObserver) return;
+    diagnosticObserver(label, { ...snapshot.diagnostics });
   };
 
   const addLifecycleEvent = (name: string, detail: string | null = null) => {
@@ -560,6 +574,7 @@ export function createReferenceDroneEngine(
       let createdMaster: GainNode | null = null;
       let createdAnalyser: AnalyserNode | null = null;
       try {
+        notifyDiagnosticObserver('before drone context creation');
         addLifecycleEvent('context constructor requested', constructorName);
         createdContext = contextFactory();
         context = createdContext;
@@ -651,6 +666,7 @@ export function createReferenceDroneEngine(
             ? 'master->output-analyser->destination'
             : 'master->destination',
         );
+        notifyDiagnosticObserver('after drone context creation');
       } catch (error) {
         safeDisconnect(createdMaster);
         safeDisconnect(createdAnalyser);
@@ -721,6 +737,7 @@ export function createReferenceDroneEngine(
           resumeResult: 'resolved',
           contextStateAfterResume: state,
         });
+        notifyDiagnosticObserver('after drone resume');
       } catch (error) {
         addLifecycleEvent(
           'resume rejected',
@@ -836,7 +853,22 @@ export function createReferenceDroneEngine(
       setParamValue(graph.masterGain.gain, mappedGain, currentTime);
       oscillator = graph.context.createOscillator();
       voiceGain = graph.context.createGain();
-      oscillator.type = config.oscillatorType;
+      const timbre = createReferenceDroneTimbre(
+        note.midiNote,
+        note.frequencyHz,
+      );
+      let customTimbreApplied = false;
+      try {
+        const periodicWave = graph.context.createPeriodicWave(
+          timbre.periodicWaveReal,
+          timbre.periodicWaveImag,
+          { disableNormalization: true },
+        );
+        oscillator.setPeriodicWave(periodicWave);
+        customTimbreApplied = true;
+      } catch {
+        oscillator.type = config.oscillatorType;
+      }
       setParamValue(voiceGain.gain, 0, currentTime);
       setParamValue(oscillator.frequency, note.frequencyHz, currentTime);
       const nextVoice: DroneVoice = {
@@ -847,6 +879,8 @@ export function createReferenceDroneEngine(
         oscillatorConnected: false,
         gainConnected: false,
         started: false,
+        timbre,
+        customTimbreApplied,
       };
       updateDiagnostics({
         voiceState: 'created',
@@ -870,6 +904,14 @@ export function createReferenceDroneEngine(
         masterGain: mappedGain,
         masterGainCurrent: graph.masterGain.gain.value,
         effectiveGain: 0,
+        oscillatorType: customTimbreApplied ? 'custom' : config.oscillatorType,
+        timbreProfile: customTimbreApplied
+          ? timbre.profileId
+          : 'pure-sine-fallback',
+        partials: customTimbreApplied
+          ? timbre.partials
+          : Object.freeze([timbre.partials[0]!]),
+        predictedPeak: 0,
       });
       oscillator.connect(voiceGain);
       nextVoice.oscillatorConnected = true;
@@ -1203,6 +1245,10 @@ export function createReferenceDroneEngine(
     }
     const commandOperation = ++operation;
     const activeVoice = voice;
+    const retrying =
+      snapshot.status === 'error' ||
+      snapshot.diagnostics.requiresExplicitReactivation;
+    if (retrying) notifyDiagnosticObserver('before drone retry');
     const changing = activeVoice !== null;
     const command = changing
       ? `change:${note.midiNote}`
@@ -1267,6 +1313,25 @@ export function createReferenceDroneEngine(
           activeVoice.note.frequencyHz !== note.frequencyHz
         ) {
           const currentTime = requireFiniteTime(readyGraph.context);
+          const nextTimbre = createReferenceDroneTimbre(
+            note.midiNote,
+            note.frequencyHz,
+          );
+          if (activeVoice.customTimbreApplied) {
+            try {
+              activeVoice.oscillator.setPeriodicWave(
+                readyGraph.context.createPeriodicWave(
+                  nextTimbre.periodicWaveReal,
+                  nextTimbre.periodicWaveImag,
+                  { disableNormalization: true },
+                ),
+              );
+            } catch {
+              activeVoice.oscillator.type = config.oscillatorType;
+              activeVoice.customTimbreApplied = false;
+            }
+          }
+          activeVoice.timbre = nextTimbre;
           holdAutomation(activeVoice.oscillator.frequency, currentTime);
           linearRamp(
             activeVoice.oscillator.frequency,
@@ -1274,6 +1339,17 @@ export function createReferenceDroneEngine(
             currentTime + config.transitionSeconds,
           );
           activeVoice.note = { ...note };
+          updateDiagnostics({
+            oscillatorType: activeVoice.customTimbreApplied
+              ? 'custom'
+              : config.oscillatorType,
+            timbreProfile: activeVoice.customTimbreApplied
+              ? nextTimbre.profileId
+              : 'pure-sine-fallback',
+            partials: activeVoice.customTimbreApplied
+              ? nextTimbre.partials
+              : Object.freeze([nextTimbre.partials[0]!]),
+          });
           debugLog('note transition scheduled', {
             frequencyHz: note.frequencyHz,
           });
@@ -1315,6 +1391,14 @@ export function createReferenceDroneEngine(
             snapshot.volume,
             config.maximumMasterGain,
           ),
+          predictedPeak:
+            mapReferenceDroneVolumeToGain(
+              snapshot.volume,
+              config.maximumMasterGain,
+            ) *
+            (voice.customTimbreApplied
+              ? voice.timbre.normalizedAmplitudeSum
+              : 1),
           errorCode: null,
           errorMessage: null,
           requiresExplicitReactivation: false,
@@ -1327,6 +1411,9 @@ export function createReferenceDroneEngine(
         frequencyHz: note.frequencyHz,
         masterGain: snapshot.diagnostics.masterGain,
       });
+      notifyDiagnosticObserver(
+        retrying ? 'after drone retry' : 'after drone activation',
+      );
       return { ok: true };
     } catch (error) {
       return publishError(toEngineError(error), command);
@@ -1553,6 +1640,12 @@ export function createReferenceDroneEngine(
         masterGain: context ? mappedGain : null,
         masterGainCurrent: masterGain?.gain.value ?? null,
         effectiveGain: voice?.started ? mappedGain : null,
+        predictedPeak: voice?.started
+          ? mappedGain *
+            (voice.customTimbreApplied
+              ? voice.timbre.normalizedAmplitudeSum
+              : 1)
+          : null,
         lastCommand: `volume:${Math.round(volume * 100)}`,
       },
     });

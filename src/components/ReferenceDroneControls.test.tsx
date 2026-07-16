@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialReferenceDroneDiagnostics } from '../audio/referenceDroneConfig';
+import { createAudioSessionDiagnosticTimeline } from '../audio/audioSessionDiagnostics';
 import type { ReferenceDroneSnapshot } from '../types/referenceDrone';
 import { ReferenceDroneControls } from './ReferenceDroneControls';
 import { ReferenceDroneDiagnostics } from './ReferenceDroneDiagnostics';
@@ -44,6 +45,9 @@ describe('reference drone controls and status', () => {
       screen.getByRole('slider', { name: 'Reference drone volume' }),
     ).toHaveValue('25');
     expect(screen.getByText(/Headphones are recommended/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Low notes use gentle upper harmonics/),
+    ).toBeInTheDocument();
 
     rerender(
       <ReferenceDroneControls
@@ -156,6 +160,11 @@ describe('reference drone controls and status', () => {
     const onPlayDirectOutputTest = vi.fn();
     const onPlayConstantGainOutputTest = vi.fn();
     const onRecreateContext = vi.fn();
+    Object.defineProperty(navigator, 'audioSession', {
+      configurable: true,
+      value: { type: 'auto', state: 'inactive' },
+    });
+    const audioSessionTimeline = createAudioSessionDiagnosticTimeline();
     const { unmount } = render(
       <ReferenceDroneDiagnostics
         diagnostics={createInitialReferenceDroneDiagnostics('AudioContext', 1)}
@@ -164,6 +173,7 @@ describe('reference drone controls and status', () => {
         onPlayDirectOutputTest={onPlayDirectOutputTest}
         onPlayConstantGainOutputTest={onPlayConstantGainOutputTest}
         onRecreateContext={onRecreateContext}
+        audioSessionTimeline={audioSessionTimeline}
       />,
     );
     fireEvent.click(
@@ -174,6 +184,16 @@ describe('reference drone controls and status', () => {
       screen.getByRole('button', { name: 'Play direct Web Audio test' }),
     );
     expect(onPlayDirectOutputTest).toHaveBeenCalledOnce();
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: 'Drone before microphone' }),
+      ).getByRole('button', { name: 'Silent' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Prepare playback audio session',
+      }),
+    );
     fireEvent.click(
       within(
         screen.getByRole('group', { name: 'Direct Web Audio audible' }),
@@ -187,7 +207,13 @@ describe('reference drone controls and status', () => {
       'No microphone audio or samples are included.',
     );
     expect(writeText.mock.calls[0]?.[0]).toContain('Direct Web Audio: no');
-    expect(screen.getByRole('status')).toHaveTextContent('report copied');
+    expect(writeText.mock.calls[0]?.[0]).toContain(
+      'Drone before microphone: silent',
+    );
+    expect(writeText.mock.calls[0]?.[0]).toContain('Requested type: playback');
+    expect(
+      screen.getByText('Audio diagnostic report copied.'),
+    ).toBeInTheDocument();
     unmount();
 
     Object.defineProperty(navigator, 'clipboard', {

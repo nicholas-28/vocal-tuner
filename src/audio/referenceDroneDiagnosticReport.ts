@@ -35,6 +35,20 @@ export function formatAudioDiagnosticReport(
     ['Active MIDI', diagnostics.midiNote],
     ['Frequency Hz', diagnostics.frequencyHz],
     ['Oscillator type', diagnostics.oscillatorType],
+    ['Selected backend', diagnostics.backend],
+    ['Timbre profile', diagnostics.timbreProfile],
+    ['Predicted peak', diagnostics.predictedPeak],
+    [
+      'Partials',
+      diagnostics.partials.length
+        ? diagnostics.partials
+            .map(
+              (partial) =>
+                `${partial.harmonic}x=${partial.frequencyHz.toFixed(6)}Hz@${partial.normalizedAmplitude.toFixed(6)}`,
+            )
+            .join(', ')
+        : 'not available',
+    ],
     ['Oscillator created', diagnostics.oscillatorCreated],
     ['Oscillator started', diagnostics.oscillatorStarted],
     ['Oscillator ended', diagnostics.oscillatorEnded],
@@ -127,6 +141,32 @@ export function formatAudioDiagnosticReport(
           `Error code: ${value(context.nativeAudio.errorCode)}`,
           `Error message: ${value(context.nativeAudio.errorMessage)}`,
           `Events: ${context.nativeAudio.events.join(', ') || 'none'}`,
+          ...(context.audioSessionTimeline
+            ? [
+                '',
+                'Microphone dependency annotations:',
+                `Drone before microphone: ${context.audioSessionTimeline.phaseAudibility.beforeMicrophone}`,
+                `Drone after microphone start: ${context.audioSessionTimeline.phaseAudibility.afterMicrophoneStart}`,
+                `Drone after microphone stop: ${context.audioSessionTimeline.phaseAudibility.afterMicrophoneStop}`,
+                '',
+                'Audio-session preparation:',
+                `Candidates: ${context.audioSessionTimeline.preparation.candidateTypes.join(', ') || 'none'}`,
+                `Requested type: ${value(context.audioSessionTimeline.preparation.requestedType)}`,
+                `Prior type: ${value(context.audioSessionTimeline.preparation.priorType)}`,
+                `Resulting type: ${value(context.audioSessionTimeline.preparation.resultingType)}`,
+                `Resulting state: ${value(context.audioSessionTimeline.preparation.resultingState)}`,
+                `Result: ${context.audioSessionTimeline.preparation.result}`,
+                `Error: ${value(context.audioSessionTimeline.preparation.errorMessage)}`,
+                '',
+                'Audio-session snapshots:',
+                ...(context.audioSessionTimeline.snapshots.length
+                  ? context.audioSessionTimeline.snapshots.map(
+                      (entry) =>
+                        `${entry.sequence}. +${entry.relativeTimeMs.toFixed(1)} ms — ${entry.label} — session=${value(entry.audioSessionType)}/${value(entry.audioSessionState)}; drone=${entry.droneContextState}#${value(entry.droneContextGeneration)}@${value(entry.droneSampleRate)}Hz; microphone=${entry.microphoneContextState}@${value(entry.microphoneSampleRate)}Hz; tracks=${entry.activeMicrophoneTrackCount}:${entry.microphoneTrackReadyState}; channels=${value(entry.destinationChannelCount)}; visibility=${entry.visibilityState}; focus=${value(entry.pageHasFocus)}; RMS=${value(entry.outputRms)}; peak=${value(entry.outputPeak)}; audible=${entry.dronePhysicalAnnotation}`,
+                    )
+                  : ['(empty)']),
+              ]
+            : []),
         ]
       : []),
     '',
