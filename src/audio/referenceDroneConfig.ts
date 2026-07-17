@@ -55,6 +55,10 @@ function getAudioSessionDiagnostics() {
     available: Boolean(audioSession),
     type: typeof audioSession?.type === 'string' ? audioSession.type : null,
     state: typeof audioSession?.state === 'string' ? audioSession.state : null,
+    preparationResult: 'not-requested' as const,
+    priorType: null,
+    restoredType: null,
+    errorMessage: null,
   });
 }
 

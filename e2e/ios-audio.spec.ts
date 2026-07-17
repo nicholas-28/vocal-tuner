@@ -345,36 +345,17 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   await expect(panel).toContainText('1× 65.41 Hz');
   await c2.click();
 
-  await page
-    .getByRole('group', { name: 'Drone before microphone' })
-    .getByRole('button', { name: 'Silent', exact: true })
-    .click();
-  await page
-    .getByRole('button', { name: 'Prepare playback audio session' })
-    .click();
-  await expect(panel).toContainText('Session experiment: succeeded');
-  await page
-    .getByRole('button', { name: 'Restore prior audio session' })
-    .click();
   await page.getByRole('button', { name: 'Start microphone' }).click();
   await expect(page.getByLabel('Microphone status')).toContainText(
     'Microphone active',
   );
   await expect(panel).toContainText('after getUserMedia resolved');
   await expect(panel).toContainText('after microphone AudioContext starts');
-  await page
-    .getByRole('group', { name: 'Drone after microphone start' })
-    .getByRole('button', { name: 'Audible', exact: true })
-    .click();
   await page.getByRole('button', { name: 'Stop microphone' }).click();
   await expect(page.getByLabel('Microphone status')).toContainText(
     'Microphone inactive',
   );
   await expect(panel).toContainText('after microphone Stop');
-  await page
-    .getByRole('group', { name: 'Drone after microphone stop' })
-    .getByRole('button', { name: 'Audible', exact: true })
-    .click();
 
   await page
     .getByRole('group', { name: 'Persistent drone audible' })
@@ -408,7 +389,7 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
     await page.evaluate(
       () => (window as AudioProbeWindow).__audioProbe.copiedReport,
     ),
-  ).toContain('Drone before microphone: silent');
+  ).toContain('AudioSession preparation: prepared');
   expect(
     await page.evaluate(
       () => (window as AudioProbeWindow).__audioProbe.copiedReport,

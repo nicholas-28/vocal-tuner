@@ -237,7 +237,8 @@ Implemented on branch `issue-018-1-ios-safari-reference-drone`; physical iPhone 
 - Compact mobile comparison UI with local audibility annotations and expanded plain-text report
 - Physical iOS evidence now isolates a microphone-triggered audio-session/output-route wake-up while the contexts remain separate
 - Bounded pre/post `getUserMedia`, microphone-context, Stop, drone-retry, focus, session, track, and signal snapshots
-- Diagnostic-only `playback` / `play-and-record` preparation with prior-type restoration and fresh-context comparison
+- Production capability-gated `playback` preparation before fresh output-context construction, with safe prior-type restoration and no microphone request
+- Removed superseded interactive session experiments and phase annotations while retaining the compact cross-context timeline
 - Default pitch-preserving, normalized range-aware harmonic timbre with exact sine fallback and unchanged 0.16 gain ceiling
 - Production backend remains Web Audio; no microphone requirement or unproven native-media fallback
 - Mobile WebKit deterministic coverage without claiming physical audibility

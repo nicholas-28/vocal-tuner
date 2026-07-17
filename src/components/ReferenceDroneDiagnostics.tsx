@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BUILD_INFO } from '../config/buildInfo';
 import { formatAudioDiagnosticReport } from '../audio/referenceDroneDiagnosticReport';
 import { useNativeAudioDiagnostic } from '../hooks/useNativeAudioDiagnostic';
@@ -13,8 +7,6 @@ import type {
   AudioSessionDiagnosticState,
   AudioSessionDiagnosticTimeline,
   ManualAudibilityResult,
-  PhaseAudibilityResult,
-  PhaseAudibilityResults,
 } from '../types/audioDiagnostics';
 import type {
   ReferenceDroneDiagnosticTestResult,
@@ -34,21 +26,6 @@ type ReferenceDroneDiagnosticsProps = {
 
 const EMPTY_AUDIO_SESSION_STATE: AudioSessionDiagnosticState = Object.freeze({
   snapshots: Object.freeze([]),
-  phaseAudibility: Object.freeze({
-    beforeMicrophone: 'not-tested',
-    afterMicrophoneStart: 'not-tested',
-    afterMicrophoneStop: 'not-tested',
-  }),
-  preparation: Object.freeze({
-    available: false,
-    candidateTypes: Object.freeze([]),
-    requestedType: null,
-    priorType: null,
-    resultingType: null,
-    resultingState: null,
-    result: 'not-requested',
-    errorMessage: null,
-  }),
 });
 
 const INITIAL_MANUAL_RESULTS: AudioDiagnosticManualResults = Object.freeze({
@@ -78,13 +55,6 @@ export function ReferenceDroneDiagnostics({
     audioSessionTimeline?.getSnapshot ?? (() => EMPTY_AUDIO_SESSION_STATE),
     () => EMPTY_AUDIO_SESSION_STATE,
   );
-  useEffect(() => {
-    const timeline = audioSessionTimeline;
-    return () => {
-      if (timeline?.getSnapshot().preparation.priorType !== null)
-        timeline?.restore();
-    };
-  }, [audioSessionTimeline]);
   const report = useMemo(
     () =>
       formatAudioDiagnosticReport(diagnostics, BUILD_INFO, {
@@ -218,67 +188,6 @@ export function ReferenceDroneDiagnostics({
             }
           />
         </div>
-        <div className="reference-audio-comparison-guide">
-          <h4>Microphone dependency A/B</h4>
-          <ol>
-            <li>Test the drone before using the microphone.</li>
-            <li>Use Start microphone below, then test the drone again.</li>
-            <li>Stop the microphone, then test the drone once more.</li>
-          </ol>
-          <PhaseAudibilityControl
-            label="Drone before microphone"
-            phase="beforeMicrophone"
-            value={audioSessionState.phaseAudibility.beforeMicrophone}
-            timeline={audioSessionTimeline}
-          />
-          <PhaseAudibilityControl
-            label="Drone after microphone start"
-            phase="afterMicrophoneStart"
-            value={audioSessionState.phaseAudibility.afterMicrophoneStart}
-            timeline={audioSessionTimeline}
-          />
-          <PhaseAudibilityControl
-            label="Drone after microphone stop"
-            phase="afterMicrophoneStop"
-            value={audioSessionState.phaseAudibility.afterMicrophoneStop}
-            timeline={audioSessionTimeline}
-          />
-        </div>
-        <div className="reference-audio-session-actions">
-          <h4>Experimental audio-session preparation</h4>
-          <p>
-            Diagnostic only. Restore the previous type before requesting the
-            microphone.
-          </p>
-          <DiagnosticAction
-            label="Prepare playback audio session"
-            disabled={testsBusy || !audioSessionState.preparation.available}
-            onClick={() => audioSessionTimeline?.prepare('playback')}
-          />
-          <DiagnosticAction
-            label="Prepare playback and recreate output context"
-            disabled={testsBusy || !audioSessionState.preparation.available}
-            onClick={() => {
-              audioSessionTimeline?.prepare('playback');
-              onRecreateContext?.();
-            }}
-          />
-          <DiagnosticAction
-            label="Prepare play-and-record audio session"
-            disabled={testsBusy || !audioSessionState.preparation.available}
-            onClick={() => audioSessionTimeline?.prepare('play-and-record')}
-          />
-          <DiagnosticAction
-            label="Restore prior audio session"
-            disabled={
-              testsBusy || audioSessionState.preparation.priorType === null
-            }
-            onClick={() => audioSessionTimeline?.restore()}
-          />
-          <p role="status">
-            Session experiment: {audioSessionState.preparation.result}
-          </p>
-        </div>
       </section>
 
       <section
@@ -411,14 +320,11 @@ export function ReferenceDroneDiagnostics({
             ['Backend', diagnostics.backend],
             ['Timbre', diagnostics.timbreProfile],
             ['Predicted peak', formatNumber(diagnostics.predictedPeak, 6)],
+            ['Session preparation', diagnostics.audioSession.preparationResult],
+            ['Session prior type', diagnostics.audioSession.priorType ?? '—'],
             [
-              'Session candidates',
-              audioSessionState.preparation.candidateTypes.join(', ') || '—',
-            ],
-            ['Session result', audioSessionState.preparation.result],
-            [
-              'Session resulting type',
-              audioSessionState.preparation.resultingType ?? '—',
+              'Session restored type',
+              diagnostics.audioSession.restoredType ?? '—',
             ],
           ]}
         />
@@ -444,8 +350,7 @@ export function ReferenceDroneDiagnostics({
               drone {entry.droneContextState}; mic{' '}
               {entry.microphoneContextState}; tracks{' '}
               {entry.activeMicrophoneTrackCount}; RMS{' '}
-              {formatNumber(entry.outputRms, 6)}; audible{' '}
-              {entry.dronePhysicalAnnotation}
+              {formatNumber(entry.outputRms, 6)}
             </li>
           ))}
         </ol>
@@ -555,39 +460,6 @@ function ManualAudibilityControl({
             : option === 'yes'
               ? 'Yes'
               : 'No'}
-        </button>
-      ))}
-    </fieldset>
-  );
-}
-
-function PhaseAudibilityControl({
-  label,
-  phase,
-  value,
-  timeline,
-}: {
-  label: string;
-  phase: keyof PhaseAudibilityResults;
-  value: PhaseAudibilityResult;
-  timeline: AudioSessionDiagnosticTimeline | null;
-}) {
-  return (
-    <fieldset>
-      <legend>{label}</legend>
-      {(['audible', 'silent', 'not-tested'] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          className="secondary-button"
-          aria-pressed={value === option}
-          onClick={() => timeline?.setPhaseAudibility(phase, option)}
-        >
-          {option === 'not-tested'
-            ? 'Not tested'
-            : option === 'audible'
-              ? 'Audible'
-              : 'Silent'}
         </button>
       ))}
     </fieldset>

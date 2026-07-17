@@ -9,6 +9,11 @@ import {
 } from './referenceDroneConfig';
 import { selectAudioContextConstructor } from './referenceDroneContext';
 import {
+  prepareReferenceDronePlaybackSession,
+  restoreReferenceDroneAudioSession,
+  type ReferenceDroneSessionPreparationResult,
+} from './referenceDroneAudioSession';
+import {
   createInitialSignalMeasurement,
   measureReferenceDroneSignal,
   REFERENCE_DRONE_ANALYSER_FFT_SIZE,
@@ -1126,6 +1131,50 @@ export function createReferenceDroneEngine(
     addLifecycleEvent('output context recreation requested');
   };
 
+  const prepareOutputSessionFromUserGesture = () => {
+    const preparation = prepareReferenceDronePlaybackSession();
+    updateDiagnostics({
+      audioSession: Object.freeze({
+        available: preparation.available,
+        type: preparation.resultingType,
+        state: preparation.state,
+        preparationResult: preparation.result,
+        priorType: preparation.priorType,
+        restoredType: null,
+        errorMessage: preparation.errorMessage,
+      }),
+    });
+    addLifecycleEvent(
+      'playback session preparation',
+      `${preparation.result}:${preparation.priorType ?? 'none'}->${preparation.resultingType ?? 'none'}`,
+    );
+    if (preparation.changed && context) {
+      recreateOutputContextFromUserGesture();
+    }
+    return preparation;
+  };
+
+  const restoreOutputSessionSoon = (
+    preparation: ReferenceDroneSessionPreparationResult,
+  ) => {
+    if (!preparation.changed || typeof window === 'undefined') return;
+    window.setTimeout(() => {
+      const restoredType = restoreReferenceDroneAudioSession(preparation);
+      if (disposed) return;
+      updateDiagnostics({
+        audioSession: Object.freeze({
+          ...snapshot.diagnostics.audioSession,
+          type: restoredType ?? snapshot.diagnostics.audioSession.type,
+          restoredType,
+        }),
+      });
+      addLifecycleEvent(
+        'playback session restoration',
+        restoredType ?? 'skipped',
+      );
+    }, 0);
+  };
+
   const runDirectOutputTestFromUserGesture = async (
     key: DiagnosticTestKey,
     constantGain: boolean,
@@ -1274,11 +1323,16 @@ export function createReferenceDroneEngine(
         errorMessage: null,
       },
     });
+    let sessionPreparation: ReferenceDroneSessionPreparationResult | null =
+      null;
     try {
       if (!activeVoice && releasePromise) releaseFinish?.();
       if (disposed || commandOperation !== operation) {
         return { ok: false, errorCode: 'audio-start-failed' };
       }
+      sessionPreparation = activeVoice
+        ? null
+        : prepareOutputSessionFromUserGesture();
       const graph = ensureOutputGraph();
       const pendingResume = beginResumeFromUserGesture(graph);
       let preparedVoice: DroneVoice | null = null;
@@ -1293,6 +1347,7 @@ export function createReferenceDroneEngine(
       );
       if (!readyGraph || disposed || commandOperation !== operation) {
         if (preparedVoice) abortVoice(preparedVoice);
+        if (sessionPreparation) restoreOutputSessionSoon(sessionPreparation);
         return { ok: false, errorCode: 'audio-start-failed' };
       }
       if (activeVoice) {
@@ -1414,8 +1469,10 @@ export function createReferenceDroneEngine(
       notifyDiagnosticObserver(
         retrying ? 'after drone retry' : 'after drone activation',
       );
+      if (sessionPreparation) restoreOutputSessionSoon(sessionPreparation);
       return { ok: true };
     } catch (error) {
+      if (sessionPreparation) restoreOutputSessionSoon(sessionPreparation);
       return publishError(toEngineError(error), command);
     }
   };

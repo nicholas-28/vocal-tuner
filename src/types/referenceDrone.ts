@@ -76,6 +76,16 @@ export type ReferenceDroneAudioSessionDiagnostics = Readonly<{
   available: boolean;
   type: string | null;
   state: string | null;
+  preparationResult:
+    | 'not-requested'
+    | 'unavailable'
+    | 'not-needed'
+    | 'prepared'
+    | 'rejected'
+    | 'failed';
+  priorType: string | null;
+  restoredType: string | null;
+  errorMessage: string | null;
 }>;
 
 export type ReferenceDroneBackend = 'web-audio';

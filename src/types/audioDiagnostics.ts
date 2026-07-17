@@ -27,14 +27,6 @@ export type AudioDiagnosticReportContext = Readonly<{
   audioSessionTimeline?: AudioSessionDiagnosticState;
 }>;
 
-export type PhaseAudibilityResult = 'not-tested' | 'audible' | 'silent';
-
-export type PhaseAudibilityResults = Readonly<{
-  beforeMicrophone: PhaseAudibilityResult;
-  afterMicrophoneStart: PhaseAudibilityResult;
-  afterMicrophoneStop: PhaseAudibilityResult;
-}>;
-
 export type MicrophoneAudioDiagnosticEvent = Readonly<{
   label: string;
   microphoneState: string;
@@ -65,31 +57,10 @@ export type AudioSessionDiagnosticSnapshot = Readonly<{
   microphoneTrackReadyState: string;
   outputRms: number | null;
   outputPeak: number | null;
-  dronePhysicalAnnotation: PhaseAudibilityResult;
 }>;
-
-export type AudioSessionPreparationType = 'playback' | 'play-and-record';
-export type AudioSessionPreparationResult =
-  | 'not-requested'
-  | 'succeeded'
-  | 'restored'
-  | 'rejected'
-  | 'failed'
-  | 'unavailable';
 
 export type AudioSessionDiagnosticState = Readonly<{
   snapshots: readonly AudioSessionDiagnosticSnapshot[];
-  phaseAudibility: PhaseAudibilityResults;
-  preparation: Readonly<{
-    available: boolean;
-    candidateTypes: readonly string[];
-    requestedType: AudioSessionPreparationType | null;
-    priorType: string | null;
-    resultingType: string | null;
-    resultingState: string | null;
-    result: AudioSessionPreparationResult;
-    errorMessage: string | null;
-  }>;
 }>;
 
 export type AudioSessionDiagnosticTimeline = Readonly<{
@@ -102,12 +73,6 @@ export type AudioSessionDiagnosticTimeline = Readonly<{
     diagnostics: import('./referenceDrone').ReferenceDroneDiagnostics,
   ) => void;
   captureMicrophone: (event: MicrophoneAudioDiagnosticEvent) => void;
-  prepare: (type: AudioSessionPreparationType) => AudioSessionPreparationResult;
-  restore: () => AudioSessionPreparationResult;
-  setPhaseAudibility: (
-    phase: keyof PhaseAudibilityResults,
-    result: PhaseAudibilityResult,
-  ) => void;
   getSnapshot: () => AudioSessionDiagnosticState;
   subscribe: (listener: () => void) => () => void;
 }>;

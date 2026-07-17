@@ -208,7 +208,7 @@ Diagnostics and demo query handling use one environment policy. Development and 
 
 ## ADR-023 — Reference output starts inside trusted activation and confirms rendering
 
-Status: accepted pending physical iPhone confirmation
+Status: accepted
 
 A production iPhone Safari report exposed a timing gap in ADR-016: context construction and resume were synchronous in the semantic click, but oscillator construction and start occurred only after awaiting resume. WebKit applies stricter transient-activation rules to starting Web Audio rendering. Reference activation now synchronously creates/connects a zero-gain voice and starts its oscillator in the trusted activation task, then awaits resume and confirms actual running state plus an advancing rendering clock before scheduling attack or publishing `playing`.
 
@@ -226,10 +226,20 @@ These experiments are diagnostics rather than an automatic recovery policy. Acti
 
 ## ADR-025 — Preserve Web Audio ownership while measuring session transitions and improving harmonic audibility
 
-Status: accepted pending physical iPhone confirmation
+Status: superseded by ADR-026
 
 Physical iOS 18.4.1 testing showed that microphone capture can make an already digitally active reference drone physically audible. The microphone and drone use separate contexts, capture creates its context only after permission, and its source/analyser graph has no destination connection. The strongest supported explanation is therefore an implicit iOS audio-session/category or route transition caused by `getUserMedia`, rather than a dependency in the application graph.
 
 The temporary audio diagnostic mode now records a bounded cross-context timeline and permits explicit, capability-detected `playback` and `play-and-record` assignments with prior-value restoration. These assignments are not used in normal mode: the Audio Session API remains a Working Draft, and WebKit has documented microphone-capture failures when `playback` is left active. Web Audio remains the only production backend; neither microphone permission nor native-media fallback is selected without a successful physical A/B result.
 
 Mobile audibility is improved independently with one deterministic `PeriodicWave`. The selected note stays harmonic 1, all upper partials are integer multiples, and low/middle/high profiles reduce harmonic support as MIDI rises. Coefficients are normalized by their absolute sum with Web Audio normalization disabled. The existing 0.16 maximum master gain and volume semantics remain unchanged, so the conservative predicted peak cannot exceed 0.16. Unsupported periodic-wave construction falls back to the exact sine fundamental.
+
+## ADR-026 — Prepare an inactive playback session before constructing reference output
+
+Status: accepted pending physical iPhone confirmation
+
+Physical iOS 18.4.1 testing established that a fresh-page drone has strong pre-destination samples but no physical output, while `getUserMedia` makes that same unrecreated drone audible immediately and it remains audible after capture stops. The microphone creates a separate input-only context after permission and never connects to destination. The implementation therefore has no application graph edge capable of waking the drone; the changing resource is WebKit's shared page/OS audio session and physical route.
+
+On a reference-key gesture, the production engine now capability-detects `navigator.audioSession`. When its state is not active and its type is not already `playback`, it assigns `playback` before constructing output. If a stopped output context is retained, the engine discards it after preparation; the replacement context, graph, zero-gain voice, and oscillator are created synchronously in the same trusted gesture. This is candidate A. An active session is never overwritten. The prior type is restored on the next task only while the session still contains the temporary `playback` value, which avoids leaving a capture-incompatible playback policy or overwriting another session owner.
+
+The fallback on browsers without the draft API is the unchanged lazy Web Audio path. The repair does not inspect the browser user agent, call `getUserMedia`, change master gain, change the exact fundamental, add a native-media backend, or couple drone ownership to microphone analysis. The now-resolved interactive session experiments and phase annotations are removed; the bounded transition timeline remains for physical verification.

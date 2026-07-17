@@ -185,6 +185,8 @@ describe('reference drone engine', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, 'audioSession');
+    Reflect.deleteProperty(navigator, 'mediaDevices');
   });
 
   it('confirms a running, fully connected graph before reporting playing', async () => {
@@ -223,6 +225,84 @@ describe('reference drone engine', () => {
       1,
       10.05,
     );
+  });
+
+  it('prepares playback before constructing output, restores auto, and never requests microphone access', async () => {
+    vi.useFakeTimers();
+    const events: string[] = [];
+    let sessionType = 'auto';
+    Object.defineProperty(navigator, 'audioSession', {
+      configurable: true,
+      value: {
+        get type() {
+          return sessionType;
+        },
+        set type(value: string) {
+          sessionType = value;
+          events.push(`session:${value}`);
+        },
+        state: 'inactive',
+      },
+    });
+    const getUserMedia = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    const context = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => {
+        events.push('context:create');
+        return asAudioContext(context);
+      },
+    });
+
+    expect((await engine.play(A4)).ok).toBe(true);
+    expect(events.slice(0, 2)).toEqual(['session:playback', 'context:create']);
+    expect(engine.getSnapshot().diagnostics.audioSession).toMatchObject({
+      preparationResult: 'prepared',
+      priorType: 'auto',
+      type: 'playback',
+    });
+    expect(getUserMedia).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sessionType).toBe('auto');
+    expect(engine.getSnapshot().diagnostics.audioSession.restoredType).toBe(
+      'auto',
+    );
+  });
+
+  it('recreates a retained stopped output context after session preparation', async () => {
+    let sessionType = 'auto';
+    Object.defineProperty(navigator, 'audioSession', {
+      configurable: true,
+      value: {
+        get type() {
+          return sessionType;
+        },
+        set type(value: string) {
+          sessionType = value;
+        },
+        state: 'inactive',
+      },
+    });
+    const first = new MockAudioContext();
+    const second = new MockAudioContext();
+    const contexts = [first, second];
+    const factory = vi.fn(() => asAudioContext(contexts.shift()!));
+    const engine = createReferenceDroneEngine({ contextFactory: factory });
+
+    await engine.play(A4);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const stopping = engine.stop();
+    first.oscillators[0]?.finish();
+    await stopping;
+    await engine.play(G4);
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(engine.getSnapshot().diagnostics.contextGenerationId).toBe(2);
   });
 
   it('inserts one analyser on the real persistent path and classifies active samples', async () => {

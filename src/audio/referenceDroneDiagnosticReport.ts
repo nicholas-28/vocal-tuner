@@ -112,6 +112,10 @@ export function formatAudioDiagnosticReport(
     ['AudioSession available', diagnostics.audioSession.available],
     ['AudioSession type', diagnostics.audioSession.type],
     ['AudioSession state', diagnostics.audioSession.state],
+    ['AudioSession preparation', diagnostics.audioSession.preparationResult],
+    ['AudioSession prior type', diagnostics.audioSession.priorType],
+    ['AudioSession restored type', diagnostics.audioSession.restoredType],
+    ['AudioSession error', diagnostics.audioSession.errorMessage],
     ['Last error code', diagnostics.errorCode],
     ['Last error message', diagnostics.errorMessage],
   ];
@@ -144,25 +148,11 @@ export function formatAudioDiagnosticReport(
           ...(context.audioSessionTimeline
             ? [
                 '',
-                'Microphone dependency annotations:',
-                `Drone before microphone: ${context.audioSessionTimeline.phaseAudibility.beforeMicrophone}`,
-                `Drone after microphone start: ${context.audioSessionTimeline.phaseAudibility.afterMicrophoneStart}`,
-                `Drone after microphone stop: ${context.audioSessionTimeline.phaseAudibility.afterMicrophoneStop}`,
-                '',
-                'Audio-session preparation:',
-                `Candidates: ${context.audioSessionTimeline.preparation.candidateTypes.join(', ') || 'none'}`,
-                `Requested type: ${value(context.audioSessionTimeline.preparation.requestedType)}`,
-                `Prior type: ${value(context.audioSessionTimeline.preparation.priorType)}`,
-                `Resulting type: ${value(context.audioSessionTimeline.preparation.resultingType)}`,
-                `Resulting state: ${value(context.audioSessionTimeline.preparation.resultingState)}`,
-                `Result: ${context.audioSessionTimeline.preparation.result}`,
-                `Error: ${value(context.audioSessionTimeline.preparation.errorMessage)}`,
-                '',
                 'Audio-session snapshots:',
                 ...(context.audioSessionTimeline.snapshots.length
                   ? context.audioSessionTimeline.snapshots.map(
                       (entry) =>
-                        `${entry.sequence}. +${entry.relativeTimeMs.toFixed(1)} ms — ${entry.label} — session=${value(entry.audioSessionType)}/${value(entry.audioSessionState)}; drone=${entry.droneContextState}#${value(entry.droneContextGeneration)}@${value(entry.droneSampleRate)}Hz; microphone=${entry.microphoneContextState}@${value(entry.microphoneSampleRate)}Hz; tracks=${entry.activeMicrophoneTrackCount}:${entry.microphoneTrackReadyState}; channels=${value(entry.destinationChannelCount)}; visibility=${entry.visibilityState}; focus=${value(entry.pageHasFocus)}; RMS=${value(entry.outputRms)}; peak=${value(entry.outputPeak)}; audible=${entry.dronePhysicalAnnotation}`,
+                        `${entry.sequence}. +${entry.relativeTimeMs.toFixed(1)} ms — ${entry.label} — session=${value(entry.audioSessionType)}/${value(entry.audioSessionState)}; drone=${entry.droneContextState}#${value(entry.droneContextGeneration)}@${value(entry.droneSampleRate)}Hz; microphone=${entry.microphoneContextState}@${value(entry.microphoneSampleRate)}Hz; tracks=${entry.activeMicrophoneTrackCount}:${entry.microphoneTrackReadyState}; channels=${value(entry.destinationChannelCount)}; visibility=${entry.visibilityState}; focus=${value(entry.pageHasFocus)}; RMS=${value(entry.outputRms)}; peak=${value(entry.outputPeak)}`,
                     )
                   : ['(empty)']),
               ]

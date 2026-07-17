@@ -186,16 +186,6 @@ describe('reference drone controls and status', () => {
     expect(onPlayDirectOutputTest).toHaveBeenCalledOnce();
     fireEvent.click(
       within(
-        screen.getByRole('group', { name: 'Drone before microphone' }),
-      ).getByRole('button', { name: 'Silent' }),
-    );
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Prepare playback audio session',
-      }),
-    );
-    fireEvent.click(
-      within(
         screen.getByRole('group', { name: 'Direct Web Audio audible' }),
       ).getByRole('button', { name: 'No' }),
     );
@@ -208,9 +198,8 @@ describe('reference drone controls and status', () => {
     );
     expect(writeText.mock.calls[0]?.[0]).toContain('Direct Web Audio: no');
     expect(writeText.mock.calls[0]?.[0]).toContain(
-      'Drone before microphone: silent',
+      'AudioSession preparation: not-requested',
     );
-    expect(writeText.mock.calls[0]?.[0]).toContain('Requested type: playback');
     expect(
       screen.getByText('Audio diagnostic report copied.'),
     ).toBeInTheDocument();
