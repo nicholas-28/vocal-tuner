@@ -9,11 +9,6 @@ import {
 } from './referenceDroneConfig';
 import { selectAudioContextConstructor } from './referenceDroneContext';
 import {
-  prepareReferenceDronePlaybackSession,
-  restoreReferenceDroneAudioSession,
-  type ReferenceDroneSessionPreparationResult,
-} from './referenceDroneAudioSession';
-import {
   createInitialSignalMeasurement,
   measureReferenceDroneSignal,
   REFERENCE_DRONE_ANALYSER_FFT_SIZE,
@@ -241,12 +236,14 @@ export function createReferenceDroneEngine(
   let snapshot: ReferenceDroneSnapshot = {
     status: 'stopped',
     activeMidi: null,
+    pendingMidi: null,
     frequencyHz: null,
     volume: normalizeReferenceDroneVolume(
       options.initialVolume ?? config.defaultVolume,
       config.defaultVolume,
     ),
     errorCode: null,
+    recoveryState: 'ready',
     diagnostics: initialDiagnostics,
   };
   const listeners = new Set<(value: ReferenceDroneSnapshot) => void>();
@@ -268,6 +265,7 @@ export function createReferenceDroneEngine(
   let persistentSignalOwner: 'drone' | 'engine-test' | null = null;
   let lifecycleSequence = 0;
   let disposed = false;
+  let outputContextNeedsReplacement = false;
   let contextStateListener: {
     context: AudioContext;
     listener: EventListener;
@@ -455,14 +453,22 @@ export function createReferenceDroneEngine(
     error: DroneEngineError,
     lastCommand = snapshot.diagnostics.lastCommand,
   ): ReferenceDroneCommandResult => {
+    const requiresFreshOutputContext =
+      error.code === 'context-interrupted' ||
+      error.code === 'context-not-running' ||
+      error.code === 'context-closed';
+    const needsReactivation = error.code === 'context-interrupted';
+    if (requiresFreshOutputContext) outputContextNeedsReplacement = true;
     abortVoice(voice);
     debugLog('error', { code: error.code, message: error.message });
     publish({
       ...snapshot,
       status: 'error',
       activeMidi: null,
+      pendingMidi: null,
       frequencyHz: null,
       errorCode: error.code,
+      recoveryState: needsReactivation ? 'needs-reactivation' : 'ready',
       diagnostics: {
         ...snapshot.diagnostics,
         contextState: context
@@ -484,10 +490,7 @@ export function createReferenceDroneEngine(
         lastCommand,
         errorCode: error.code,
         errorMessage: import.meta.env.DEV ? error.message : null,
-        requiresExplicitReactivation:
-          error.code === 'context-interrupted' ||
-          error.code === 'context-not-running' ||
-          error.code === 'context-closed',
+        requiresExplicitReactivation: requiresFreshOutputContext,
       },
     });
     return { ok: false, errorCode: error.code };
@@ -515,6 +518,7 @@ export function createReferenceDroneEngine(
     ) {
       if (contextState !== 'running') {
         operation += 1;
+        outputContextNeedsReplacement = true;
         if (contextState === 'closed') {
           safeDisconnect(masterGain);
           safeDisconnect(outputAnalyser);
@@ -1095,7 +1099,9 @@ export function createReferenceDroneEngine(
     );
   };
 
-  const recreateOutputContextFromUserGesture = () => {
+  const recreateOutputContextFromUserGesture = (
+    reason = 'diagnostic-request',
+  ) => {
     const oldContext = context;
     const oldGeneration = oldContext ? contextGeneration : null;
     stopSignalSampling();
@@ -1109,6 +1115,7 @@ export function createReferenceDroneEngine(
     destinationConnected = false;
     detachContextListener(oldContext);
     context = null;
+    outputContextNeedsReplacement = false;
     updateDiagnostics({
       previousContextGenerationId: oldGeneration,
       contextCloseResult: oldContext ? 'pending' : 'no-context',
@@ -1128,51 +1135,7 @@ export function createReferenceDroneEngine(
           if (!disposed) updateDiagnostics({ contextCloseResult: 'rejected' });
         });
     }
-    addLifecycleEvent('output context recreation requested');
-  };
-
-  const prepareOutputSessionFromUserGesture = () => {
-    const preparation = prepareReferenceDronePlaybackSession();
-    updateDiagnostics({
-      audioSession: Object.freeze({
-        available: preparation.available,
-        type: preparation.resultingType,
-        state: preparation.state,
-        preparationResult: preparation.result,
-        priorType: preparation.priorType,
-        restoredType: null,
-        errorMessage: preparation.errorMessage,
-      }),
-    });
-    addLifecycleEvent(
-      'playback session preparation',
-      `${preparation.result}:${preparation.priorType ?? 'none'}->${preparation.resultingType ?? 'none'}`,
-    );
-    if (preparation.changed && context) {
-      recreateOutputContextFromUserGesture();
-    }
-    return preparation;
-  };
-
-  const restoreOutputSessionSoon = (
-    preparation: ReferenceDroneSessionPreparationResult,
-  ) => {
-    if (!preparation.changed || typeof window === 'undefined') return;
-    window.setTimeout(() => {
-      const restoredType = restoreReferenceDroneAudioSession(preparation);
-      if (disposed) return;
-      updateDiagnostics({
-        audioSession: Object.freeze({
-          ...snapshot.diagnostics.audioSession,
-          type: restoredType ?? snapshot.diagnostics.audioSession.type,
-          restoredType,
-        }),
-      });
-      addLifecycleEvent(
-        'playback session restoration',
-        restoredType ?? 'skipped',
-      );
-    }, 0);
+    addLifecycleEvent('output context recreation requested', reason);
   };
 
   const runDirectOutputTestFromUserGesture = async (
@@ -1309,7 +1272,7 @@ export function createReferenceDroneEngine(
     publish({
       ...snapshot,
       status: changing ? 'changing' : 'starting',
-      activeMidi: note.midiNote,
+      pendingMidi: note.midiNote,
       frequencyHz: note.frequencyHz,
       errorCode: null,
       diagnostics: {
@@ -1323,16 +1286,14 @@ export function createReferenceDroneEngine(
         errorMessage: null,
       },
     });
-    let sessionPreparation: ReferenceDroneSessionPreparationResult | null =
-      null;
     try {
       if (!activeVoice && releasePromise) releaseFinish?.();
       if (disposed || commandOperation !== operation) {
         return { ok: false, errorCode: 'audio-start-failed' };
       }
-      sessionPreparation = activeVoice
-        ? null
-        : prepareOutputSessionFromUserGesture();
+      if (!activeVoice && outputContextNeedsReplacement) {
+        recreateOutputContextFromUserGesture('explicit-reactivation');
+      }
       const graph = ensureOutputGraph();
       const pendingResume = beginResumeFromUserGesture(graph);
       let preparedVoice: DroneVoice | null = null;
@@ -1346,8 +1307,7 @@ export function createReferenceDroneEngine(
         pendingResume,
       );
       if (!readyGraph || disposed || commandOperation !== operation) {
-        if (preparedVoice) abortVoice(preparedVoice);
-        if (sessionPreparation) restoreOutputSessionSoon(sessionPreparation);
+        // A newer command owns any shared prepared voice and its cleanup.
         return { ok: false, errorCode: 'audio-start-failed' };
       }
       if (activeVoice) {
@@ -1428,8 +1388,10 @@ export function createReferenceDroneEngine(
         ...snapshot,
         status: 'playing',
         activeMidi: note.midiNote,
+        pendingMidi: null,
         frequencyHz: note.frequencyHz,
         errorCode: null,
+        recoveryState: 'ready',
         diagnostics: {
           ...snapshot.diagnostics,
           contextState: 'running',
@@ -1469,10 +1431,11 @@ export function createReferenceDroneEngine(
       notifyDiagnosticObserver(
         retrying ? 'after drone retry' : 'after drone activation',
       );
-      if (sessionPreparation) restoreOutputSessionSoon(sessionPreparation);
       return { ok: true };
     } catch (error) {
-      if (sessionPreparation) restoreOutputSessionSoon(sessionPreparation);
+      if (disposed || commandOperation !== operation) {
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
       return publishError(toEngineError(error), command);
     }
   };
@@ -1595,8 +1558,10 @@ export function createReferenceDroneEngine(
           ...snapshot,
           status: 'stopped',
           activeMidi: null,
+          pendingMidi: null,
           frequencyHz: null,
           errorCode: null,
+          recoveryState: 'ready',
           diagnostics: {
             ...snapshot.diagnostics,
             engineState: 'stopped',
@@ -1623,8 +1588,10 @@ export function createReferenceDroneEngine(
           ...snapshot,
           status: 'stopped',
           activeMidi: null,
+          pendingMidi: null,
           frequencyHz: null,
           errorCode: null,
+          recoveryState: 'ready',
           diagnostics: {
             ...snapshot.diagnostics,
             engineState: 'stopped',
@@ -1661,8 +1628,10 @@ export function createReferenceDroneEngine(
         ...snapshot,
         status: 'stopped',
         activeMidi: null,
+        pendingMidi: null,
         frequencyHz: null,
         errorCode: null,
+        recoveryState: 'ready',
         diagnostics: {
           ...snapshot.diagnostics,
           engineState: 'stopped',
@@ -1751,6 +1720,13 @@ export function createReferenceDroneEngine(
 
   const markLifecycle = (name: string, state: string) => {
     if (disposed) return;
+    const isPageExit = state === 'hidden' || name === 'pagehide';
+    const productOutputWasActive =
+      voice !== null ||
+      snapshot.status === 'starting' ||
+      snapshot.status === 'playing' ||
+      snapshot.status === 'changing' ||
+      snapshot.status === 'stopping';
     addLifecycleEvent(name, state);
     updateDiagnostics({
       pageLifecycleState: state,
@@ -1764,11 +1740,11 @@ export function createReferenceDroneEngine(
           : snapshot.diagnostics.lastVisibilityChange,
       requiresExplicitReactivation:
         snapshot.diagnostics.requiresExplicitReactivation ||
-        state === 'hidden' ||
-        name === 'pagehide',
+        (isPageExit && productOutputWasActive),
     });
-    if (voice && (state === 'hidden' || name === 'pagehide')) {
+    if (isPageExit && productOutputWasActive) {
       operation += 1;
+      outputContextNeedsReplacement = true;
       const outputTestWasActive =
         snapshot.diagnostics.outputTestStatus === 'starting' ||
         snapshot.diagnostics.outputTestStatus === 'playing';
@@ -1783,7 +1759,7 @@ export function createReferenceDroneEngine(
         name,
       );
     }
-    if (diagnosticVoice && (state === 'hidden' || name === 'pagehide')) {
+    if (diagnosticVoice && isPageExit) {
       operation += 1;
       cleanupDiagnosticVoice(diagnosticVoice);
       for (const key of [
@@ -1803,7 +1779,7 @@ export function createReferenceDroneEngine(
     }
     if (
       context &&
-      (state === 'hidden' || name === 'pagehide') &&
+      isPageExit &&
       getContextState(context) === 'running' &&
       typeof context.suspend === 'function'
     ) {
@@ -1879,8 +1855,10 @@ export function createReferenceDroneEngine(
       ...snapshot,
       status: 'stopped',
       activeMidi: null,
+      pendingMidi: null,
       frequencyHz: null,
       errorCode: null,
+      recoveryState: 'ready',
       diagnostics: {
         ...snapshot.diagnostics,
         contextState:

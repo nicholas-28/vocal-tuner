@@ -8,6 +8,9 @@ export type ReferenceDroneSessionPreparationResult = Readonly<{
   errorMessage: string | null;
 }>;
 
+// This module is intentionally invoked only by the explicit audio-diagnostics
+// experiment. Normal reference-key activation must not mutate AudioSession.
+
 type MutableAudioSession = {
   type?: unknown;
   state?: unknown;

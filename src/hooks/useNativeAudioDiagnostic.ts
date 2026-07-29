@@ -130,5 +130,30 @@ export function useNativeAudioDiagnostic() {
 
   useEffect(() => cleanup, [cleanup]);
 
+  useEffect(() => {
+    const interruptForPageLifecycle = () => {
+      if (!audioRef.current) return;
+      cleanup();
+      setState((current) => ({
+        ...current,
+        status: 'failed',
+        paused: true,
+        errorMessage: 'Page lifecycle interrupted the native audio test.',
+        events: Object.freeze(
+          [...current.events, 'page lifecycle interrupted'].slice(-20),
+        ),
+      }));
+    };
+    const interruptWhenHidden = () => {
+      if (document.visibilityState === 'hidden') interruptForPageLifecycle();
+    };
+    window.addEventListener('pagehide', interruptForPageLifecycle);
+    document.addEventListener('visibilitychange', interruptWhenHidden);
+    return () => {
+      window.removeEventListener('pagehide', interruptForPageLifecycle);
+      document.removeEventListener('visibilitychange', interruptWhenHidden);
+    };
+  }, [cleanup]);
+
   return { state, playFromUserGesture };
 }

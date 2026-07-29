@@ -1,6 +1,11 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BUILD_INFO } from '../config/buildInfo';
 import { formatAudioDiagnosticReport } from '../audio/referenceDroneDiagnosticReport';
+import {
+  prepareReferenceDronePlaybackSession,
+  restoreReferenceDroneAudioSession,
+  type ReferenceDroneSessionPreparationResult,
+} from '../audio/referenceDroneAudioSession';
 import { useNativeAudioDiagnostic } from '../hooks/useNativeAudioDiagnostic';
 import type {
   AudioDiagnosticManualResults,
@@ -20,7 +25,7 @@ type ReferenceDroneDiagnosticsProps = {
   onPlayOutputTest?: () => void;
   onPlayDirectOutputTest?: () => void;
   onPlayConstantGainOutputTest?: () => void;
-  onRecreateContext?: () => void;
+  onRecreateContext?: () => void | Promise<void>;
   audioSessionTimeline?: AudioSessionDiagnosticTimeline | null;
 };
 
@@ -48,6 +53,10 @@ export function ReferenceDroneDiagnostics({
   const [copyStatus, setCopyStatus] = useState('');
   const [showFallback, setShowFallback] = useState(false);
   const [manualResults, setManualResults] = useState(INITIAL_MANUAL_RESULTS);
+  const [sessionExperiment, setSessionExperiment] = useState<
+    ReferenceDroneSessionPreparationResult | undefined
+  >();
+  const [sessionExperimentBusy, setSessionExperimentBusy] = useState(false);
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
   const nativeAudio = useNativeAudioDiagnostic();
   const audioSessionState = useSyncExternalStore(
@@ -77,7 +86,35 @@ export function ReferenceDroneDiagnostics({
   const nativeBusy =
     nativeAudio.state.status === 'play-requested' ||
     nativeAudio.state.status === 'playing';
-  const testsBusy = engineBusy || nativeBusy;
+  const testsBusy = engineBusy || nativeBusy || sessionExperimentBusy;
+  const disabledReason = engineBusy
+    ? 'Stop the reference drone or current Web Audio test first.'
+    : nativeBusy
+      ? 'Wait for the native audio test to finish.'
+      : sessionExperimentBusy
+        ? 'Wait for the audio-session experiment to finish.'
+        : null;
+
+  const runSessionPreparationExperiment = async () => {
+    if (!onRecreateContext || testsBusy) return;
+    setSessionExperimentBusy(true);
+    audioSessionTimeline?.capture('before diagnostic session preparation');
+    const preparation = prepareReferenceDronePlaybackSession();
+    setSessionExperiment(preparation);
+    audioSessionTimeline?.capture(
+      `diagnostic session preparation: ${preparation.result}`,
+    );
+    try {
+      await onRecreateContext();
+      audioSessionTimeline?.capture('after diagnostic context recreation');
+    } catch {
+      audioSessionTimeline?.capture('diagnostic context recreation failed');
+    } finally {
+      restoreReferenceDroneAudioSession(preparation);
+      audioSessionTimeline?.capture('after diagnostic session restore');
+      setSessionExperimentBusy(false);
+    }
+  };
 
   const copyReport = async () => {
     try {
@@ -109,33 +146,55 @@ export function ReferenceDroneDiagnostics({
         aria-labelledby="audio-actions-heading"
       >
         <h3 id="audio-actions-heading">Physical test actions</h3>
+        {disabledReason && (
+          <p id="audio-actions-disabled-reason" role="status">
+            Diagnostic actions unavailable: {disabledReason}
+          </p>
+        )}
         <div className="reference-audio-action-grid">
           <DiagnosticAction
+            label="Prepare playback and recreate output context"
+            disabled={testsBusy || !onRecreateContext}
+            disabledReason={disabledReason}
+            onClick={() => void runSessionPreparationExperiment()}
+          />
+          <DiagnosticAction
             label="Play 1-second output test"
-            disabled={testsBusy}
+            disabled={testsBusy || !onPlayOutputTest}
+            disabledReason={disabledReason}
             onClick={onPlayOutputTest}
           />
           <DiagnosticAction
             label="Play direct Web Audio test"
-            disabled={testsBusy}
+            disabled={testsBusy || !onPlayDirectOutputTest}
+            disabledReason={disabledReason}
             onClick={onPlayDirectOutputTest}
           />
           <DiagnosticAction
             label="Play Web Audio test with constant gain"
-            disabled={testsBusy}
+            disabled={testsBusy || !onPlayConstantGainOutputTest}
+            disabledReason={disabledReason}
             onClick={onPlayConstantGainOutputTest}
           />
           <DiagnosticAction
             label="Play native audio test"
             disabled={testsBusy}
+            disabledReason={disabledReason}
             onClick={nativeAudio.playFromUserGesture}
           />
           <DiagnosticAction
             label="Recreate audio output context"
-            disabled={testsBusy}
+            disabled={testsBusy || !onRecreateContext}
+            disabledReason={disabledReason}
             onClick={onRecreateContext}
           />
         </div>
+        <p aria-label="Audio-session experiment result">
+          Audio-session experiment:{' '}
+          {sessionExperiment
+            ? `${sessionExperiment.result}; ${sessionExperiment.priorType ?? '—'} → ${sessionExperiment.resultingType ?? '—'}`
+            : 'not run'}
+        </p>
         <div className="reference-audio-manual-results">
           <ManualAudibilityControl
             label="Persistent drone audible"
@@ -417,18 +476,23 @@ export function ReferenceDroneDiagnostics({
 function DiagnosticAction({
   label,
   disabled,
+  disabledReason,
   onClick,
 }: {
   label: string;
   disabled: boolean;
-  onClick?: () => void;
+  disabledReason: string | null;
+  onClick?: () => void | Promise<void>;
 }) {
   return (
     <button
       type="button"
       className="secondary-button"
       disabled={disabled}
-      onClick={onClick}
+      aria-describedby={
+        disabled && disabledReason ? 'audio-actions-disabled-reason' : undefined
+      }
+      onClick={() => void onClick?.()}
     >
       {label}
     </button>

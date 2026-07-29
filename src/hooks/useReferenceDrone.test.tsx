@@ -12,9 +12,11 @@ function createFakeEngine(initialVolume = 0.25) {
   let snapshot: ReferenceDroneSnapshot = {
     status: 'stopped',
     activeMidi: null,
+    pendingMidi: null,
     frequencyHz: null,
     volume: initialVolume,
     errorCode: null,
+    recoveryState: 'ready',
     diagnostics: createInitialReferenceDroneDiagnostics(),
   };
   const listeners = new Set<(value: ReferenceDroneSnapshot) => void>();

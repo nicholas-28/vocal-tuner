@@ -112,4 +112,26 @@ describe('useNativeAudioDiagnostic', () => {
     expect(removeEventListener).toHaveBeenCalledTimes(4);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:media-error');
   });
+
+  it('cleans and unlocks a native test when the page is hidden', async () => {
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('Audio', MockAudioElement);
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:interrupted'),
+      revokeObjectURL,
+    });
+    const { result } = renderHook(() => useNativeAudioDiagnostic());
+    act(() => result.current.playFromUserGesture());
+    const audio = MockAudioElement.instances[0];
+
+    act(() => window.dispatchEvent(new Event('pagehide')));
+
+    expect(result.current.state).toMatchObject({
+      status: 'failed',
+      paused: true,
+      errorMessage: 'Page lifecycle interrupted the native audio test.',
+    });
+    expect(audio?.pause).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:interrupted');
+  });
 });

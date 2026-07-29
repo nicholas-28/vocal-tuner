@@ -173,10 +173,14 @@ export type ReferenceDroneNote = {
 
 export type ReferenceDroneSnapshot = {
   status: ReferenceDroneStatus;
+  /** The last note whose output graph was fully confirmed. */
   activeMidi: number | null;
+  /** The newest note command still awaiting confirmation. */
+  pendingMidi: number | null;
   frequencyHz: number | null;
   volume: number;
   errorCode: ReferenceDroneErrorCode | null;
+  recoveryState: 'ready' | 'needs-reactivation';
   diagnostics: ReferenceDroneDiagnostics;
 };
 

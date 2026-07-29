@@ -16,9 +16,11 @@ import { ReferenceDroneStatus } from './ReferenceDroneStatus';
 const stopped: ReferenceDroneSnapshot = {
   status: 'stopped',
   activeMidi: null,
+  pendingMidi: null,
   frequencyHz: null,
   volume: 0.25,
   errorCode: null,
+  recoveryState: 'ready',
   diagnostics: createInitialReferenceDroneDiagnostics(),
 };
 
@@ -118,6 +120,20 @@ describe('reference drone controls and status', () => {
     );
     expect(screen.getByRole('status')).toHaveTextContent(
       'audio output stayed suspended',
+    );
+    rerender(
+      <ReferenceDroneStatus
+        snapshot={{
+          ...stopped,
+          status: 'error',
+          errorCode: 'context-interrupted',
+          recoveryState: 'needs-reactivation',
+        }}
+        range={{ lowMidi: 48, highMidi: 72 }}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Reference audio paused by the browser. Tap the selected note to restart.',
     );
   });
 

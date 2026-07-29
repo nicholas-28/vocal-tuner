@@ -18,9 +18,11 @@ export function createInitialReferenceDroneSnapshot(): ReferenceDroneSnapshot {
   return {
     status: 'stopped',
     activeMidi: null,
+    pendingMidi: null,
     frequencyHz: null,
     volume: DEFAULT_REFERENCE_DRONE_CONFIG.defaultVolume,
     errorCode: null,
+    recoveryState: 'ready',
     diagnostics: createInitialReferenceDroneDiagnostics(constructorName),
   };
 }
@@ -88,10 +90,10 @@ export function useReferenceDrone(
     async (midiNote: number) => {
       const current = snapshotRef.current;
       const isSoundingOrStarting =
-        current.activeMidi === midiNote &&
-        (current.status === 'starting' ||
-          current.status === 'playing' ||
-          current.status === 'changing');
+        (current.activeMidi === midiNote &&
+          (current.status === 'playing' || current.status === 'changing')) ||
+        (current.pendingMidi === midiNote &&
+          (current.status === 'starting' || current.status === 'changing'));
       if (isSoundingOrStarting) {
         await ensureEngine().stop();
         return;

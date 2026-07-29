@@ -7,6 +7,7 @@ test('loads the initial tuner screen', async ({ page }) => {
       contexts: 0,
       resumes: 0,
       oscillatorStarts: 0,
+      audioSessionAssignments: [] as string[],
     };
     Object.defineProperty(window, '__droneMock', {
       configurable: true,
@@ -75,6 +76,20 @@ test('loads the initial tuner screen', async ({ page }) => {
     Object.defineProperty(window, 'AudioContext', {
       configurable: true,
       value: MockAudioContext,
+    });
+    let audioSessionType = 'auto';
+    Object.defineProperty(navigator, 'audioSession', {
+      configurable: true,
+      value: {
+        get type() {
+          return audioSessionType;
+        },
+        set type(value: string) {
+          audioSessionType = value;
+          droneMock.audioSessionAssignments.push(value);
+        },
+        state: 'inactive',
+      },
     });
   });
   const pageErrors: Error[] = [];
@@ -287,6 +302,53 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'Reference drone playing A4 at 440.0 Hz',
   );
+  const contextsBeforePageHide = await page.evaluate(
+    () =>
+      (
+        window as Window & {
+          __droneMock: { contexts: number };
+        }
+      ).__droneMock.contexts,
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await expect(page.getByLabel('Reference drone status')).toContainText(
+    'Reference audio paused by the browser. Tap the selected note to restart.',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as Window & {
+            __droneMock: { contexts: number };
+          }
+        ).__droneMock.contexts,
+    ),
+  ).toBe(contextsBeforePageHide);
+  await page
+    .getByRole('button', {
+      name: 'Reference note A4, 440.0 hertz, reference audio paused by browser',
+    })
+    .click();
+  await expect(page.getByLabel('Reference drone status')).toContainText(
+    'Reference drone playing A4 at 440.0 Hz',
+  );
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as Window & {
+            __droneMock: {
+              contexts: number;
+              audioSessionAssignments: string[];
+            };
+          }
+        ).__droneMock,
+    ),
+  ).toMatchObject({
+    contexts: contextsBeforePageHide + 1,
+    audioSessionAssignments: [],
+  });
   await setCentsMeterDemo(frequencyAtMidi(69), 'voiced', 500);
   const targetMeter = page.getByRole('meter', {
     name: 'Selected-target cents meter',

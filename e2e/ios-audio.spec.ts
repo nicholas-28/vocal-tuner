@@ -9,6 +9,7 @@ type AudioProbeWindow = Window & {
     copiedReport: string;
     waveform: 'active' | 'silent';
     getUserMediaRequests: number;
+    audioSessionAssignments: string[];
     context: { interrupt: () => void } | null;
   };
 };
@@ -25,6 +26,7 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       copiedReport: '',
       waveform: 'active',
       getUserMediaRequests: 0,
+      audioSessionAssignments: [] as string[],
       context: null as MockAudioContext | null,
     };
     class MockAudioParam {
@@ -142,7 +144,17 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
         },
       },
     });
-    const audioSession = { type: 'auto', state: 'inactive' };
+    let audioSessionType = 'auto';
+    const audioSession = {
+      get type() {
+        return audioSessionType;
+      },
+      set type(value: string) {
+        audioSessionType = value;
+        probe.audioSessionAssignments.push(value);
+      },
+      state: 'inactive',
+    };
     Object.defineProperty(navigator, 'audioSession', {
       configurable: true,
       value: audioSession,
@@ -159,7 +171,7 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       value: {
         getUserMedia: async () => {
           probe.getUserMediaRequests += 1;
-          audioSession.type = 'play-and-record';
+          audioSessionType = 'play-and-record';
           audioSession.state = 'active';
           const track = new MockTrack();
           return { getTracks: () => [track] };
@@ -261,12 +273,17 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       () => (window as AudioProbeWindow).__audioProbe.getUserMediaRequests,
     ),
   ).toBe(0);
+  expect(
+    await page.evaluate(
+      () => (window as AudioProbeWindow).__audioProbe.audioSessionAssignments,
+    ),
+  ).toEqual([]);
 
   await page.evaluate(() =>
     (window as AudioProbeWindow).__audioProbe.context?.interrupt(),
   );
   await expect(page.getByLabel('Reference drone status')).toContainText(
-    'interrupted',
+    'Reference audio paused by the browser. Tap the selected note to restart.',
   );
   await expect(panel).toContainText('Explicit reactivationrequired');
   await c4.click();
@@ -275,6 +292,52 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   );
   await expect(panel).toContainText('before drone retry');
   await expect(panel).toContainText('after drone retry');
+
+  const cSharp4 = page.locator('.reference-key[data-midi="61"]');
+  const d4 = page.locator('.reference-key[data-midi="62"]');
+  await page.evaluate(() => {
+    (
+      document.querySelector('.reference-key[data-midi="61"]') as HTMLElement
+    )?.click();
+    (
+      document.querySelector('.reference-key[data-midi="62"]') as HTMLElement
+    )?.click();
+  });
+  await expect(d4).toHaveAttribute('data-sounding', 'true');
+  await expect(cSharp4).not.toHaveAttribute('data-sounding');
+  await expect(d4).not.toHaveAttribute('data-pressed');
+  await c4.click();
+  await expect(c4).toHaveAttribute('data-sounding', 'true');
+
+  await c4.dispatchEvent('pointerdown', { pointerId: 41 });
+  await expect(c4).toHaveAttribute('data-pressed', 'true');
+  const contextsBeforePageHide = await page.evaluate(
+    () => (window as AudioProbeWindow).__audioProbe.contexts,
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await expect(c4).not.toHaveAttribute('data-pressed');
+  await expect(c4).not.toHaveAttribute('data-sounding');
+  await expect(page.getByLabel('Reference drone status')).toContainText(
+    'Reference audio paused by the browser. Tap the selected note to restart.',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+  expect(
+    await page.evaluate(
+      () => (window as AudioProbeWindow).__audioProbe.contexts,
+    ),
+  ).toBe(contextsBeforePageHide);
+  await c4.click();
+  await expect(page.getByLabel('Reference drone status')).toContainText(
+    'Reference drone playing C4',
+  );
+  expect(
+    await page.evaluate(
+      () => (window as AudioProbeWindow).__audioProbe.contexts,
+    ),
+  ).toBe(contextsBeforePageHide + 1);
+  await expect(
+    page.getByText(/Diagnostic actions unavailable: Stop the reference drone/),
+  ).toBeVisible();
   await c4.click();
   await expect(page.getByLabel('Reference drone status')).toContainText(
     'stopped',
@@ -357,6 +420,20 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   );
   await expect(panel).toContainText('after microphone Stop');
 
+  const sessionExperiment = page.getByRole('button', {
+    name: 'Prepare playback and recreate output context',
+  });
+  await sessionExperiment.click();
+  await expect(sessionExperiment).toBeEnabled({ timeout: 2500 });
+  await expect(
+    page.getByLabel('Audio-session experiment result'),
+  ).toContainText('prepared; play-and-record → playback');
+  expect(
+    await page.evaluate(
+      () => (window as AudioProbeWindow).__audioProbe.audioSessionAssignments,
+    ),
+  ).toEqual(['playback', 'play-and-record']);
+
   await page
     .getByRole('group', { name: 'Persistent drone audible' })
     .getByRole('button', { name: 'No', exact: true })
@@ -389,7 +466,12 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
     await page.evaluate(
       () => (window as AudioProbeWindow).__audioProbe.copiedReport,
     ),
-  ).toContain('AudioSession preparation: prepared');
+  ).toContain('AudioSession preparation: not-requested');
+  expect(
+    await page.evaluate(
+      () => (window as AudioProbeWindow).__audioProbe.copiedReport,
+    ),
+  ).toContain('diagnostic session preparation: prepared');
   expect(
     await page.evaluate(
       () => (window as AudioProbeWindow).__audioProbe.copiedReport,
