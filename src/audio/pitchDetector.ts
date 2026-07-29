@@ -70,6 +70,7 @@ export function detectPitchYin(
 
       const thresholdCandidate = findThresholdCandidate(
         difference,
+        minimumLag,
         maximumLag,
         config.yinThreshold,
       );
@@ -193,10 +194,11 @@ function normalizeDifference(difference: Float64Array, maximumLag: number) {
 
 function findThresholdCandidate(
   difference: Float64Array,
+  minimumLag: number,
   maximumLag: number,
   threshold: number,
 ): number | null {
-  for (let lag = 2; lag <= maximumLag; lag += 1) {
+  for (let lag = minimumLag; lag <= maximumLag; lag += 1) {
     if (difference[lag] < threshold) {
       while (lag + 1 <= maximumLag && difference[lag + 1] < difference[lag])
         lag += 1;

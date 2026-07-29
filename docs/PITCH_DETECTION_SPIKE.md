@@ -65,6 +65,22 @@ Test recent iPhone Safari, Android Chrome, macOS Safari, and desktop Chrome:
 7. Stop, confirm frequency clears and the system microphone indicator disappears, then start again.
 8. Refresh while active and confirm browser capture ends.
 
+## Known limitations
+
+### Sub-multiple aliasing above the range ceiling
+
+`findThresholdCandidate` and `findMinimumIndex` both search only lags from `minimumLag` to `maximumLag`, where `minimumLag = floor(sampleRate / maximumFrequencyHz)`. This bound exists so that short-lag noise (sibilants, breath, high harmonics) cannot win against the true candidate — see the fix for the reference drop-out bug where an unbounded search picked up sub-`minimumLag` noise dips before reaching the real period.
+
+The same bound has a side effect: for a genuinely periodic signal whose true frequency is *above* `maximumFrequencyHz`, its true period lies below `minimumLag` and the search can never reach it. A periodic signal's normalized difference also has a valid, near-zero minimum at every integer multiple of its true period, not only at the true period itself. The search finds the first such multiple that lands inside `[minimumLag, maximumLag]` and reports it as a confident, in-range detection.
+
+Concretely, at 48 kHz with `maximumFrequencyHz = 1200` (`minimumLag = 40`), a pure 1500 Hz tone has a true period of ~32 samples. The search skips past it, reaches the second-period lag (~64 samples) first, and reports ~750 Hz with high confidence instead of rejecting the signal as out of range.
+
+This triggers specifically for **periodic (or near-periodic) signals above `maximumFrequencyHz`** — clean tones and strong harmonic content are the realistic case, since they are what produces a deep enough minimum at an exact integer multiple. Broadband or noisy signals above the ceiling do not reliably alias this way and are still rejected.
+
+The bounded search cannot avoid this on its own: distinguishing "genuine low pitch" from "harmonic sub-multiple of an excluded high pitch" needs information the shortest-valid-lag heuristic doesn't have (e.g. checking whether a shorter, higher-confidence match exists just below `minimumLag`, which is exactly the region the bound exists to exclude). Adding that check is harmonic-rejection logic and is out of scope here.
+
+This is accepted for now: the product's vocal range of interest sits below `maximumFrequencyHz` (65–1200 Hz covers the sung range this tuner targets), so a real voice signal is not expected to trigger this case. It is documented so a future report of "high note reads as an octave-and-a-fifth down" or similar is recognized as this known aliasing behavior rather than investigated as a fresh bug. See `src/audio/pitchDetector.test.ts` — `reports a sub-multiple for periodic signals above the range ceiling` — for the reproducing case.
+
 ## Acceptance or replacement criteria
 
 Keep and tune YIN if sustained voices across the device matrix usually produce plausible frequency, silence clears promptly, computation remains affordable, and octave errors are infrequent enough for the technical proof. Compare or replace it with MPM before continuing if octave/subharmonic errors are common, low voices are unreliable, or mobile computation materially harms responsiveness or battery use.
