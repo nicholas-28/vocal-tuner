@@ -43,7 +43,7 @@ Deployment browser coverage runs two separate production bundles:
 
 - `npm run test:e2e:production` builds without test controls and verifies deep-link loading, no automatic permission request, hidden production diagnostics, rejected public mock flags, manifest delivery, and 320 px layout.
 - `npm run test:e2e:demo` builds with the explicit local `VITE_ENABLE_TEST_CONTROLS=true` flag and retains deterministic tuner, target, practice, timeline, drone, and range coverage.
-- `npm run test:e2e:ios` builds production and runs a mobile WebKit diagnostic sequence with a prefixed constructor, suspended/running/interrupted recovery, gesture sequencing, active/silent analyser fixtures, persistent/direct/constant/native/recreated output comparisons, no microphone request from reference controls, bounded microphone/session snapshots, production playback-session preparation/restoration, harmonic-profile transitions, copied report, and 320 px layout.
+- `npm run test:e2e:ios` builds production and runs a mobile WebKit diagnostic sequence with a prefixed constructor, suspended/running/interrupted recovery, gesture sequencing, active/silent analyser fixtures, persistent/direct/constant/native/recreated output comparisons, no microphone request or AudioSession write from normal reference controls, diagnostic-only playback-session preparation/restoration, harmonic-profile transitions, copied report, and 320 px layout.
 - `npm run test:e2e` runs all three flows. None contacts Vercel or requires credentials.
 
 Automated WebKit confirms browser integration and state truthfulness but cannot prove physical iPhone audibility, device routing, media volume, mute behavior, or installed-home-screen differences. Issue 018.1 must not merge until the physical checklist in `IOS_SAFARI_AUDIO_DEBUGGING.md` passes on the deployed Preview URL.
@@ -63,6 +63,8 @@ Minimum:
 - Android Chrome;
 - macOS Safari;
 - desktop Chrome.
+
+**Precondition for any audio test on iPhone:** confirm the hardware mute (ring/silent) switch is in ring/sound-enabled position before testing, and record its position. iOS Safari's Web Audio respects that switch while `HTMLAudioElement` does not, so a muted switch produces a silent-output result that is indistinguishable from a real defect unless this is checked first — see `docs/DECISIONS.md` ADR-028 and `IOS_SAFARI_AUDIO_DEBUGGING.md`.
 
 ## Real-voice testing
 

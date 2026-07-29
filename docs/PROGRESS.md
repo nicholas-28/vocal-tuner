@@ -222,7 +222,7 @@ Implemented on branch `issue-018-vercel-deployment`.
 
 ## Issue 018.1 — Diagnose and fix iOS Safari reference-drone playback
 
-Implemented on branch `issue-018-1-ios-safari-reference-drone`; physical iPhone acceptance remains pending.
+Implemented on branch `issue-018-1-ios-safari-reference-drone`; closed after physical verification identified the actual cause (see below).
 
 - Moved context resume, zero-gain voice connection, and oscillator start into the trusted activation task
 - Delayed attack and `playing` until actual running state and rendering-clock advancement
@@ -237,9 +237,19 @@ Implemented on branch `issue-018-1-ios-safari-reference-drone`; physical iPhone 
 - Compact mobile comparison UI with local audibility annotations and expanded plain-text report
 - Physical iOS evidence now isolates a microphone-triggered audio-session/output-route wake-up while the contexts remain separate
 - Bounded pre/post `getUserMedia`, microphone-context, Stop, drone-retry, focus, session, track, and signal snapshots
-- Production capability-gated `playback` preparation before fresh output-context construction, with safe prior-type restoration and no microphone request
-- Removed superseded interactive session experiments and phase annotations while retaining the compact cross-context timeline
+- Physical iPhone follow-up rejected production `playback` preparation: it remained silent before capture and regressed key/lifecycle behavior
+- Rolled normal AudioSession mutation back; retained one explicit prepare-playback-plus-fresh-context action in diagnostic mode only
+- Split pressed, selected, pending, confirmed-sounding, needs-reactivation, and error presentation into deterministic states
+- Newest-command-wins activation prevents stale rapid taps from owning the voice or publishing an obsolete failure
+- Hidden/pagehide invalidates the voice; foreground never auto-plays, and the next explicit gesture creates a fresh output context
 - Default pitch-preserving, normalized range-aware harmonic timbre with exact sine fallback and unchanged 0.16 gain ceiling
 - Production backend remains Web Audio; no microphone requirement or unproven native-media fallback
-- Mobile WebKit deterministic coverage without claiming physical audibility
+- Mobile WebKit deterministic coverage without claiming physical audibility; fresh iPhone validation remains required before merge
 - No Firebase, backend, recording, analytics, tracking, or new dependency
+
+**Closing outcome.** The reference drone was never broken. iOS Safari's Web Audio respects the iPhone hardware mute switch; `HTMLAudioElement` does not. With the switch in silent position, a fully healthy, confirmed-`running` Web Audio graph produces no audible output — this explains every "graph looks right but I hear nothing" observation collected during this issue, including the `getUserMedia` correlation (capture moves the audio session into a category the switch does not silence). Verified manually on one physical iPhone: switch in ring position, clean tree at `68ea3e8`, no microphone started, drone audible. See `docs/DECISIONS.md` ADR-028.
+
+- Several iterations (ADR-024 through ADR-027: pre-destination analyser, isolated Web Audio/native comparisons, an AudioSession `playback`-category write, and its rollback) investigated a cause that did not exist. A two-minute hardware check — flip the switch, retest — would have settled the question before any of that work started.
+- Lesson learned: verify external and physical device conditions (mute switches, volume, output route) before deep-diving platform or browser internals. The diagnostic tooling built along the way (pre-destination analyser, native-media comparison, bounded lifecycle timeline) is retained and remains useful for future audio issues; the causal conclusions drawn from it during this issue were not, and have been corrected in `docs/DECISIONS.md` and `IOS_SAFARI_AUDIO_DEBUGGING.md`.
+- The AudioSession-mutation workaround was removed from the production activation path; it never affected audibility, so removing it cost nothing. The diagnostics-gated experiment that still exists is a documented negative result and a deletion candidate in a future cleanup.
+- The `pendingMidi`/`recoveryState` presentation-state split and newest-command-wins activation serialization, both introduced while investigating this issue, are unrelated to the audibility question, fix a real activation race, and remain in place on their own merits.

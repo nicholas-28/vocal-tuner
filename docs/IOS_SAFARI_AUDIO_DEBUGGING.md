@@ -1,12 +1,22 @@
 # iPhone Safari reference-audio debugging
 
-Issue 018.1 responds to a production report where the reference drone was silent on a physical iPhone even though desktop playback worked. Repository investigation found that context construction and `resume()` began in the trusted click, but oscillator creation and `start()` happened only after awaiting the resume promise. WebKit applies stricter user-gesture timing to Web Audio rendering, so the first repair prepares and starts a zero-gain source before yielding, then raises its envelope only after state and rendering-clock confirmation.
+Issue 018.1 responds to a production report where the reference drone was silent on a physical iPhone even though desktop playback worked. Most of this document was written while that report was still open and unexplained; it has been restructured after physical verification identified the actual cause. See `docs/DECISIONS.md` ADR-028 for the decision-log entry.
 
-That repair fixed a real activation defect but did not restore physical output. A Preview tested in ordinary Safari 18.4 on iOS 18.4.1 reported a standard `AudioContext`, 48 kHz sample rate, `running` state, advancing rendering clock, started oscillator, connected graph, voice gain `1.0`, master gain about `0.16`, and no error. Both the persistent drone and original one-second engine test remained inaudible. Connection flags and `AudioParam.value` describe control state; they do not prove that rendered buffers contain non-zero samples or that the physical route receives them.
+## Root cause: the hardware mute switch
 
-The decisive physical comparison established that capture changes the outcome: the drone is inaudible in a fresh ordinary Safari tab, then the same unrecreated drone becomes audible immediately after `getUserMedia` starts and remains audible after capture stops. Note changes work throughout. The pre-destination analyser simultaneously reports a strong digital signal (approximately `0.09–0.11` RMS and `0.13–0.16` peak). The microphone context is separate, is created only after permission resolves, and has no destination connection. The failure is therefore downstream of the analyser: WebKit has not activated the physical output session/route for ambient Web Audio, while capture activates the shared page audio session and route.
+The reference drone was never broken. iOS Safari's Web Audio implementation respects the iPhone's hardware mute (ring/silent) switch. `HTMLAudioElement` does not. With the switch in silent position, a fully connected, `running`, otherwise-healthy Web Audio graph produces no audible output — every readiness check the engine performs (context state, rendering-clock advancement, graph connections, gain values) can pass while the switch alone accounts for the silence.
 
-Automated WebKit tests verify sequencing and state truthfulness. They cannot prove that a physical iPhone speaker or routed output is audible. Physical testing is the merge gate.
+Verified manually on one physical iPhone: clean tree at commit `68ea3e8`, ordinary Safari tab, switch in ring (sound-enabled) position, no microphone started — the drone was audible. This is one device, checked once. It has not been confirmed across iOS versions or audited against WebKit source.
+
+This also explains the `getUserMedia` correlation documented below: starting microphone capture moves the page's OS audio session into a recording category. Apple's published audio-session-category behavior distinguishes sound-effect/game-audio categories, which the switch silences, from playback and recording categories, which it does not. The drone becoming audible after `getUserMedia` was a side effect of leaving the mute-switch-affected category, not a graph dependency, a route "wake-up," or an undocumented WebKit transition. **Microphone capture is not required for drone audibility** and never was; it only appeared necessary because every comparison that used it also happened to escape the muted category.
+
+## Check this before anything else
+
+Before opening diagnostics, reproducing a report, or reading the investigation history below:
+
+1. Check the iPhone's physical mute switch. Ring visible / switch toward the screen back = sound enabled. Orange visible = silent. This alone explains most "graph looks healthy but I hear nothing" reports.
+2. Confirm basic device audio with a known media source (e.g. the Music app, or any plain `<audio>` element) — this confirms volume, output route, and Bluetooth/AirPlay are not separately at fault. It will play regardless of the switch, since native media playback isn't silenced by it, so it isn't a substitute for step 1.
+3. Only if the switch is confirmed in ring position and the drone is still silent, proceed to the diagnostic mode and the physical acceptance sequence below.
 
 ## Production diagnostic mode
 
@@ -16,34 +26,31 @@ Open:
 
 Production diagnostics remain hidden without this exact query flag. The mode exposes read-only browser, context, graph, gain, interruption, lifecycle, and generation state. It does not enable `centsMeterDemo`, fabricated pitch, practice controls, admin behavior, recording, or microphone samples.
 
-The action area now provides five explicit comparisons:
+The action area provides six explicit comparisons:
 
 - **Play 1-second output test** uses the persistent engine/master/analyser path.
 - **Play direct Web Audio test** uses a temporary ramped gain and analyser connected directly to the current context destination.
 - **Play Web Audio test with constant gain** uses a temporary direct path with gain set at the running context time and no ramp.
-- **Play native audio test** plays a locally generated one-second PCM WAV through an `HTMLAudioElement`, outside Web Audio.
+- **Play native audio test** plays a locally generated one-second PCM WAV through an `HTMLAudioElement`, outside Web Audio. Because `HTMLAudioElement` ignores the mute switch, this test staying audible while the others are silent is now understood to usually mean the switch is engaged, not that something else is broken.
 - **Recreate audio output context** cleans and closes the retained graph, creates a new context in the tap, and runs the direct constant-gain test.
+- **Prepare playback session, recreate context, and test** temporarily writes the capability-detected AudioSession type, then runs the fresh-context test and restores the prior type. This action is a retained negative result, not a working repair (see ADR-028 in `docs/DECISIONS.md`): it does not change audibility. It is kept because it is diagnostics-gated and harmless, and is a deletion candidate during a future cleanup.
 
-The resolved microphone-dependency annotations and interactive audio-session experiments have been removed. The action area retains the isolated output comparisons, while the compact timeline records the production session preparation and later microphone transitions.
+Normal reference activation does not mutate AudioSession and never calls `getUserMedia`. Only the labeled diagnostic action above writes `navigator.audioSession.type`.
 
 Tests cannot overlap the drone or each other. They do not select a note or mutate microphone, history, target, or practice state. Manual Yes/No annotations are local, non-persistent, and included in **Copy audio diagnostic report**. If Clipboard API access fails, a selected read-only textarea appears.
 
-When diagnostics are enabled, the persistent audible path is `oscillator → voice gain → master gain → output analyser → destination`. The analyser reads 1,024-sample time-domain buffers at 8 Hz only while output is expected. One reusable array and one sampling interval are used. It classifies active or silent only after three consecutive measurements at a centralized RMS-or-peak threshold of `0.0001`; until then the result is not measured. Sampling stops on idle, hiding, replacement, pagehide, and disposal. These values measure the digital signal immediately before `AudioDestinationNode`, not the speaker.
+When diagnostics are enabled, the persistent audible path is `oscillator → voice gain → master gain → output analyser → destination`. The analyser reads 1,024-sample time-domain buffers at 8 Hz only while output is expected. One reusable array and one sampling interval are used. It classifies active or silent only after three consecutive measurements at a centralized RMS-or-peak threshold of `0.0001`; until then the result is not measured. Sampling stops on idle, hiding, replacement, pagehide, and disposal. These values measure the digital signal immediately before `AudioDestinationNode`, not the speaker — a healthy analyser reading and physical silence are both expected simultaneously when the mute switch is engaged.
 
 The copied report contains a bounded 40-entry cross-context timeline. Snapshots are captured at page load, before/after drone context creation, after drone resume, before/after retry, before `getUserMedia`, immediately after capture resolves, after the microphone analysis context starts, and after microphone Stop. They include session type/state, both context states/sample rates, destination channels, track count/readiness, visibility/focus, and last output RMS/peak. No microphone sample data is read by this timeline.
 
-## Current AudioSession decision
+## What we ruled out and why
 
-The [Audio Session Working Draft](https://www.w3.org/TR/audio-session/) defines `auto`, `playback`, and `play-and-record`; microphone tracks contribute a play-and-record element. [WebKit issue 237322](https://bugs.webkit.org/show_bug.cgi?id=237322) associates `playback` with speaker-oriented Web Audio behavior. [WebKit issue 282939](https://bugs.webkit.org/show_bug.cgi?id=282939) records iOS route changes after `getUserMedia` and a `playback` → `auto` route-reset workaround. The production policy is therefore:
+This section is investigation history, kept for anyone debugging a future audio report on this codebase. Each item below was a real hypothesis, tested with real evidence, and superseded once the mute switch was identified. It is not a list of open questions — all of it is closed.
 
-- normal reference playback remains Web Audio and feature-detects the draft API without browser sniffing;
-- an inactive session receives a temporary `playback` assignment before context construction;
-- a retained stopped output context is discarded after preparation, then replaced and started synchronously in the same key gesture;
-- the prior type is restored on the next task only if the session still has the temporary `playback` value;
-- an active session is not changed, preserving an already-running microphone;
-- starting the drone never calls `getUserMedia`;
-- browsers without `navigator.audioSession` keep the prior Web Audio behavior;
-- native media remains diagnostic and is not a production fallback.
+- **Trusted-activation timing gap (ADR-023).** A real defect, unrelated to the mute switch: context construction and `resume()` began in the trusted click, but oscillator creation and `start()` happened only after awaiting the resume promise, and WebKit applies stricter transient-activation rules to starting Web Audio rendering. The fix — create/connect/start a zero-gain source synchronously in the gesture, raise the envelope only after state and rendering-clock confirmation — is correct and remains in place. It did not, and could not, address a hardware switch.
+- **"The Web Audio graph is inaudible on iPhone despite passing every readiness check" (ADR-024).** Ruled out as a graph or route defect. The pre-destination analyser and native-media comparisons built to test this theory reported exactly the pattern the mute switch produces: a healthy analyser reading with physical silence, and an audible native-media test at the same time. That pattern was real; the "broken route" interpretation of it was not.
+- **"`getUserMedia` wakes or repairs the audio route" (ADR-025).** Ruled out as a wake-up or repair mechanism. The correlation — starting the microphone made the drone audible — was real and reproducible. The mechanism was a mute-switch-exempt audio-session category change caused by capture, not a dependency between the microphone graph and the drone's output graph. The two contexts never shared a node, and stopping capture did not silence the drone.
+- **"Writing `navigator.audioSession.type = 'playback'` reproduces the fix" (ADR-026).** Tested and rejected on device: it did not restore audibility and it regressed key/lifecycle presentation. This is consistent with the corrected understanding — the actual variable (the physical switch) is outside the application and not something this Working-Draft API controls, at least not in the WebKit build tested. Why the write measured as ineffective (whether it simply doesn't produce the same category change `getUserMedia` does, or something else) is Unknown; this was not investigated further once the switch was identified as the cause.
 
 ## Enable Safari Web Inspector
 
@@ -66,45 +73,45 @@ The [Audio Session Working Draft](https://www.w3.org/TR/audio-session/) defines 
 
 Record the iPhone model, iOS version, ordinary Safari tab or installed-home-screen mode, Production or Preview URL, and output route.
 
-1. Confirm media volume is audible with a known media source.
-2. Check the current output route, including Bluetooth, AirPlay, wired headphones, and the built-in speaker.
-3. Record silent-mode state as an observed device variable; do not assume it is the software cause.
+1. Confirm the hardware mute switch is in ring (sound-enabled) position. Record its position explicitly — do not assume it, and do not skip this because a prior run already checked it.
+2. Confirm media volume is audible with a known media source.
+3. Check the current output route, including Bluetooth, AirPlay, wired headphones, and the built-in speaker.
 4. Keep the Safari tab in the foreground.
 5. Reload diagnostics and confirm no context exists before a tap.
-6. Without starting the microphone, test A4 and confirm the report shows session preparation before context creation.
+6. Without starting the microphone, test A4 and confirm normal activation records no AudioSession assignment.
 7. Test C3, E3, G3, C4, and A4; record practical loudness and harmonic-profile diagnostics.
-8. Stop and restart the drone; confirm the retained output context is replaced after a new inactive-session preparation.
-9. Start microphone capture normally and test the same notes while the drone is active.
+8. Stop and restart the drone; confirm a healthy stopped output context is retained.
+9. Start microphone capture normally and test the same notes while the drone is active. This is a regression check, not a precondition — audibility should already have held at step 7 with the switch in ring position and no microphone use.
 10. Stop the microphone and test the drone again without reloading.
 11. Confirm the microphone was requested exactly once and never by a reference-key action.
-12. Run the direct, constant-gain, and native-media comparisons if the preparation result remains ambiguous.
-13. Background Safari, return to the foreground, confirm no auto-start, and retry explicitly.
-14. Repeat the core comparison on built-in speaker and available wired/Bluetooth headphones.
-15. Copy the completed report before reloading.
+12. Run the direct, constant-gain, and native-media comparisons if any result remains ambiguous. If the native-media test is audible while the drone is not, check the switch again before concluding anything else.
+13. Background Safari, return to the foreground, confirm no auto-start and a needs-reactivation message, then retry explicitly and confirm a fresh context generation.
+14. With the drone stopped, run the labeled playback-session/context-recreation diagnostic and confirm it remains a no-op for audibility (see "What we ruled out and why" above).
+15. Repeat the core comparison on built-in speaker and available wired/Bluetooth headphones.
+16. Copy the completed report before reloading.
 
-Expected successful diagnostics are context `running`, resume `resolved` when requested, rendering clock `advanced`, oscillator started, both gain connections present, destination connected, non-zero protected master gain above 0% volume, and engine `playing`. These values prove digital rendering readiness, not physical speaker routing.
+Expected successful diagnostics are context `running`, resume `resolved` when requested, rendering clock `advanced`, oscillator started, both gain connections present, destination connected, non-zero protected master gain above 0% volume, and engine `playing`. These values prove digital rendering readiness, not physical speaker routing — with the switch engaged, all of them can be true simultaneously with total physical silence.
 
 ## Report interpretation
 
 - `suspended` after a resolved resume: output activation was rejected; tap again and retain the report.
 - `interrupted`: iOS interrupted the context; return to the foreground and use a new explicit playback gesture.
 - `running` with rendering clock `stalled`: the context reported a false-ready state; the UI must remain in error rather than claim playback.
-- `running` with clock `advanced` and valid graph but silence: inspect media volume, mute state, Bluetooth/AirPlay route, headphones, tab state, and device/iOS-specific WebKit behavior.
+- `running` with clock `advanced` and valid graph but silence: check the hardware mute switch first (see above). If the switch is confirmed in ring position and silence persists, then inspect media volume, Bluetooth/AirPlay route, headphones, tab state, and device/iOS-specific WebKit behavior.
 - `closed`: the next explicit gesture creates a new context generation.
 - constructor `webkitAudioContext`: the standard constructor was absent and the runtime used the prefixed capability fallback.
 
 ## Comparison interpretation
 
-- Web Audio active + native audible + Web Audio inaudible: likely an iOS Web Audio destination/session problem.
-- Web Audio active + native also inaudible: investigate route, media volume, mute policy, Bluetooth/AirPlay, page state, or broader media output.
-- Web Audio silent + native audible: the Web Audio control graph is alive but is not rendering non-zero samples.
+- Web Audio active + native audible + Web Audio inaudible: check the hardware mute switch first — this is its expected signature, since `HTMLAudioElement` ignores the switch and Web Audio does not. Only investigate an iOS Web Audio destination/session problem once the switch is confirmed in ring position.
+- Web Audio active + native also inaudible: the switch is not the explanation by itself; investigate route, media volume, Bluetooth/AirPlay, page state, or broader media output.
+- Web Audio silent + native audible: with the switch confirmed in ring position, the Web Audio control graph is alive but is not rendering non-zero samples; with the switch in silent position, this is the expected mute-switch signature, not a graph defect.
 - Direct Web Audio audible + persistent inaudible: investigate the retained master/envelope lifecycle.
-- Persistent and direct paths active but inaudible: investigate destination/session behavior beyond graph construction.
+- Persistent and direct paths active but inaudible: with the switch confirmed in ring position, investigate destination/session behavior beyond graph construction.
 - Constant gain active while ramped gain is silent: investigate automation timing; do not remove production envelopes without physical proof.
-- Failure before microphone despite `Session preparation: prepared` means the temporary session pulse or context replacement still needs adjustment on that iOS build.
-- Successful drone playback followed by successful capture verifies that prior-type restoration preserved microphone compatibility.
+- The diagnostic playback-session preparation reporting `prepared` does not, and is not expected to, change audibility. Its result is retained for the report but is not diagnostic of anything beyond confirming the write itself succeeded.
 - `play-and-record` or microphone capture producing only quiet output may indicate receiver/communications routing rather than insufficient Web Audio gain.
 
-The production path writes only the feature-detected `navigator.audioSession.type` preparation described above. It does not inspect the user agent, select a native backend, or request microphone access.
+The production path does not write `navigator.audioSession.type`, inspect the user agent, select a native backend, or request microphone access. The labeled diagnostic session experiment is the sole writer, and it is a documented negative result rather than a mechanism to reason about when interpreting audibility.
 
-The report contains deployment version/SHA, parsed iOS/Safari version, context and analyser generations, automation metadata, selected backend, harmonic profile and partials, predicted/observed peak, production session preparation/restoration, native events, the audio-session timeline, visibility state, and the bounded lifecycle log. It contains no microphone audio, recording, account information, token, or secret. This production diagnostic surface is temporary and hidden without `audioDiagnostics=1`.
+The report contains deployment version/SHA, parsed iOS/Safari version, context and analyser generations, automation metadata, selected backend, harmonic profile and partials, predicted/observed peak, diagnostic session snapshots, native events, the audio-session timeline, visibility state, and the bounded lifecycle log. It contains no microphone audio, recording, account information, token, or secret. This production diagnostic surface is temporary and hidden without `audioDiagnostics=1`.
