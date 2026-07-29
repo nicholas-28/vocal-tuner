@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { PitchMonitor } from '../components/PitchMonitor';
 import { PitchDiagnostics } from '../components/PitchDiagnostics';
 import { DeveloperBuildInfo } from '../components/DeveloperBuildInfo';
@@ -15,12 +15,37 @@ import { usePitchContinuity } from '../hooks/usePitchContinuity';
 import { useVisiblePitchRange } from '../hooks/useVisiblePitchRange';
 import { useCentsMeterDemo } from '../hooks/useCentsMeterDemo';
 import { createRuntimeFeaturePolicy } from '../config/runtimeFeatures';
+import { createAudioSessionDiagnosticTimeline } from '../audio/audioSessionDiagnostics';
 
 export function App() {
   const runtimeFeatures = useMemo(
     () => createRuntimeFeaturePolicy(window.location.search),
     [],
   );
+  const audioSessionTimeline = useMemo(
+    () =>
+      runtimeFeatures.showAudioDiagnostics
+        ? createAudioSessionDiagnosticTimeline()
+        : null,
+    [runtimeFeatures.showAudioDiagnostics],
+  );
+  useEffect(() => {
+    if (!audioSessionTimeline) return;
+    const onVisibility = () =>
+      audioSessionTimeline.capture(
+        `page visibility: ${document.visibilityState}`,
+      );
+    const onFocus = () => audioSessionTimeline.capture('page focus');
+    const onBlur = () => audioSessionTimeline.capture('page blur');
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [audioSessionTimeline]);
   const pitch = usePitchDetection();
   const continuity = usePitchContinuity();
   const history = usePitchHistory();
@@ -40,6 +65,8 @@ export function App() {
       continuity.reset();
       history.stopSession();
     },
+    onAudioDiagnosticEvent: (event) =>
+      audioSessionTimeline?.captureMicrophone(event),
   });
   const musicalPitch = useMusicalPitchFromDetection(
     continuity.state.lastAcceptedPitch,
@@ -121,6 +148,8 @@ export function App() {
         showReferenceDroneDiagnostics={
           runtimeFeatures.showReferenceDroneDiagnostics
         }
+        showAudioDiagnostics={runtimeFeatures.showAudioDiagnostics}
+        audioSessionTimeline={audioSessionTimeline}
       />
       <MicrophoneControls
         state={state}

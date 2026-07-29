@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useEffect,
   type CSSProperties,
 } from 'react';
 import { useCanvasViewport } from '../hooks/useCanvasViewport';
@@ -16,6 +17,8 @@ import type { PitchHistory } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
 import type { MusicalPitch } from '../types/musicalPitch';
 import type { PitchContinuityStatus } from '../types/pitchContinuity';
+import type { AudioSessionDiagnosticTimeline } from '../types/audioDiagnostics';
+import type { ReferenceDroneDiagnostics as DroneDiagnostics } from '../types/referenceDrone';
 import { drawPitchCurve } from '../visualization/drawPitchCurve';
 import { drawPitchGrid } from '../visualization/drawPitchGrid';
 import { DEFAULT_PITCH_CURVE_CONFIG } from '../visualization/pitchCurveConfig';
@@ -50,6 +53,8 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
   observationTimestampMs?: number | null;
   practiceMicrophoneActive?: boolean;
   showReferenceDroneDiagnostics?: boolean;
+  showAudioDiagnostics?: boolean;
+  audioSessionTimeline?: AudioSessionDiagnosticTimeline | null;
 };
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
@@ -68,6 +73,8 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   observationTimestampMs = null,
   practiceMicrophoneActive = active,
   showReferenceDroneDiagnostics = false,
+  showAudioDiagnostics = false,
+  audioSessionTimeline = null,
 }: PitchGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,7 +84,19 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
     [lowMidi, highMidi],
   );
   const referenceKeyboard = useReferenceKeyboard(visibleRange);
-  const referenceDrone = useReferenceDrone();
+  const droneDiagnosticObserver = useCallback(
+    (label: string, diagnostics: DroneDiagnostics) =>
+      audioSessionTimeline?.captureDrone(label, diagnostics),
+    [audioSessionTimeline],
+  );
+  const referenceDrone = useReferenceDrone(
+    undefined,
+    showAudioDiagnostics,
+    droneDiagnosticObserver,
+  );
+  useEffect(() => {
+    audioSessionTimeline?.updateDrone(referenceDrone.snapshot.diagnostics);
+  }, [audioSessionTimeline, referenceDrone.snapshot.diagnostics]);
   const practice = useTargetPracticeSession({
     selectedMidi: referenceKeyboard.state.selectedMidi,
     microphoneActive: practiceMicrophoneActive,
@@ -177,7 +196,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
           onMoveFocus={referenceKeyboard.moveFocus}
           onFocusMidi={referenceKeyboard.setFocusedMidi}
           onActivateMidi={activateReferenceMidi}
-          activeDroneMidi={referenceDrone.snapshot.activeMidi}
+          droneSnapshot={referenceDrone.snapshot}
           selectionLocked={practice.targetSelectionLocked}
         />
         <figure
@@ -232,9 +251,23 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
         measurementTimestampMs={measurementTimestampMs}
       />
       <TargetPracticeSession model={practice} />
-      {showReferenceDroneDiagnostics && (
+      {(showReferenceDroneDiagnostics || showAudioDiagnostics) && (
         <ReferenceDroneDiagnostics
           diagnostics={referenceDrone.snapshot.diagnostics}
+          audioDiagnosticMode={showAudioDiagnostics}
+          onPlayOutputTest={() =>
+            void referenceDrone.playOutputTestFromUserGesture()
+          }
+          onPlayDirectOutputTest={() =>
+            void referenceDrone.playDirectOutputTestFromUserGesture()
+          }
+          onPlayConstantGainOutputTest={() =>
+            void referenceDrone.playConstantGainOutputTestFromUserGesture()
+          }
+          onRecreateContext={
+            referenceDrone.recreateContextAndPlayOutputTestFromUserGesture
+          }
+          audioSessionTimeline={audioSessionTimeline}
         />
       )}
     </div>

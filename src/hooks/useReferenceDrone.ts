@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createReferenceDroneEngine } from '../audio/referenceDroneEngine';
+import { selectAudioContextConstructor } from '../audio/referenceDroneContext';
 import {
   createInitialReferenceDroneDiagnostics,
   DEFAULT_REFERENCE_DRONE_CONFIG,
@@ -8,25 +9,39 @@ import { createReferenceKey } from '../reference/referenceKeyboard';
 import type {
   ReferenceDroneEngine,
   ReferenceDroneEngineFactory,
+  ReferenceDroneDiagnosticObserver,
   ReferenceDroneSnapshot,
 } from '../types/referenceDrone';
 
 export function createInitialReferenceDroneSnapshot(): ReferenceDroneSnapshot {
+  const constructorName = selectAudioContextConstructor().name;
   return {
     status: 'stopped',
     activeMidi: null,
+    pendingMidi: null,
     frequencyHz: null,
     volume: DEFAULT_REFERENCE_DRONE_CONFIG.defaultVolume,
     errorCode: null,
-    diagnostics: createInitialReferenceDroneDiagnostics(),
+    recoveryState: 'ready',
+    diagnostics: createInitialReferenceDroneDiagnostics(constructorName),
   };
 }
 
-const defaultEngineFactory: ReferenceDroneEngineFactory = (initialVolume) =>
-  createReferenceDroneEngine({ initialVolume });
+const defaultEngineFactory: ReferenceDroneEngineFactory = (
+  initialVolume,
+  diagnosticsEnabled,
+  diagnosticObserver,
+) =>
+  createReferenceDroneEngine({
+    initialVolume,
+    diagnosticsEnabled,
+    diagnosticObserver,
+  });
 
 export function useReferenceDrone(
   engineFactory: ReferenceDroneEngineFactory = defaultEngineFactory,
+  diagnosticsEnabled = false,
+  diagnosticObserver?: ReferenceDroneDiagnosticObserver,
 ) {
   const [snapshot, setSnapshot] = useState<ReferenceDroneSnapshot>(
     createInitialReferenceDroneSnapshot,
@@ -45,19 +60,23 @@ export function useReferenceDrone(
 
   const ensureEngine = useCallback(() => {
     if (engineRef.current) return engineRef.current;
-    const engine = factoryRef.current(snapshotRef.current.volume);
+    const engine = factoryRef.current(
+      snapshotRef.current.volume,
+      diagnosticsEnabled,
+      diagnosticObserver,
+    );
     engineRef.current = engine;
     unsubscribeRef.current = engine.subscribe((next) => {
       if (engineRef.current === engine) updateSnapshot(next);
     });
     return engine;
-  }, [updateSnapshot]);
+  }, [diagnosticObserver, diagnosticsEnabled, updateSnapshot]);
 
-  const playMidi = useCallback(
+  const activateMidiFromUserGesture = useCallback(
     async (midiNote: number) => {
       const key = createReferenceKey(midiNote);
       if (!key) return;
-      await ensureEngine().play({
+      await ensureEngine().activateFromUserGesture({
         midiNote,
         frequencyHz: key.idealFrequencyHz,
       });
@@ -65,14 +84,16 @@ export function useReferenceDrone(
     [ensureEngine],
   );
 
+  const playMidi = activateMidiFromUserGesture;
+
   const toggleMidi = useCallback(
     async (midiNote: number) => {
       const current = snapshotRef.current;
       const isSoundingOrStarting =
-        current.activeMidi === midiNote &&
-        (current.status === 'starting' ||
-          current.status === 'playing' ||
-          current.status === 'changing');
+        (current.activeMidi === midiNote &&
+          (current.status === 'playing' || current.status === 'changing')) ||
+        (current.pendingMidi === midiNote &&
+          (current.status === 'starting' || current.status === 'changing'));
       if (isSoundingOrStarting) {
         await ensureEngine().stop();
         return;
@@ -101,6 +122,23 @@ export function useReferenceDrone(
     [updateSnapshot],
   );
 
+  const playOutputTestFromUserGesture = useCallback(async () => {
+    await ensureEngine().playOutputTestFromUserGesture();
+  }, [ensureEngine]);
+
+  const playDirectOutputTestFromUserGesture = useCallback(async () => {
+    await ensureEngine().playDirectOutputTestFromUserGesture();
+  }, [ensureEngine]);
+
+  const playConstantGainOutputTestFromUserGesture = useCallback(async () => {
+    await ensureEngine().playConstantGainOutputTestFromUserGesture();
+  }, [ensureEngine]);
+
+  const recreateContextAndPlayOutputTestFromUserGesture =
+    useCallback(async () => {
+      await ensureEngine().recreateContextAndPlayOutputTestFromUserGesture();
+    }, [ensureEngine]);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -113,5 +151,16 @@ export function useReferenceDrone(
     };
   }, []);
 
-  return { snapshot, toggleMidi, playMidi, stop, setVolume };
+  return {
+    snapshot,
+    activateMidiFromUserGesture,
+    toggleMidi,
+    playMidi,
+    playOutputTestFromUserGesture,
+    playDirectOutputTestFromUserGesture,
+    playConstantGainOutputTestFromUserGesture,
+    recreateContextAndPlayOutputTestFromUserGesture,
+    stop,
+    setVolume,
+  };
 }

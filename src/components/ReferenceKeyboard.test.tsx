@@ -1,22 +1,41 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useCallback } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { createReferenceDroneEngine } from '../audio/referenceDroneEngine';
 import { useReferenceKeyboard } from '../hooks/useReferenceKeyboard';
+import type { ReferenceDroneSnapshot } from '../types/referenceDrone';
 import type { VisiblePitchRange } from '../types/visiblePitchRange';
 import { ReferenceKeyboard } from './ReferenceKeyboard';
 import { ReferenceNoteStatus } from './ReferenceNoteStatus';
+
+const stoppedDroneSnapshot = createReferenceDroneEngine({
+  contextFactory: () => {
+    throw new Error('The keyboard test must not create audio output.');
+  },
+}).getSnapshot();
+const noop = () => undefined;
 
 function Harness({
   range,
   activeDroneMidi = null,
   onActivateMidi = () => undefined,
   selectionLocked = false,
+  droneSnapshot = {},
+  onReleaseAllObserved = noop,
 }: {
   range: VisiblePitchRange;
   activeDroneMidi?: number | null;
   onActivateMidi?: (midiNote: number) => void;
   selectionLocked?: boolean;
+  droneSnapshot?: Partial<ReferenceDroneSnapshot>;
+  onReleaseAllObserved?: () => void;
 }) {
   const keyboard = useReferenceKeyboard(range);
+  const releaseKeyboard = keyboard.releaseAll;
+  const releaseAll = useCallback(() => {
+    releaseKeyboard();
+    onReleaseAllObserved();
+  }, [onReleaseAllObserved, releaseKeyboard]);
   const activateMidi = (midiNote: number) => {
     keyboard.selectMidi(midiNote);
     onActivateMidi(midiNote);
@@ -30,11 +49,16 @@ function Harness({
         onEndPointerPress={keyboard.endPointerPress}
         onBeginKeyboardPress={keyboard.beginKeyboardPress}
         onEndKeyboardPress={keyboard.endKeyboardPress}
-        onReleaseAll={keyboard.releaseAll}
+        onReleaseAll={releaseAll}
         onMoveFocus={keyboard.moveFocus}
         onFocusMidi={keyboard.setFocusedMidi}
         onActivateMidi={activateMidi}
-        activeDroneMidi={activeDroneMidi}
+        droneSnapshot={{
+          ...stoppedDroneSnapshot,
+          status: activeDroneMidi === null ? 'stopped' : 'playing',
+          activeMidi: activeDroneMidi,
+          ...droneSnapshot,
+        }}
         selectionLocked={selectionLocked}
       />
       <ReferenceNoteStatus state={keyboard.state} />
@@ -155,6 +179,11 @@ describe('ReferenceKeyboard', () => {
     fireEvent.blur(window);
     expect(c5).not.toHaveAttribute('data-pressed');
 
+    fireEvent.keyDown(c5, { key: 'Enter' });
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    fireEvent(document, new Event('visibilitychange'));
+    expect(c5).not.toHaveAttribute('data-pressed');
+
     fireEvent.pointerDown(c5, { pointerId: 5 });
     rerender(<Harness range={{ lowMidi: 36, highMidi: 60 }} />);
     expect(
@@ -166,6 +195,53 @@ describe('ReferenceKeyboard', () => {
     expect(
       screen.getByRole('button', { name: 'Reference note C4, 261.6 hertz' }),
     ).toHaveFocus();
+  });
+
+  it('renders deterministic preparing and recovery states for natural and accidental keys', () => {
+    const { rerender } = render(
+      <Harness
+        range={middleRange}
+        droneSnapshot={{ status: 'starting', pendingMidi: 60 }}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Reference note C4, 261.6 hertz, reference drone preparing',
+      }),
+    );
+    expect(
+      screen.getByRole('button', {
+        name: 'Reference note C4, 261.6 hertz, reference drone preparing',
+      }),
+    ).toHaveAttribute('data-preparing', 'true');
+
+    rerender(
+      <Harness
+        range={middleRange}
+        droneSnapshot={{
+          status: 'error',
+          pendingMidi: null,
+          errorCode: 'context-interrupted',
+          recoveryState: 'needs-reactivation',
+        }}
+      />,
+    );
+    const c4 = screen.getByRole('button', {
+      name: 'Reference note C4, 261.6 hertz, reference audio paused by browser',
+    });
+    expect(c4).toHaveAttribute('data-needs-reactivation', 'true');
+    expect(c4).not.toHaveAttribute('data-sounding');
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Reference note C#4, 277.2 hertz',
+      }),
+    );
+    expect(
+      screen.getByRole('button', {
+        name: 'Reference note C#4, 277.2 hertz, reference audio paused by browser',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps focus navigation but blocks target activation while locked', () => {
@@ -191,5 +267,25 @@ describe('ReferenceKeyboard', () => {
         name: 'Reference note C#4, 277.2 hertz',
       }),
     ).toHaveFocus();
+  });
+
+  it('releases transient press state during unmount cleanup', () => {
+    const onReleaseAllObserved = vi.fn();
+    const { unmount } = render(
+      <Harness
+        range={middleRange}
+        onReleaseAllObserved={onReleaseAllObserved}
+      />,
+    );
+    fireEvent.pointerDown(
+      screen.getByRole('button', {
+        name: 'Reference note C4, 261.6 hertz',
+      }),
+      { pointerId: 51 },
+    );
+
+    unmount();
+
+    expect(onReleaseAllObserved).toHaveBeenCalled();
   });
 });

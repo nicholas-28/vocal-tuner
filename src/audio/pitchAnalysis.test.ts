@@ -10,6 +10,7 @@ describe('pitch analysis graph', () => {
   class MockAudioContext {
     state = 'running' as AudioContextState;
     sampleRate = 48_000;
+    destination = { channelCount: 2 };
     createMediaStreamSource = vi.fn(() => ({
       connect: vi.fn(),
       disconnect: disconnectSource,

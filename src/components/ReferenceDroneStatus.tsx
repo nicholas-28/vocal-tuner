@@ -15,14 +15,18 @@ export function ReferenceDroneStatus({
   snapshot,
   range,
 }: ReferenceDroneStatusProps) {
-  const key =
-    snapshot.activeMidi === null
-      ? null
-      : createReferenceKey(snapshot.activeMidi);
+  const displayedMidi =
+    snapshot.status === 'starting' || snapshot.status === 'changing'
+      ? snapshot.pendingMidi
+      : snapshot.activeMidi;
+  const key = displayedMidi === null ? null : createReferenceKey(displayedMidi);
   const frequency = key
     ? formatReferenceKeyFrequency(key.idealFrequencyHz)
     : null;
   const statusText = (() => {
+    if (snapshot.recoveryState === 'needs-reactivation') {
+      return 'Reference audio paused by the browser. Tap the selected note to restart.';
+    }
     if (snapshot.status === 'error') {
       if (snapshot.errorCode === 'unavailable') {
         return 'Reference drone unavailable in this browser.';

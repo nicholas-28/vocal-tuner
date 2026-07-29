@@ -17,6 +17,16 @@ export type ReferenceKeyboardState = {
   focusedMidi: number;
 };
 
+export type ReferenceKeyPresentation = Readonly<{
+  isPressed: boolean;
+  isSelected: boolean;
+  isSounding: boolean;
+  isPreparing: boolean;
+  needsReactivation: boolean;
+  hasError: boolean;
+  isUnavailable: boolean;
+}>;
+
 export type ReferenceKeyLayout = {
   rowIndex: number;
   topRatio: number;

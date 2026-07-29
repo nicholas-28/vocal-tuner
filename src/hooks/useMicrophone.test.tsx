@@ -18,10 +18,18 @@ function createStream() {
   return { stream, track };
 }
 
+const analysisDiagnostics = Object.freeze({
+  contextState: 'running',
+  sampleRate: 48_000,
+  destinationChannelCount: 2,
+  destinationConnected: false as const,
+});
+
 function createServices(
   stream: MediaStream,
   monitor: PitchAnalysisHandle = {
     stop: vi.fn().mockResolvedValue(undefined),
+    diagnostics: analysisDiagnostics,
   },
 ): MicrophoneServices {
   return {
@@ -58,7 +66,10 @@ describe('useMicrophone', () => {
     const request = new Promise<MediaStream>((resolve) => {
       resolveStream = resolve;
     });
-    const monitor = { stop: vi.fn().mockResolvedValue(undefined) };
+    const monitor = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      diagnostics: analysisDiagnostics,
+    };
     const services = createServices(stream, monitor);
     services.requestStream = vi.fn(() => request);
     const onSessionStarted = vi.fn();
@@ -85,13 +96,41 @@ describe('useMicrophone', () => {
     expect(monitor.stop).toHaveBeenCalledOnce();
   });
 
+  it('publishes ordered capture and analysis context diagnostics', async () => {
+    const { stream } = createStream();
+    const services = createServices(stream);
+    const onAudioDiagnosticEvent = vi.fn();
+    const { result } = renderHook(() =>
+      useMicrophone(services, { onAudioDiagnosticEvent }),
+    );
+    await act(() => result.current.start());
+    await act(() => result.current.stop());
+    expect(
+      onAudioDiagnosticEvent.mock.calls.map(([event]) => event.label),
+    ).toEqual([
+      'before getUserMedia',
+      'after getUserMedia resolved',
+      'after microphone AudioContext starts',
+      'after microphone Stop',
+    ]);
+    expect(onAudioDiagnosticEvent.mock.calls[2]?.[0]).toMatchObject({
+      contextState: 'running',
+      sampleRate: 48_000,
+      destinationConnected: false,
+      activeTrackCount: 1,
+    });
+  });
+
   it('exposes stopping until asynchronous monitor cleanup completes', async () => {
     const { stream } = createStream();
     let resolveStop!: () => void;
     const stopPromise = new Promise<void>((resolve) => {
       resolveStop = resolve;
     });
-    const services = createServices(stream, { stop: vi.fn(() => stopPromise) });
+    const services = createServices(stream, {
+      stop: vi.fn(() => stopPromise),
+      diagnostics: analysisDiagnostics,
+    });
     const { result } = renderHook(() => useMicrophone(services));
     await act(() => result.current.start());
 
@@ -129,7 +168,10 @@ describe('useMicrophone', () => {
     const services = createServices(stream);
     services.startLevelMonitor = vi.fn((_stream, onDetection) => {
       publishDetection = onDetection;
-      return { stop: vi.fn().mockResolvedValue(undefined) };
+      return {
+        stop: vi.fn().mockResolvedValue(undefined),
+        diagnostics: analysisDiagnostics,
+      };
     });
     const onDetection = vi.fn();
     const onAnalysisReset = vi.fn();
@@ -165,7 +207,10 @@ describe('useMicrophone', () => {
 
   it('cleans up when an active track ends unexpectedly', async () => {
     const { stream, track } = createStream();
-    const monitor = { stop: vi.fn().mockResolvedValue(undefined) };
+    const monitor = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      diagnostics: analysisDiagnostics,
+    };
     const services = createServices(stream, monitor);
     const { result } = renderHook(() => useMicrophone(services));
     await act(() => result.current.start());

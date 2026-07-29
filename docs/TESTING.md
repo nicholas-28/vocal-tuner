@@ -43,7 +43,14 @@ Deployment browser coverage runs two separate production bundles:
 
 - `npm run test:e2e:production` builds without test controls and verifies deep-link loading, no automatic permission request, hidden production diagnostics, rejected public mock flags, manifest delivery, and 320 px layout.
 - `npm run test:e2e:demo` builds with the explicit local `VITE_ENABLE_TEST_CONTROLS=true` flag and retains deterministic tuner, target, practice, timeline, drone, and range coverage.
-- `npm run test:e2e` runs both flows. Neither flow contacts Vercel or requires credentials.
+- `npm run test:e2e:ios` builds production and runs a mobile WebKit diagnostic sequence with a prefixed constructor, suspended/running/interrupted recovery, gesture sequencing, active/silent analyser fixtures, persistent/direct/constant/native/recreated output comparisons, no microphone request or AudioSession write from normal reference controls, diagnostic-only playback-session preparation/restoration, harmonic-profile transitions, copied report, and 320 px layout.
+- `npm run test:e2e` runs all three flows. None contacts Vercel or requires credentials.
+
+Automated WebKit confirms browser integration and state truthfulness but cannot prove physical iPhone audibility, device routing, media volume, mute behavior, or installed-home-screen differences. Issue 018.1 must not merge until the physical checklist in `IOS_SAFARI_AUDIO_DEBUGGING.md` passes on the deployed Preview URL.
+
+Audio diagnostics unit coverage uses deterministic time-domain buffers. It verifies the real analyser connection, RMS and peak math, three-window classification, reusable arrays, one-loop cleanup, direct and constant-gain graphs, context replacement, generated-WAV/media lifecycle, and report/UI behavior. Tests synthesize no physical sound.
+
+Harmonic tests verify exact A4/C4 fundamentals, integer partial multiples, range boundaries, coefficient normalization, the `0.16` worst-case peak ceiling, one-oscillator note transitions, fallback sine behavior, and cleanup. Audio-session tests cover ordered/bounded snapshots; feature absence; rejected and throwing setters; playback-before-context ordering; retained-context replacement; active-session preservation; owner-safe prior-type restoration; microphone Start/Stop ordering; and the absence of microphone calls or samples from reference activation.
 
 `npm run build` finishes with deployment validation. The validator parses `vercel.json` and the manifest, verifies referenced assets in source and `dist`, and rejects obvious localhost endpoints and local filesystem paths in production output.
 
@@ -56,6 +63,8 @@ Minimum:
 - Android Chrome;
 - macOS Safari;
 - desktop Chrome.
+
+**Precondition for any audio test on iPhone:** confirm the hardware mute (ring/silent) switch is in ring/sound-enabled position before testing, and record its position. iOS Safari's Web Audio respects that switch while `HTMLAudioElement` does not, so a muted switch produces a silent-output result that is indistinguishable from a real defect unless this is checked first — see `docs/DECISIONS.md` ADR-028 and `IOS_SAFARI_AUDIO_DEBUGGING.md`.
 
 ## Real-voice testing
 

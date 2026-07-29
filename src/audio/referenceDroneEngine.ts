@@ -1,14 +1,29 @@
 import {
+  createInitialAutomationDiagnostics,
+  createInitialDiagnosticTestResult,
   createInitialReferenceDroneDiagnostics,
   DEFAULT_REFERENCE_DRONE_CONFIG,
   isValidReferenceDroneConfig,
   mapReferenceDroneVolumeToGain,
   normalizeReferenceDroneVolume,
 } from './referenceDroneConfig';
+import { selectAudioContextConstructor } from './referenceDroneContext';
+import {
+  createInitialSignalMeasurement,
+  measureReferenceDroneSignal,
+  REFERENCE_DRONE_ANALYSER_FFT_SIZE,
+  REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
+} from './referenceDroneSignal';
+import {
+  createReferenceDroneTimbre,
+  type ReferenceDroneTimbre,
+} from './referenceDroneTimbre';
 import type {
+  ReferenceDroneAudioContextConstructorName,
   ReferenceDroneCommandResult,
   ReferenceDroneConfig,
   ReferenceDroneContextState,
+  ReferenceDroneDiagnosticObserver,
   ReferenceDroneEngine,
   ReferenceDroneErrorCode,
   ReferenceDroneNote,
@@ -18,23 +33,45 @@ import { getCurrentRuntimeFeaturePolicy } from '../config/runtimeFeatures';
 
 type ReferenceDroneEngineOptions = {
   contextFactory?: () => AudioContext;
+  contextConstructorName?: ReferenceDroneAudioContextConstructorName;
   config?: ReferenceDroneConfig;
   initialVolume?: number;
+  diagnosticsEnabled?: boolean;
+  diagnosticObserver?: ReferenceDroneDiagnosticObserver;
 };
 
 type DroneVoice = {
+  generationId: number;
   oscillator: OscillatorNode;
   gain: GainNode;
   note: ReferenceDroneNote;
   oscillatorConnected: boolean;
   gainConnected: boolean;
   started: boolean;
+  timbre: ReferenceDroneTimbre;
+  customTimbreApplied: boolean;
 };
 
 type OutputGraph = {
   context: AudioContext;
   masterGain: GainNode;
+  analyser: AnalyserNode | null;
 };
+
+type DiagnosticVoice = {
+  oscillator: OscillatorNode;
+  gain: GainNode;
+  analyser: AnalyserNode;
+  samples: Float32Array;
+  generationId: number;
+  started: boolean;
+};
+
+type DiagnosticTestKey =
+  | 'engineOutputTest'
+  | 'directOutputTest'
+  | 'constantGainOutputTest'
+  | 'recreatedContextOutputTest';
 
 class DroneEngineError extends Error {
   constructor(
@@ -45,19 +82,15 @@ class DroneEngineError extends Error {
   }
 }
 
-function defaultContextFactory(): AudioContext {
-  const browserWindow = window as typeof window & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-  const AudioContextClass =
-    browserWindow.AudioContext ?? browserWindow.webkitAudioContext;
-  if (!AudioContextClass) {
+function createDefaultContext(): AudioContext {
+  const selection = selectAudioContextConstructor();
+  if (!selection.constructor) {
     throw new DroneEngineError(
       'unavailable',
       'Web Audio is unavailable in this browser.',
     );
   }
-  return new AudioContextClass();
+  return new selection.constructor();
 }
 
 function isValidNote(note: ReferenceDroneNote): boolean {
@@ -73,8 +106,12 @@ function getContextState(context: AudioContext): ReferenceDroneContextState {
   if (state === 'running' || state === 'suspended' || state === 'closed') {
     return state;
   }
-  return state === 'interrupted' ? 'interrupted' : 'suspended';
+  return state === 'interrupted' ? 'interrupted' : 'unknown';
 }
+
+let nextEngineGenerationId = 1;
+const referenceDronePageStartTime =
+  typeof performance === 'undefined' ? Date.now() : performance.now();
 
 function safeDisconnect(node: AudioNode | null): void {
   try {
@@ -183,30 +220,56 @@ export function createReferenceDroneEngine(
   const config = isValidReferenceDroneConfig(requestedConfig)
     ? requestedConfig
     : DEFAULT_REFERENCE_DRONE_CONFIG;
-  const contextFactory = options.contextFactory ?? defaultContextFactory;
-  const initialDiagnostics = createInitialReferenceDroneDiagnostics();
+  const constructorSelection = selectAudioContextConstructor();
+  const diagnosticsEnabled = options.diagnosticsEnabled === true;
+  const diagnosticObserver = options.diagnosticObserver;
+  const contextFactory = options.contextFactory ?? createDefaultContext;
+  const constructorName =
+    options.contextConstructorName ??
+    (options.contextFactory ? 'AudioContext' : constructorSelection.name);
+  const engineGenerationId = nextEngineGenerationId++;
+  const initialDiagnostics = createInitialReferenceDroneDiagnostics(
+    constructorName,
+    engineGenerationId,
+  );
   initialDiagnostics.oscillatorType = config.oscillatorType;
   let snapshot: ReferenceDroneSnapshot = {
     status: 'stopped',
     activeMidi: null,
+    pendingMidi: null,
     frequencyHz: null,
     volume: normalizeReferenceDroneVolume(
       options.initialVolume ?? config.defaultVolume,
       config.defaultVolume,
     ),
     errorCode: null,
+    recoveryState: 'ready',
     diagnostics: initialDiagnostics,
   };
   const listeners = new Set<(value: ReferenceDroneSnapshot) => void>();
   let context: AudioContext | null = null;
   let masterGain: GainNode | null = null;
+  let outputAnalyser: AnalyserNode | null = null;
+  let outputAnalyserSamples: Float32Array | null = null;
   let destinationConnected = false;
   let voice: DroneVoice | null = null;
   let releasePromise: Promise<void> | null = null;
   let releaseFinish: (() => void) | null = null;
   let resumePromise: Promise<void> | null = null;
   let operation = 0;
+  let contextGeneration = 0;
+  let voiceGeneration = 0;
+  let analyserGeneration = 0;
+  let signalInterval: number | null = null;
+  let diagnosticVoice: DiagnosticVoice | null = null;
+  let persistentSignalOwner: 'drone' | 'engine-test' | null = null;
+  let lifecycleSequence = 0;
   let disposed = false;
+  let outputContextNeedsReplacement = false;
+  let contextStateListener: {
+    context: AudioContext;
+    listener: EventListener;
+  } | null = null;
 
   const publish = (next: ReferenceDroneSnapshot) => {
     snapshot = {
@@ -231,16 +294,151 @@ export function createReferenceDroneEngine(
     });
   };
 
+  const notifyDiagnosticObserver = (label: string) => {
+    if (!diagnosticsEnabled || !diagnosticObserver) return;
+    diagnosticObserver(label, { ...snapshot.diagnostics });
+  };
+
+  const addLifecycleEvent = (name: string, detail: string | null = null) => {
+    const now =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    const event = Object.freeze({
+      sequence: ++lifecycleSequence,
+      relativeTimeMs: Math.max(0, now - referenceDronePageStartTime),
+      name,
+      detail,
+    });
+    updateDiagnostics({
+      lifecycleLog: Object.freeze(
+        [...snapshot.diagnostics.lifecycleLog, event].slice(-40),
+      ),
+    });
+  };
+
+  const nowMs = () =>
+    typeof performance === 'undefined' ? Date.now() : performance.now();
+
+  const createAutomationRecord = (
+    parameter: AudioParam,
+    target: number,
+    contextTime: number,
+    method: string,
+    fallbackMethod: string | null,
+    ownedContext: AudioContext,
+  ) =>
+    Object.freeze({
+      currentValue: Number.isFinite(parameter.value) ? parameter.value : null,
+      scheduledTarget: target,
+      schedulingContextTime: contextTime,
+      lastAutomationTimestampMs: nowMs(),
+      method,
+      fallbackMethod,
+      scheduledAfterRunning: getContextState(ownedContext) === 'running',
+    });
+
+  const updateDiagnosticTest = (
+    key: DiagnosticTestKey,
+    values: Partial<ReferenceDroneSnapshot['diagnostics'][DiagnosticTestKey]>,
+  ) => {
+    updateDiagnostics({
+      [key]: Object.freeze({
+        ...snapshot.diagnostics[key],
+        ...values,
+      }),
+    });
+  };
+
+  const stopSignalSampling = () => {
+    if (signalInterval !== null && typeof window !== 'undefined') {
+      window.clearInterval(signalInterval);
+    }
+    signalInterval = null;
+    persistentSignalOwner = null;
+  };
+
+  const samplePersistentSignal = (
+    ownedAnalyser: AnalyserNode,
+    ownedContextGeneration: number,
+    ownedAnalyserGeneration: number,
+    ownedVoiceGeneration: number | null,
+  ) => {
+    if (
+      disposed ||
+      outputAnalyser !== ownedAnalyser ||
+      contextGeneration !== ownedContextGeneration ||
+      analyserGeneration !== ownedAnalyserGeneration ||
+      !outputAnalyserSamples
+    )
+      return;
+    ownedAnalyser.getFloatTimeDomainData(outputAnalyserSamples);
+    const signal = measureReferenceDroneSignal(
+      outputAnalyserSamples,
+      snapshot.diagnostics.persistentSignal,
+      nowMs(),
+      {
+        analyserGenerationId: ownedAnalyserGeneration,
+        contextGenerationId: ownedContextGeneration,
+        voiceGenerationId: ownedVoiceGeneration,
+        analyserConnectedToDestination: destinationConnected,
+      },
+    );
+    const values: Partial<ReferenceDroneSnapshot['diagnostics']> = {
+      persistentSignal: signal,
+    };
+    if (persistentSignalOwner === 'engine-test') {
+      values.engineOutputTest = Object.freeze({
+        ...snapshot.diagnostics.engineOutputTest,
+        signal,
+      });
+    }
+    updateDiagnostics(values);
+  };
+
+  const startPersistentSignalSampling = (
+    owner: 'drone' | 'engine-test',
+    ownedVoiceGeneration: number | null,
+  ) => {
+    stopSignalSampling();
+    if (!diagnosticsEnabled || !outputAnalyser || typeof window === 'undefined')
+      return;
+    persistentSignalOwner = owner;
+    const ownedAnalyser = outputAnalyser;
+    const ownedContextGeneration = contextGeneration;
+    const ownedAnalyserGeneration = analyserGeneration;
+    const sample = () =>
+      samplePersistentSignal(
+        ownedAnalyser,
+        ownedContextGeneration,
+        ownedAnalyserGeneration,
+        ownedVoiceGeneration,
+      );
+    sample();
+    signalInterval = window.setInterval(
+      sample,
+      REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
+    );
+  };
+
   const cleanupVoice = (releasedVoice: DroneVoice, ended = true) => {
     releasedVoice.oscillator.onended = null;
     safeDisconnect(releasedVoice.oscillator);
     safeDisconnect(releasedVoice.gain);
+    const ownsCurrentDiagnostics =
+      voice === releasedVoice ||
+      snapshot.diagnostics.voiceGenerationId === releasedVoice.generationId;
     if (voice === releasedVoice) voice = null;
+    if (!ownsCurrentDiagnostics) return;
+    stopSignalSampling();
+    addLifecycleEvent('node ended', `voice ${releasedVoice.generationId}`);
     updateDiagnostics({
       voiceState: ended ? 'ended' : 'none',
+      oscillatorEnded: ended,
       oscillatorStarted: false,
       graphConnected: false,
+      voiceGainConnected: false,
+      voiceGenerationId: null,
       voiceGainTarget: null,
+      voiceGainCurrent: null,
       effectiveGain: null,
     });
   };
@@ -255,14 +453,22 @@ export function createReferenceDroneEngine(
     error: DroneEngineError,
     lastCommand = snapshot.diagnostics.lastCommand,
   ): ReferenceDroneCommandResult => {
+    const requiresFreshOutputContext =
+      error.code === 'context-interrupted' ||
+      error.code === 'context-not-running' ||
+      error.code === 'context-closed';
+    const needsReactivation = error.code === 'context-interrupted';
+    if (requiresFreshOutputContext) outputContextNeedsReplacement = true;
     abortVoice(voice);
     debugLog('error', { code: error.code, message: error.message });
     publish({
       ...snapshot,
       status: 'error',
       activeMidi: null,
+      pendingMidi: null,
       frequencyHz: null,
       errorCode: error.code,
+      recoveryState: needsReactivation ? 'needs-reactivation' : 'ready',
       diagnostics: {
         ...snapshot.diagnostics,
         contextState: context
@@ -270,23 +476,40 @@ export function createReferenceDroneEngine(
           : snapshot.diagnostics.contextState,
         engineState: 'error',
         voiceState: 'none',
+        voiceGenerationId: null,
+        oscillatorCreated: false,
         oscillatorStarted: false,
+        oscillatorEnded: false,
         graphConnected: false,
+        voiceGainConnected: false,
         midiNote: null,
         frequencyHz: null,
         voiceGainTarget: null,
+        voiceGainCurrent: null,
         effectiveGain: null,
         lastCommand,
         errorCode: error.code,
         errorMessage: import.meta.env.DEV ? error.message : null,
+        requiresExplicitReactivation: requiresFreshOutputContext,
       },
     });
     return { ok: false, errorCode: error.code };
   };
 
-  const handleContextStateChange = () => {
-    if (disposed || !context) return;
-    const contextState = getContextState(context);
+  const handleContextStateChange = (
+    ownedContext: AudioContext,
+    ownedGeneration: number,
+  ) => {
+    if (
+      disposed ||
+      context !== ownedContext ||
+      contextGeneration !== ownedGeneration
+    )
+      return;
+    const contextState = getContextState(ownedContext);
+    const timestamp =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    addLifecycleEvent('context statechange', contextState);
     debugLog('context state changed', { state: contextState });
     if (
       snapshot.status === 'playing' ||
@@ -295,9 +518,13 @@ export function createReferenceDroneEngine(
     ) {
       if (contextState !== 'running') {
         operation += 1;
+        outputContextNeedsReplacement = true;
         if (contextState === 'closed') {
           safeDisconnect(masterGain);
+          safeDisconnect(outputAnalyser);
           masterGain = null;
+          outputAnalyser = null;
+          outputAnalyserSamples = null;
           destinationConnected = false;
         }
         publishError(
@@ -314,22 +541,32 @@ export function createReferenceDroneEngine(
         return;
       }
     }
-    updateDiagnostics({ contextState });
+    updateDiagnostics({
+      contextState,
+      lastStateChangeTimestampMs: timestamp,
+      requiresExplicitReactivation:
+        contextState === 'suspended' || contextState === 'interrupted',
+    });
   };
 
   const detachContextListener = (ownedContext: AudioContext | null) => {
-    ownedContext?.removeEventListener?.(
+    if (!ownedContext || contextStateListener?.context !== ownedContext) return;
+    ownedContext.removeEventListener?.(
       'statechange',
-      handleContextStateChange,
+      contextStateListener.listener,
     );
+    contextStateListener = null;
   };
 
   const discardClosedOutput = () => {
     if (!context || getContextState(context) !== 'closed') return;
     detachContextListener(context);
     safeDisconnect(masterGain);
+    safeDisconnect(outputAnalyser);
     context = null;
     masterGain = null;
+    outputAnalyser = null;
+    outputAnalyserSamples = null;
     destinationConnected = false;
   };
 
@@ -344,11 +581,22 @@ export function createReferenceDroneEngine(
     if (!context) {
       let createdContext: AudioContext | null = null;
       let createdMaster: GainNode | null = null;
+      let createdAnalyser: AnalyserNode | null = null;
       try {
+        notifyDiagnosticObserver('before drone context creation');
+        addLifecycleEvent('context constructor requested', constructorName);
         createdContext = contextFactory();
         context = createdContext;
-        context.addEventListener?.('statechange', handleContextStateChange);
+        const ownedGeneration = ++contextGeneration;
+        const listener = () =>
+          handleContextStateChange(createdContext!, ownedGeneration);
+        contextStateListener = { context, listener };
+        context.addEventListener?.('statechange', listener);
         const contextState = getContextState(context);
+        addLifecycleEvent(
+          'context created',
+          `${ownedGeneration}:${contextState}`,
+        );
         debugLog('context created', { state: contextState });
         if (contextState === 'closed') {
           throw new DroneEngineError(
@@ -363,21 +611,79 @@ export function createReferenceDroneEngine(
           config.maximumMasterGain,
         );
         setParamValue(createdMaster.gain, mappedGain, currentTime);
-        createdMaster.connect(context.destination);
+        const masterAutomation = createAutomationRecord(
+          createdMaster.gain,
+          mappedGain,
+          currentTime,
+          typeof createdMaster.gain.setValueAtTime === 'function'
+            ? 'setValueAtTime'
+            : 'value-assignment',
+          null,
+          context,
+        );
+        if (diagnosticsEnabled) {
+          createdAnalyser = context.createAnalyser();
+          createdAnalyser.fftSize = REFERENCE_DRONE_ANALYSER_FFT_SIZE;
+          createdAnalyser.smoothingTimeConstant = 0;
+          createdMaster.connect(createdAnalyser);
+          createdAnalyser.connect(context.destination);
+          outputAnalyser = createdAnalyser;
+          outputAnalyserSamples = new Float32Array(createdAnalyser.fftSize);
+          analyserGeneration += 1;
+        } else {
+          createdMaster.connect(context.destination);
+        }
         masterGain = createdMaster;
         destinationConnected = true;
         updateDiagnostics({
+          constructorAvailable: true,
+          constructorName,
+          contextGenerationId: ownedGeneration,
           contextState,
+          contextSampleRate: Number.isFinite(context.sampleRate)
+            ? context.sampleRate
+            : null,
+          contextBaseLatency:
+            'baseLatency' in context &&
+            Number.isFinite((context as AudioContext).baseLatency)
+              ? (context as AudioContext).baseLatency
+              : null,
+          destinationChannelCount: Number.isFinite(
+            context.destination.channelCount,
+          )
+            ? context.destination.channelCount
+            : null,
+          masterGainConnected: true,
           destinationConnected: true,
           masterGain: mappedGain,
+          masterGainCurrent: createdMaster.gain.value,
+          masterAutomation,
           effectiveGain: null,
+          persistentSignal: diagnosticsEnabled
+            ? Object.freeze({
+                ...createInitialSignalMeasurement(),
+                analyserGenerationId: analyserGeneration,
+                contextGenerationId: ownedGeneration,
+                analyserConnectedToDestination: true,
+              })
+            : createInitialSignalMeasurement(),
         });
         debugLog('destination connected', { masterGain: mappedGain });
+        addLifecycleEvent(
+          'nodes connected',
+          diagnosticsEnabled
+            ? 'master->output-analyser->destination'
+            : 'master->destination',
+        );
+        notifyDiagnosticObserver('after drone context creation');
       } catch (error) {
         safeDisconnect(createdMaster);
+        safeDisconnect(createdAnalyser);
         if (createdContext) detachContextListener(createdContext);
         context = null;
         masterGain = null;
+        outputAnalyser = null;
+        outputAnalyserSamples = null;
         destinationConnected = false;
         if (createdContext && getContextState(createdContext) !== 'closed') {
           void createdContext.close().catch(() => undefined);
@@ -398,28 +704,72 @@ export function createReferenceDroneEngine(
         'Reference drone destination is not connected.',
       );
     }
-    return { context, masterGain };
+    return { context, masterGain, analyser: outputAnalyser };
   };
 
-  const ensureReady = async (
-    commandOperation: number,
-  ): Promise<OutputGraph | null> => {
-    const graph = ensureOutputGraph();
-    let contextState = getContextState(graph.context);
-    if (contextState === 'suspended' || contextState === 'interrupted') {
+  const beginResumeFromUserGesture = (
+    graph: OutputGraph,
+  ): Promise<void> | null => {
+    const contextState = getContextState(graph.context);
+    if (
+      contextState === 'suspended' ||
+      contextState === 'interrupted' ||
+      snapshot.diagnostics.requiresExplicitReactivation
+    ) {
       debugLog('context resume begin', { state: contextState });
+      addLifecycleEvent('resume requested', contextState);
+      updateDiagnostics({
+        resumeRequested: true,
+        resumeResult: 'pending',
+        contextStateAfterResume: null,
+        renderingClockAdvanced: null,
+      });
       resumePromise ??= graph.context.resume().finally(() => {
         resumePromise = null;
       });
-      await resumePromise;
-      contextState = getContextState(graph.context);
-      debugLog('context resume completed', { state: contextState });
+      return resumePromise;
     }
+    return null;
+  };
+
+  const confirmReady = async (
+    graph: OutputGraph,
+    commandOperation: number,
+    pendingResume: Promise<void> | null,
+  ): Promise<OutputGraph | null> => {
+    if (pendingResume) {
+      try {
+        await pendingResume;
+        const state = getContextState(graph.context);
+        addLifecycleEvent('resume resolved', state);
+        updateDiagnostics({
+          resumeResult: 'resolved',
+          contextStateAfterResume: state,
+        });
+        notifyDiagnosticObserver('after drone resume');
+      } catch (error) {
+        addLifecycleEvent(
+          'resume rejected',
+          error instanceof Error ? error.name : 'unknown',
+        );
+        updateDiagnostics({
+          resumeResult: 'rejected',
+          contextStateAfterResume: getContextState(graph.context),
+        });
+        throw error;
+      }
+    }
+    const contextState = getContextState(graph.context);
+    debugLog('context readiness checked', { state: contextState });
     if (disposed || commandOperation !== operation) {
       debugLog('command invalidated', { commandOperation, operation });
       return null;
     }
-    updateDiagnostics({ contextState });
+    updateDiagnostics({
+      contextState,
+      contextStateAfterResume: pendingResume ? contextState : null,
+      requiresExplicitReactivation: contextState !== 'running',
+    });
     if (contextState !== 'running') {
       throw new DroneEngineError(
         contextState === 'interrupted'
@@ -429,6 +779,23 @@ export function createReferenceDroneEngine(
             : 'context-not-running',
         `AudioContext is ${contextState} after resume.`,
       );
+    }
+    if (pendingResume) {
+      const before = graph.context.currentTime;
+      await new Promise<void>((resolve) => setTimeout(resolve, 48));
+      if (disposed || commandOperation !== operation) return null;
+      const advanced = graph.context.currentTime > before;
+      updateDiagnostics({ renderingClockAdvanced: advanced });
+      addLifecycleEvent(
+        'rendering clock checked',
+        advanced ? 'advanced' : 'stalled',
+      );
+      if (!advanced) {
+        throw new DroneEngineError(
+          'context-not-running',
+          'AudioContext reported running but its rendering clock did not advance.',
+        );
+      }
     }
     return graph;
   };
@@ -473,7 +840,7 @@ export function createReferenceDroneEngine(
     return trackedRelease;
   };
 
-  const createAndStartVoice = (
+  const createPreparedVoice = (
     graph: OutputGraph,
     note: ReferenceDroneNote,
   ): DroneVoice => {
@@ -495,34 +862,83 @@ export function createReferenceDroneEngine(
       setParamValue(graph.masterGain.gain, mappedGain, currentTime);
       oscillator = graph.context.createOscillator();
       voiceGain = graph.context.createGain();
-      oscillator.type = config.oscillatorType;
+      const timbre = createReferenceDroneTimbre(
+        note.midiNote,
+        note.frequencyHz,
+      );
+      let customTimbreApplied = false;
+      try {
+        const periodicWave = graph.context.createPeriodicWave(
+          timbre.periodicWaveReal,
+          timbre.periodicWaveImag,
+          { disableNormalization: true },
+        );
+        oscillator.setPeriodicWave(periodicWave);
+        customTimbreApplied = true;
+      } catch {
+        oscillator.type = config.oscillatorType;
+      }
       setParamValue(voiceGain.gain, 0, currentTime);
       setParamValue(oscillator.frequency, note.frequencyHz, currentTime);
       const nextVoice: DroneVoice = {
+        generationId: ++voiceGeneration,
         oscillator,
         gain: voiceGain,
         note: { ...note },
         oscillatorConnected: false,
         gainConnected: false,
         started: false,
+        timbre,
+        customTimbreApplied,
       };
       updateDiagnostics({
         voiceState: 'created',
+        voiceGenerationId: nextVoice.generationId,
+        oscillatorCreated: true,
+        oscillatorEnded: false,
         midiNote: note.midiNote,
         frequencyHz: note.frequencyHz,
-        voiceGainTarget: 1,
+        voiceGainTarget: 0,
+        voiceGainCurrent: voiceGain.gain.value,
+        voiceAutomation: createAutomationRecord(
+          voiceGain.gain,
+          0,
+          currentTime,
+          typeof voiceGain.gain.setValueAtTime === 'function'
+            ? 'setValueAtTime'
+            : 'value-assignment',
+          null,
+          graph.context,
+        ),
         masterGain: mappedGain,
-        effectiveGain: mappedGain,
+        masterGainCurrent: graph.masterGain.gain.value,
+        effectiveGain: 0,
+        oscillatorType: customTimbreApplied ? 'custom' : config.oscillatorType,
+        timbreProfile: customTimbreApplied
+          ? timbre.profileId
+          : 'pure-sine-fallback',
+        partials: customTimbreApplied
+          ? timbre.partials
+          : Object.freeze([timbre.partials[0]!]),
+        predictedPeak: 0,
       });
       oscillator.connect(voiceGain);
       nextVoice.oscillatorConnected = true;
       voiceGain.connect(graph.masterGain);
       nextVoice.gainConnected = true;
       voiceGraphConnected = true;
-      updateDiagnostics({ graphConnected: true });
+      updateDiagnostics({
+        graphConnected: true,
+        voiceGainConnected: true,
+      });
+      addLifecycleEvent('nodes connected', `voice ${nextVoice.generationId}`);
       debugLog('voice graph connected', { frequencyHz: note.frequencyHz });
       oscillator.onended = () => cleanupVoice(nextVoice);
       try {
+        addLifecycleEvent(
+          'oscillator start requested',
+          `voice ${nextVoice.generationId}`,
+        );
         oscillator.start(currentTime);
       } catch (error) {
         throw new DroneEngineError(
@@ -535,12 +951,11 @@ export function createReferenceDroneEngine(
         voiceState: 'started',
         oscillatorStarted: true,
       });
+      addLifecycleEvent(
+        'oscillator started',
+        `voice ${nextVoice.generationId}`,
+      );
       debugLog('oscillator started', { frequencyHz: note.frequencyHz });
-      linearRamp(voiceGain.gain, 1, currentTime + config.attackSeconds);
-      debugLog('attack scheduled', {
-        voiceGainTarget: 1,
-        masterGain: mappedGain,
-      });
       return nextVoice;
     } catch (error) {
       if (oscillator) safeStop(oscillator);
@@ -561,10 +976,279 @@ export function createReferenceDroneEngine(
     }
   };
 
-  const play = async (
+  const scheduleVoiceAttack = (
+    preparedVoice: DroneVoice,
+    graph: OutputGraph,
+  ) => {
+    const currentTime = requireFiniteTime(graph.context);
+    linearRamp(preparedVoice.gain.gain, 1, currentTime + config.attackSeconds);
+    const method =
+      typeof preparedVoice.gain.gain.linearRampToValueAtTime === 'function'
+        ? 'linearRampToValueAtTime'
+        : typeof preparedVoice.gain.gain.setValueAtTime === 'function'
+          ? 'setValueAtTime'
+          : 'value-assignment';
+    updateDiagnostics({
+      voiceGainTarget: 1,
+      voiceGainCurrent: preparedVoice.gain.gain.value,
+      voiceAutomation: createAutomationRecord(
+        preparedVoice.gain.gain,
+        1,
+        currentTime + config.attackSeconds,
+        method,
+        method === 'linearRampToValueAtTime' ? null : method,
+        graph.context,
+      ),
+    });
+    addLifecycleEvent(
+      'attack scheduled',
+      `voice ${preparedVoice.generationId}`,
+    );
+    debugLog('attack scheduled', {
+      voiceGainTarget: 1,
+      masterGain: snapshot.diagnostics.masterGain,
+    });
+  };
+
+  const cleanupDiagnosticVoice = (ownedVoice: DiagnosticVoice | null) => {
+    if (!ownedVoice) return;
+    safeStop(ownedVoice.oscillator);
+    safeDisconnect(ownedVoice.oscillator);
+    safeDisconnect(ownedVoice.gain);
+    safeDisconnect(ownedVoice.analyser);
+    if (diagnosticVoice === ownedVoice) diagnosticVoice = null;
+    stopSignalSampling();
+  };
+
+  const createDirectDiagnosticVoice = (graph: OutputGraph): DiagnosticVoice => {
+    let oscillator: OscillatorNode | null = null;
+    let gain: GainNode | null = null;
+    let analyser: AnalyserNode | null = null;
+    try {
+      const currentTime = requireFiniteTime(graph.context);
+      oscillator = graph.context.createOscillator();
+      gain = graph.context.createGain();
+      analyser = graph.context.createAnalyser();
+      analyser.fftSize = REFERENCE_DRONE_ANALYSER_FFT_SIZE;
+      analyser.smoothingTimeConstant = 0;
+      oscillator.type = 'sine';
+      setParamValue(oscillator.frequency, 440, currentTime);
+      setParamValue(gain.gain, 0, currentTime);
+      oscillator.connect(gain);
+      gain.connect(analyser);
+      analyser.connect(graph.context.destination);
+      oscillator.start(currentTime);
+      const nextVoice: DiagnosticVoice = {
+        oscillator,
+        gain,
+        analyser,
+        samples: new Float32Array(analyser.fftSize),
+        generationId: ++voiceGeneration,
+        started: true,
+      };
+      analyserGeneration += 1;
+      diagnosticVoice = nextVoice;
+      addLifecycleEvent(
+        'direct oscillator started',
+        `voice ${nextVoice.generationId}`,
+      );
+      return nextVoice;
+    } catch (error) {
+      if (oscillator) safeStop(oscillator);
+      safeDisconnect(oscillator);
+      safeDisconnect(gain);
+      safeDisconnect(analyser);
+      throw error;
+    }
+  };
+
+  const startDirectSignalSampling = (
+    key: DiagnosticTestKey,
+    ownedVoice: DiagnosticVoice,
+  ) => {
+    stopSignalSampling();
+    if (typeof window === 'undefined') return;
+    const ownedContextGeneration = contextGeneration;
+    const ownedAnalyserGeneration = analyserGeneration;
+    const sample = () => {
+      if (
+        disposed ||
+        diagnosticVoice !== ownedVoice ||
+        contextGeneration !== ownedContextGeneration ||
+        analyserGeneration !== ownedAnalyserGeneration
+      )
+        return;
+      ownedVoice.analyser.getFloatTimeDomainData(ownedVoice.samples);
+      const signal = measureReferenceDroneSignal(
+        ownedVoice.samples,
+        snapshot.diagnostics[key].signal,
+        nowMs(),
+        {
+          analyserGenerationId: ownedAnalyserGeneration,
+          contextGenerationId: ownedContextGeneration,
+          voiceGenerationId: ownedVoice.generationId,
+          analyserConnectedToDestination: true,
+        },
+      );
+      updateDiagnosticTest(key, { signal });
+    };
+    sample();
+    signalInterval = window.setInterval(
+      sample,
+      REFERENCE_DRONE_SIGNAL_INTERVAL_MS,
+    );
+  };
+
+  const recreateOutputContextFromUserGesture = (
+    reason = 'diagnostic-request',
+  ) => {
+    const oldContext = context;
+    const oldGeneration = oldContext ? contextGeneration : null;
+    stopSignalSampling();
+    abortVoice(voice);
+    cleanupDiagnosticVoice(diagnosticVoice);
+    safeDisconnect(masterGain);
+    safeDisconnect(outputAnalyser);
+    masterGain = null;
+    outputAnalyser = null;
+    outputAnalyserSamples = null;
+    destinationConnected = false;
+    detachContextListener(oldContext);
+    context = null;
+    outputContextNeedsReplacement = false;
+    updateDiagnostics({
+      previousContextGenerationId: oldGeneration,
+      contextCloseResult: oldContext ? 'pending' : 'no-context',
+      contextGenerationId: null,
+      contextState: 'unavailable',
+      masterGainConnected: false,
+      destinationConnected: false,
+      persistentSignal: createInitialSignalMeasurement(),
+    });
+    if (oldContext) {
+      void oldContext
+        .close()
+        .then(() => {
+          if (!disposed) updateDiagnostics({ contextCloseResult: 'resolved' });
+        })
+        .catch(() => {
+          if (!disposed) updateDiagnostics({ contextCloseResult: 'rejected' });
+        });
+    }
+    addLifecycleEvent('output context recreation requested', reason);
+  };
+
+  const runDirectOutputTestFromUserGesture = async (
+    key: DiagnosticTestKey,
+    constantGain: boolean,
+    recreateContext: boolean,
+  ): Promise<ReferenceDroneCommandResult> => {
+    if (
+      disposed ||
+      voice ||
+      diagnosticVoice ||
+      snapshot.diagnostics.outputTestStatus === 'starting' ||
+      snapshot.diagnostics.outputTestStatus === 'playing'
+    )
+      return { ok: false, errorCode: 'audio-start-failed' };
+    const commandOperation = ++operation;
+    if (recreateContext) recreateOutputContextFromUserGesture();
+    updateDiagnosticTest(key, {
+      status: 'starting',
+      oscillatorStarted: false,
+      signal: createInitialSignalMeasurement(),
+      automation: createInitialAutomationDiagnostics(),
+      errorMessage: null,
+    });
+    addLifecycleEvent(
+      'activation received',
+      recreateContext
+        ? 'recreate-context-test'
+        : constantGain
+          ? 'constant-gain-test'
+          : 'direct-output-test',
+    );
+    try {
+      const graph = ensureOutputGraph();
+      const pendingResume = beginResumeFromUserGesture(graph);
+      const testVoice = createDirectDiagnosticVoice(graph);
+      updateDiagnosticTest(key, { oscillatorStarted: true });
+      const readyGraph = await confirmReady(
+        graph,
+        commandOperation,
+        pendingResume,
+      );
+      if (!readyGraph || disposed || commandOperation !== operation) {
+        cleanupDiagnosticVoice(testVoice);
+        updateDiagnosticTest(key, { status: 'failed' });
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
+      const currentTime = requireFiniteTime(readyGraph.context);
+      const gainValue = 0.12;
+      let method: string;
+      if (constantGain) {
+        setParamValue(testVoice.gain.gain, gainValue, currentTime);
+        method =
+          typeof testVoice.gain.gain.setValueAtTime === 'function'
+            ? 'setValueAtTime'
+            : 'value-assignment';
+      } else {
+        linearRamp(testVoice.gain.gain, gainValue, currentTime + 0.02);
+        method =
+          typeof testVoice.gain.gain.linearRampToValueAtTime === 'function'
+            ? 'linearRampToValueAtTime'
+            : typeof testVoice.gain.gain.setValueAtTime === 'function'
+              ? 'setValueAtTime'
+              : 'value-assignment';
+      }
+      const automation = createAutomationRecord(
+        testVoice.gain.gain,
+        gainValue,
+        constantGain ? currentTime : currentTime + 0.02,
+        method,
+        method === (constantGain ? 'setValueAtTime' : 'linearRampToValueAtTime')
+          ? null
+          : method,
+        readyGraph.context,
+      );
+      updateDiagnosticTest(key, { status: 'playing', automation });
+      startDirectSignalSampling(key, testVoice);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 1000));
+      if (
+        disposed ||
+        commandOperation !== operation ||
+        diagnosticVoice !== testVoice
+      ) {
+        cleanupDiagnosticVoice(testVoice);
+        updateDiagnosticTest(key, { status: 'failed' });
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
+      cleanupDiagnosticVoice(testVoice);
+      updateDiagnosticTest(key, { status: 'succeeded' });
+      addLifecycleEvent('direct output test completed', key);
+      return { ok: true };
+    } catch (error) {
+      cleanupDiagnosticVoice(diagnosticVoice);
+      updateDiagnosticTest(key, {
+        status: 'failed',
+        errorMessage:
+          error instanceof Error ? error.message : 'Unknown output failure.',
+      });
+      return publishError(toEngineError(error), key);
+    }
+  };
+
+  const activateFromUserGesture = async (
     note: ReferenceDroneNote,
   ): Promise<ReferenceDroneCommandResult> => {
     if (disposed) return { ok: false, errorCode: 'audio-start-failed' };
+    if (
+      diagnosticVoice ||
+      snapshot.diagnostics.outputTestStatus === 'starting' ||
+      snapshot.diagnostics.outputTestStatus === 'playing'
+    ) {
+      return { ok: false, errorCode: 'audio-start-failed' };
+    }
     if (!isValidNote(note)) {
       return publishError(
         new DroneEngineError('invalid-note', 'Invalid reference note.'),
@@ -573,15 +1257,22 @@ export function createReferenceDroneEngine(
     }
     const commandOperation = ++operation;
     const activeVoice = voice;
+    const retrying =
+      snapshot.status === 'error' ||
+      snapshot.diagnostics.requiresExplicitReactivation;
+    if (retrying) notifyDiagnosticObserver('before drone retry');
     const changing = activeVoice !== null;
     const command = changing
       ? `change:${note.midiNote}`
       : `play:${note.midiNote}`;
     debugLog('command', { command, operation: commandOperation });
+    const activationTimestamp =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    addLifecycleEvent('activation received', command);
     publish({
       ...snapshot,
       status: changing ? 'changing' : 'starting',
-      activeMidi: note.midiNote,
+      pendingMidi: note.midiNote,
       frequencyHz: note.frequencyHz,
       errorCode: null,
       diagnostics: {
@@ -590,17 +1281,33 @@ export function createReferenceDroneEngine(
         midiNote: note.midiNote,
         frequencyHz: note.frequencyHz,
         lastCommand: command,
+        lastUserActivationTimestampMs: activationTimestamp,
         errorCode: null,
         errorMessage: null,
       },
     });
     try {
-      if (!activeVoice && releasePromise) await releasePromise;
+      if (!activeVoice && releasePromise) releaseFinish?.();
       if (disposed || commandOperation !== operation) {
         return { ok: false, errorCode: 'audio-start-failed' };
       }
-      const graph = await ensureReady(commandOperation);
-      if (!graph || disposed || commandOperation !== operation) {
+      if (!activeVoice && outputContextNeedsReplacement) {
+        recreateOutputContextFromUserGesture('explicit-reactivation');
+      }
+      const graph = ensureOutputGraph();
+      const pendingResume = beginResumeFromUserGesture(graph);
+      let preparedVoice: DroneVoice | null = null;
+      if (!activeVoice) {
+        preparedVoice = createPreparedVoice(graph, note);
+        voice = preparedVoice;
+      }
+      const readyGraph = await confirmReady(
+        graph,
+        commandOperation,
+        pendingResume,
+      );
+      if (!readyGraph || disposed || commandOperation !== operation) {
+        // A newer command owns any shared prepared voice and its cleanup.
         return { ok: false, errorCode: 'audio-start-failed' };
       }
       if (activeVoice) {
@@ -620,7 +1327,26 @@ export function createReferenceDroneEngine(
           activeVoice.note.midiNote !== note.midiNote ||
           activeVoice.note.frequencyHz !== note.frequencyHz
         ) {
-          const currentTime = requireFiniteTime(graph.context);
+          const currentTime = requireFiniteTime(readyGraph.context);
+          const nextTimbre = createReferenceDroneTimbre(
+            note.midiNote,
+            note.frequencyHz,
+          );
+          if (activeVoice.customTimbreApplied) {
+            try {
+              activeVoice.oscillator.setPeriodicWave(
+                readyGraph.context.createPeriodicWave(
+                  nextTimbre.periodicWaveReal,
+                  nextTimbre.periodicWaveImag,
+                  { disableNormalization: true },
+                ),
+              );
+            } catch {
+              activeVoice.oscillator.type = config.oscillatorType;
+              activeVoice.customTimbreApplied = false;
+            }
+          }
+          activeVoice.timbre = nextTimbre;
           holdAutomation(activeVoice.oscillator.frequency, currentTime);
           linearRamp(
             activeVoice.oscillator.frequency,
@@ -628,20 +1354,26 @@ export function createReferenceDroneEngine(
             currentTime + config.transitionSeconds,
           );
           activeVoice.note = { ...note };
+          updateDiagnostics({
+            oscillatorType: activeVoice.customTimbreApplied
+              ? 'custom'
+              : config.oscillatorType,
+            timbreProfile: activeVoice.customTimbreApplied
+              ? nextTimbre.profileId
+              : 'pure-sine-fallback',
+            partials: activeVoice.customTimbreApplied
+              ? nextTimbre.partials
+              : Object.freeze([nextTimbre.partials[0]!]),
+          });
           debugLog('note transition scheduled', {
             frequencyHz: note.frequencyHz,
           });
         }
-      } else {
-        const nextVoice = createAndStartVoice(graph, note);
-        if (disposed || commandOperation !== operation) {
-          abortVoice(nextVoice);
-          return { ok: false, errorCode: 'audio-start-failed' };
-        }
-        voice = nextVoice;
+      } else if (preparedVoice) {
+        scheduleVoiceAttack(preparedVoice, readyGraph);
       }
       if (
-        getContextState(graph.context) !== 'running' ||
+        getContextState(readyGraph.context) !== 'running' ||
         !voice?.started ||
         !voice.oscillatorConnected ||
         !voice.gainConnected ||
@@ -656,8 +1388,10 @@ export function createReferenceDroneEngine(
         ...snapshot,
         status: 'playing',
         activeMidi: note.midiNote,
+        pendingMidi: null,
         frequencyHz: note.frequencyHz,
         errorCode: null,
+        recoveryState: 'ready',
         diagnostics: {
           ...snapshot.diagnostics,
           contextState: 'running',
@@ -669,24 +1403,148 @@ export function createReferenceDroneEngine(
           midiNote: note.midiNote,
           frequencyHz: note.frequencyHz,
           voiceGainTarget: 1,
+          voiceGainCurrent: voice?.gain.gain.value ?? null,
           effectiveGain: mapReferenceDroneVolumeToGain(
             snapshot.volume,
             config.maximumMasterGain,
           ),
+          predictedPeak:
+            mapReferenceDroneVolumeToGain(
+              snapshot.volume,
+              config.maximumMasterGain,
+            ) *
+            (voice.customTimbreApplied
+              ? voice.timbre.normalizedAmplitudeSum
+              : 1),
           errorCode: null,
           errorMessage: null,
+          requiresExplicitReactivation: false,
         },
       });
+      addLifecycleEvent('playback confirmed', `voice ${voice.generationId}`);
+      startPersistentSignalSampling('drone', voice.generationId);
       debugLog('playback confirmed', {
         contextState: 'running',
         frequencyHz: note.frequencyHz,
         masterGain: snapshot.diagnostics.masterGain,
       });
+      notifyDiagnosticObserver(
+        retrying ? 'after drone retry' : 'after drone activation',
+      );
       return { ok: true };
     } catch (error) {
+      if (disposed || commandOperation !== operation) {
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
       return publishError(toEngineError(error), command);
     }
   };
+
+  const play = activateFromUserGesture;
+
+  const playOutputTestFromUserGesture =
+    async (): Promise<ReferenceDroneCommandResult> => {
+      if (
+        disposed ||
+        voice ||
+        snapshot.diagnostics.outputTestStatus === 'starting' ||
+        snapshot.diagnostics.outputTestStatus === 'playing'
+      ) {
+        return { ok: false, errorCode: 'audio-start-failed' };
+      }
+      const commandOperation = ++operation;
+      const activationTimestamp =
+        typeof performance === 'undefined' ? Date.now() : performance.now();
+      addLifecycleEvent('activation received', 'output-test');
+      updateDiagnostics({
+        lastUserActivationTimestampMs: activationTimestamp,
+        lastCommand: 'output-test',
+        outputTestStatus: 'starting',
+        engineOutputTest: Object.freeze({
+          ...createInitialDiagnosticTestResult(
+            'oscillator → voice gain → master gain → output analyser → destination',
+          ),
+          status: 'starting',
+        }),
+        persistentSignal: outputAnalyser
+          ? Object.freeze({
+              ...createInitialSignalMeasurement(),
+              analyserGenerationId: analyserGeneration,
+              contextGenerationId: contextGeneration,
+              analyserConnectedToDestination: destinationConnected,
+            })
+          : createInitialSignalMeasurement(),
+        errorCode: null,
+        errorMessage: null,
+      });
+      try {
+        if (releasePromise) releaseFinish?.();
+        const graph = ensureOutputGraph();
+        const pendingResume = beginResumeFromUserGesture(graph);
+        const testVoice = createPreparedVoice(graph, {
+          midiNote: 69,
+          frequencyHz: 440,
+        });
+        voice = testVoice;
+        const readyGraph = await confirmReady(
+          graph,
+          commandOperation,
+          pendingResume,
+        );
+        if (!readyGraph || disposed || commandOperation !== operation) {
+          abortVoice(testVoice);
+          updateDiagnostics({ outputTestStatus: 'failed' });
+          return { ok: false, errorCode: 'audio-start-failed' };
+        }
+        scheduleVoiceAttack(testVoice, readyGraph);
+        updateDiagnostics({ outputTestStatus: 'playing' });
+        updateDiagnosticTest('engineOutputTest', {
+          status: 'playing',
+          oscillatorStarted: true,
+          automation: snapshot.diagnostics.voiceAutomation,
+        });
+        startPersistentSignalSampling('engine-test', testVoice.generationId);
+        addLifecycleEvent('output test started', '440 Hz');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 1000));
+        if (disposed || commandOperation !== operation || voice !== testVoice) {
+          abortVoice(testVoice);
+          updateDiagnostics({ outputTestStatus: 'failed' });
+          return { ok: false, errorCode: 'audio-start-failed' };
+        }
+        await releaseVoice(testVoice);
+        if (!disposed && commandOperation === operation) {
+          updateDiagnostics({
+            engineState: 'stopped',
+            outputTestStatus: 'succeeded',
+            lastCommand: 'output-test-complete',
+          });
+          updateDiagnosticTest('engineOutputTest', { status: 'succeeded' });
+          addLifecycleEvent('output test completed');
+        }
+        return { ok: true };
+      } catch (error) {
+        updateDiagnostics({ outputTestStatus: 'failed' });
+        updateDiagnosticTest('engineOutputTest', {
+          status: 'failed',
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown output failure.',
+        });
+        return publishError(toEngineError(error), 'output-test');
+      }
+    };
+
+  const playDirectOutputTestFromUserGesture = () =>
+    runDirectOutputTestFromUserGesture('directOutputTest', false, false);
+
+  const playConstantGainOutputTestFromUserGesture = () =>
+    runDirectOutputTestFromUserGesture('constantGainOutputTest', true, false);
+
+  const recreateContextAndPlayOutputTestFromUserGesture = () =>
+    runDirectOutputTestFromUserGesture(
+      'recreatedContextOutputTest',
+      true,
+      true,
+    );
 
   const stop = async (): Promise<void> => {
     if (disposed) return;
@@ -700,8 +1558,10 @@ export function createReferenceDroneEngine(
           ...snapshot,
           status: 'stopped',
           activeMidi: null,
+          pendingMidi: null,
           frequencyHz: null,
           errorCode: null,
+          recoveryState: 'ready',
           diagnostics: {
             ...snapshot.diagnostics,
             engineState: 'stopped',
@@ -711,10 +1571,41 @@ export function createReferenceDroneEngine(
             midiNote: null,
             frequencyHz: null,
             voiceGainTarget: null,
+            voiceGainCurrent: null,
             effectiveGain: null,
             lastCommand: 'stop',
             errorCode: null,
             errorMessage: null,
+          },
+        });
+      }
+      return;
+    }
+    if (snapshot.status === 'starting') {
+      abortVoice(activeVoice);
+      if (!disposed && commandOperation === operation) {
+        publish({
+          ...snapshot,
+          status: 'stopped',
+          activeMidi: null,
+          pendingMidi: null,
+          frequencyHz: null,
+          errorCode: null,
+          recoveryState: 'ready',
+          diagnostics: {
+            ...snapshot.diagnostics,
+            engineState: 'stopped',
+            voiceState: 'none',
+            voiceGenerationId: null,
+            oscillatorCreated: false,
+            oscillatorStarted: false,
+            graphConnected: false,
+            voiceGainConnected: false,
+            midiNote: null,
+            frequencyHz: null,
+            voiceGainTarget: null,
+            effectiveGain: null,
+            lastCommand: 'stop',
           },
         });
       }
@@ -737,8 +1628,10 @@ export function createReferenceDroneEngine(
         ...snapshot,
         status: 'stopped',
         activeMidi: null,
+        pendingMidi: null,
         frequencyHz: null,
         errorCode: null,
+        recoveryState: 'ready',
         diagnostics: {
           ...snapshot.diagnostics,
           engineState: 'stopped',
@@ -771,7 +1664,14 @@ export function createReferenceDroneEngine(
       diagnostics: {
         ...snapshot.diagnostics,
         masterGain: context ? mappedGain : null,
+        masterGainCurrent: masterGain?.gain.value ?? null,
         effectiveGain: voice?.started ? mappedGain : null,
+        predictedPeak: voice?.started
+          ? mappedGain *
+            (voice.customTimbreApplied
+              ? voice.timbre.normalizedAmplitudeSum
+              : 1)
+          : null,
         lastCommand: `volume:${Math.round(volume * 100)}`,
       },
     });
@@ -794,16 +1694,145 @@ export function createReferenceDroneEngine(
           currentTime + config.volumeSmoothingSeconds,
         );
       }
+      const method =
+        typeof masterGain.gain.setTargetAtTime === 'function'
+          ? 'setTargetAtTime'
+          : typeof masterGain.gain.linearRampToValueAtTime === 'function'
+            ? 'linearRampToValueAtTime'
+            : typeof masterGain.gain.setValueAtTime === 'function'
+              ? 'setValueAtTime'
+              : 'value-assignment';
+      updateDiagnostics({
+        masterAutomation: createAutomationRecord(
+          masterGain.gain,
+          mappedGain,
+          currentTime,
+          method,
+          method === 'setTargetAtTime' ? null : method,
+          context,
+        ),
+      });
       debugLog('volume scheduled', { masterGain: mappedGain });
     } catch (error) {
       publishError(toEngineError(error), 'volume');
     }
   };
 
+  const markLifecycle = (name: string, state: string) => {
+    if (disposed) return;
+    const isPageExit = state === 'hidden' || name === 'pagehide';
+    const productOutputWasActive =
+      voice !== null ||
+      snapshot.status === 'starting' ||
+      snapshot.status === 'playing' ||
+      snapshot.status === 'changing' ||
+      snapshot.status === 'stopping';
+    addLifecycleEvent(name, state);
+    updateDiagnostics({
+      pageLifecycleState: state,
+      documentVisibilityState:
+        typeof document === 'undefined'
+          ? 'unavailable'
+          : document.visibilityState,
+      lastVisibilityChange:
+        name === 'visibilitychange'
+          ? `${Math.round(typeof performance === 'undefined' ? Date.now() : performance.now())}:${state}`
+          : snapshot.diagnostics.lastVisibilityChange,
+      requiresExplicitReactivation:
+        snapshot.diagnostics.requiresExplicitReactivation ||
+        (isPageExit && productOutputWasActive),
+    });
+    if (isPageExit && productOutputWasActive) {
+      operation += 1;
+      outputContextNeedsReplacement = true;
+      const outputTestWasActive =
+        snapshot.diagnostics.outputTestStatus === 'starting' ||
+        snapshot.diagnostics.outputTestStatus === 'playing';
+      abortVoice(voice);
+      if (outputTestWasActive)
+        updateDiagnostics({ outputTestStatus: 'failed' });
+      publishError(
+        new DroneEngineError(
+          'context-interrupted',
+          'Page lifecycle interrupted reference audio.',
+        ),
+        name,
+      );
+    }
+    if (diagnosticVoice && isPageExit) {
+      operation += 1;
+      cleanupDiagnosticVoice(diagnosticVoice);
+      for (const key of [
+        'directOutputTest',
+        'constantGainOutputTest',
+        'recreatedContextOutputTest',
+      ] as const) {
+        if (
+          snapshot.diagnostics[key].status === 'starting' ||
+          snapshot.diagnostics[key].status === 'playing'
+        )
+          updateDiagnosticTest(key, {
+            status: 'failed',
+            errorMessage: 'Page lifecycle interrupted the test.',
+          });
+      }
+    }
+    if (
+      context &&
+      isPageExit &&
+      getContextState(context) === 'running' &&
+      typeof context.suspend === 'function'
+    ) {
+      const ownedContext = context;
+      addLifecycleEvent('context suspend requested', name);
+      void ownedContext
+        .suspend()
+        .then(() => {
+          if (!disposed && context === ownedContext)
+            addLifecycleEvent(
+              'context suspend resolved',
+              getContextState(ownedContext),
+            );
+        })
+        .catch(() => {
+          if (!disposed && context === ownedContext)
+            addLifecycleEvent('context suspend rejected');
+        });
+    }
+  };
+
+  const onVisibilityChange = () =>
+    markLifecycle('visibilitychange', document.visibilityState);
+  const onPageShow = () => markLifecycle('pageshow', 'visible');
+  const onPageHide = () => markLifecycle('pagehide', 'hidden');
+  const onFocus = () => markLifecycle('focus', 'focused');
+  const onBlur = () => markLifecycle('blur', 'blurred');
+  const attachLifecycleListeners = () => {
+    if (typeof window === 'undefined' || typeof document === 'undefined')
+      return;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
+  };
+  const detachLifecycleListeners = () => {
+    if (typeof window === 'undefined' || typeof document === 'undefined')
+      return;
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('pageshow', onPageShow);
+    window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('focus', onFocus);
+    window.removeEventListener('blur', onBlur);
+  };
+
   const dispose = async (): Promise<void> => {
     if (disposed) return;
     disposed = true;
+    detachLifecycleListeners();
     operation += 1;
+    stopSignalSampling();
+    cleanupDiagnosticVoice(diagnosticVoice);
     debugLog('dispose');
     const activeVoice = voice;
     voice = null;
@@ -814,7 +1843,10 @@ export function createReferenceDroneEngine(
     releaseFinish?.();
     releaseFinish = null;
     safeDisconnect(masterGain);
+    safeDisconnect(outputAnalyser);
     masterGain = null;
+    outputAnalyser = null;
+    outputAnalyserSamples = null;
     destinationConnected = false;
     const ownedContext = context;
     context = null;
@@ -823,8 +1855,10 @@ export function createReferenceDroneEngine(
       ...snapshot,
       status: 'stopped',
       activeMidi: null,
+      pendingMidi: null,
       frequencyHz: null,
       errorCode: null,
+      recoveryState: 'ready',
       diagnostics: {
         ...snapshot.diagnostics,
         contextState:
@@ -833,13 +1867,19 @@ export function createReferenceDroneEngine(
             : snapshot.diagnostics.contextState,
         engineState: 'disposed',
         voiceState: 'none',
+        voiceGenerationId: null,
+        oscillatorCreated: false,
         oscillatorStarted: false,
         graphConnected: false,
+        voiceGainConnected: false,
+        masterGainConnected: false,
         destinationConnected: false,
         midiNote: null,
         frequencyHz: null,
         voiceGainTarget: null,
+        voiceGainCurrent: null,
         masterGain: null,
+        masterGainCurrent: null,
         effectiveGain: null,
         lastCommand: 'dispose',
       },
@@ -854,8 +1894,15 @@ export function createReferenceDroneEngine(
     }
   };
 
+  attachLifecycleListeners();
+
   return {
+    activateFromUserGesture,
     play,
+    playOutputTestFromUserGesture,
+    playDirectOutputTestFromUserGesture,
+    playConstantGainOutputTestFromUserGesture,
+    recreateContextAndPlayOutputTestFromUserGesture,
     stop,
     setVolume,
     getSnapshot: () => ({

@@ -1,6 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialReferenceDroneDiagnostics } from '../audio/referenceDroneConfig';
+import { createAudioSessionDiagnosticTimeline } from '../audio/audioSessionDiagnostics';
 import type { ReferenceDroneSnapshot } from '../types/referenceDrone';
 import { ReferenceDroneControls } from './ReferenceDroneControls';
 import { ReferenceDroneDiagnostics } from './ReferenceDroneDiagnostics';
@@ -9,9 +16,11 @@ import { ReferenceDroneStatus } from './ReferenceDroneStatus';
 const stopped: ReferenceDroneSnapshot = {
   status: 'stopped',
   activeMidi: null,
+  pendingMidi: null,
   frequencyHz: null,
   volume: 0.25,
   errorCode: null,
+  recoveryState: 'ready',
   diagnostics: createInitialReferenceDroneDiagnostics(),
 };
 
@@ -38,6 +47,9 @@ describe('reference drone controls and status', () => {
       screen.getByRole('slider', { name: 'Reference drone volume' }),
     ).toHaveValue('25');
     expect(screen.getByText(/Headphones are recommended/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Low notes use gentle upper harmonics/),
+    ).toBeInTheDocument();
 
     rerender(
       <ReferenceDroneControls
@@ -109,6 +121,20 @@ describe('reference drone controls and status', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'audio output stayed suspended',
     );
+    rerender(
+      <ReferenceDroneStatus
+        snapshot={{
+          ...stopped,
+          status: 'error',
+          errorCode: 'context-interrupted',
+          recoveryState: 'needs-reactivation',
+        }}
+        range={{ lowMidi: 48, highMidi: 72 }}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Reference audio paused by the browser. Tap the selected note to restart.',
+    );
   });
 
   it('renders compact transition diagnostics without audio-rate state', () => {
@@ -138,5 +164,81 @@ describe('reference drone controls and status', () => {
     expect(values).toHaveTextContent('Oscillator startedyes');
     expect(values).toHaveTextContent('Frequency261.63 Hz');
     expect(values).toHaveTextContent('Effective gain0.040');
+  });
+
+  it('copies the production-safe audio report and offers a fallback', async () => {
+    const writeText = vi.fn(async (report: string) => report.length > 0);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const onPlayOutputTest = vi.fn();
+    const onPlayDirectOutputTest = vi.fn();
+    const onPlayConstantGainOutputTest = vi.fn();
+    const onRecreateContext = vi.fn();
+    Object.defineProperty(navigator, 'audioSession', {
+      configurable: true,
+      value: { type: 'auto', state: 'inactive' },
+    });
+    const audioSessionTimeline = createAudioSessionDiagnosticTimeline();
+    const { unmount } = render(
+      <ReferenceDroneDiagnostics
+        diagnostics={createInitialReferenceDroneDiagnostics('AudioContext', 1)}
+        audioDiagnosticMode
+        onPlayOutputTest={onPlayOutputTest}
+        onPlayDirectOutputTest={onPlayDirectOutputTest}
+        onPlayConstantGainOutputTest={onPlayConstantGainOutputTest}
+        onRecreateContext={onRecreateContext}
+        audioSessionTimeline={audioSessionTimeline}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Play 1-second output test' }),
+    );
+    expect(onPlayOutputTest).toHaveBeenCalledOnce();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Play direct Web Audio test' }),
+    );
+    expect(onPlayDirectOutputTest).toHaveBeenCalledOnce();
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: 'Direct Web Audio audible' }),
+      ).getByRole('button', { name: 'No' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy audio diagnostic report' }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0]?.[0]).toContain(
+      'No microphone audio or samples are included.',
+    );
+    expect(writeText.mock.calls[0]?.[0]).toContain('Direct Web Audio: no');
+    expect(writeText.mock.calls[0]?.[0]).toContain(
+      'AudioSession preparation: not-requested',
+    );
+    expect(
+      screen.getByText('Audio diagnostic report copied.'),
+    ).toBeInTheDocument();
+    unmount();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn(async () => Promise.reject(new Error('blocked'))),
+      },
+    });
+    render(
+      <ReferenceDroneDiagnostics
+        diagnostics={createInitialReferenceDroneDiagnostics('AudioContext', 2)}
+        audioDiagnosticMode
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy audio diagnostic report' }),
+    );
+    const fallback = await screen.findByLabelText(
+      'Audio diagnostic report copy fallback',
+    );
+    expect((fallback as HTMLTextAreaElement).value).toContain('Lifecycle log:');
   });
 });

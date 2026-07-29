@@ -2,7 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { frequencyToMusicalPitch } from '../music/pitchConversion';
 import type { PitchHistorySummary } from '../types/pitchHistory';
-import { installReferenceDroneAudioMock } from '../test/referenceDroneAudioMock';
+import {
+  installReferenceDroneAudioMock,
+  TestReferenceDroneAudioContext,
+} from '../test/referenceDroneAudioMock';
 import { PitchMonitor } from './PitchMonitor';
 
 const emptySummary: PitchHistorySummary = {
@@ -94,6 +97,50 @@ describe('PitchMonitor history diagnostics', () => {
     expect(
       screen.getByText('Start the microphone to begin pitch history.'),
     ).toBeInTheDocument();
+  });
+
+  it('creates and starts audio exactly once on completed activation, not focus or press', async () => {
+    render(
+      <PitchMonitor
+        history={{ points: [] }}
+        summary={emptySummary}
+        active={false}
+        captureState={{
+          status: 'recording',
+          accumulatedPausedDurationMs: 0,
+          resumeBoundaryEffectiveMs: null,
+        }}
+        sessionVersion={0}
+        toEffectiveTimestamp={(timestamp) => timestamp}
+        durationMs={15_000}
+        onClear={vi.fn()}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        {...defaultRangeProps}
+      />,
+    );
+    const c4 = screen.getByRole('button', {
+      name: 'Reference note C4, 261.6 hertz',
+    });
+    c4.focus();
+    fireEvent.keyDown(c4, { key: 'ArrowUp' });
+    expect(TestReferenceDroneAudioContext.instances).toHaveLength(0);
+    fireEvent.pointerDown(c4, { pointerId: 5, pointerType: 'touch' });
+    fireEvent.pointerUp(c4, { pointerId: 5, pointerType: 'touch' });
+    expect(TestReferenceDroneAudioContext.instances).toHaveLength(0);
+    fireEvent.click(c4);
+    expect(TestReferenceDroneAudioContext.instances).toHaveLength(1);
+    expect(
+      TestReferenceDroneAudioContext.instances[0]?.oscillators,
+    ).toHaveLength(1);
+    expect(
+      TestReferenceDroneAudioContext.instances[0]?.oscillators[0]?.started,
+    ).toBe(true);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Reference drone status')).toHaveTextContent(
+        'playing C4',
+      ),
+    );
   });
 
   it('reports point types and clears without invoking microphone controls', () => {

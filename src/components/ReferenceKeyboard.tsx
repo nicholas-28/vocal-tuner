@@ -10,6 +10,8 @@ import {
   formatReferenceKeyFrequency,
   generateReferenceKeys,
 } from '../reference/referenceKeyboard';
+import { createReferenceKeyPresentation } from '../reference/referenceKeyPresentation';
+import type { ReferenceDroneSnapshot } from '../types/referenceDrone';
 import type {
   ReferenceFocusCommand,
   ReferenceKeyboardState,
@@ -27,7 +29,7 @@ type ReferenceKeyboardProps = {
   onMoveFocus: (command: ReferenceFocusCommand) => void;
   onFocusMidi: (midiNote: number) => void;
   onActivateMidi: (midiNote: number) => void;
-  activeDroneMidi: number | null;
+  droneSnapshot: ReferenceDroneSnapshot;
   selectionLocked?: boolean;
 };
 
@@ -42,7 +44,7 @@ export function ReferenceKeyboard({
   onMoveFocus,
   onFocusMidi,
   onActivateMidi,
-  activeDroneMidi,
+  droneSnapshot,
   selectionLocked = false,
 }: ReferenceKeyboardProps) {
   const keys = useMemo(() => generateReferenceKeys(range), [range]);
@@ -65,9 +67,19 @@ export function ReferenceKeyboard({
   };
 
   useEffect(() => {
+    const releaseForVisibilityLoss = () => {
+      if (document.visibilityState === 'hidden') onReleaseAll();
+    };
     window.addEventListener('blur', onReleaseAll);
+    window.addEventListener('pagehide', onReleaseAll);
+    document.addEventListener('visibilitychange', releaseForVisibilityLoss);
     return () => {
       window.removeEventListener('blur', onReleaseAll);
+      window.removeEventListener('pagehide', onReleaseAll);
+      document.removeEventListener(
+        'visibilitychange',
+        releaseForVisibilityLoss,
+      );
       if (suppressCompatibilityClickTimerRef.current !== null) {
         window.clearTimeout(suppressCompatibilityClickTimerRef.current);
       }
@@ -138,7 +150,22 @@ export function ReferenceKeyboard({
       <div className="reference-keyboard__keys">
         {keys.map((key) => {
           const frequency = formatReferenceKeyFrequency(key.idealFrequencyHz);
-          const sounding = activeDroneMidi === key.midiNote;
+          const presentation = createReferenceKeyPresentation(
+            key.midiNote,
+            state,
+            droneSnapshot,
+          );
+          const stateDescription = presentation.isSounding
+            ? ', reference drone sounding'
+            : presentation.isPreparing
+              ? ', reference drone preparing'
+              : presentation.needsReactivation
+                ? ', reference audio paused by browser'
+                : presentation.isUnavailable
+                  ? ', reference audio unavailable'
+                  : presentation.hasError
+                    ? ', reference audio error'
+                    : '';
           return (
             <button
               key={key.midiNote}
@@ -148,13 +175,18 @@ export function ReferenceKeyboard({
               }}
               type="button"
               className={`reference-key reference-key--${key.kind}`}
-              aria-label={`Reference note ${key.label}, ${frequency.replace('Hz', 'hertz')}${sounding ? ', reference drone sounding' : ''}`}
-              aria-pressed={state.selectedMidi === key.midiNote}
-              aria-current={sounding ? 'true' : undefined}
+              aria-label={`Reference note ${key.label}, ${frequency.replace('Hz', 'hertz')}${stateDescription}`}
+              aria-pressed={presentation.isSelected}
+              aria-current={presentation.isSounding ? 'true' : undefined}
               aria-disabled={selectionLocked || undefined}
               data-midi={key.midiNote}
-              data-pressed={state.pressedMidi === key.midiNote || undefined}
-              data-sounding={sounding || undefined}
+              data-pressed={presentation.isPressed || undefined}
+              data-preparing={presentation.isPreparing || undefined}
+              data-sounding={presentation.isSounding || undefined}
+              data-needs-reactivation={
+                presentation.needsReactivation || undefined
+              }
+              data-error={presentation.hasError || undefined}
               tabIndex={state.focusedMidi === key.midiNote ? 0 : -1}
               onFocus={() => onFocusMidi(key.midiNote)}
               onPointerDown={(event) => {

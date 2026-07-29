@@ -205,3 +205,84 @@ Vercel hosts the existing Vite `dist` output through GitHub Preview Deployments 
 Node 22 matches GitHub Actions and is declared in `package.json`. Builds run TypeScript, Vite, then a local deployment validator. Vercel environment and Git values are explicitly selected at build time, validated in one typed module, and shown only in developer diagnostics. Production derives from Vercel build metadata rather than hostname guessing.
 
 Diagnostics and demo query handling use one environment policy. Development and Preview retain intended diagnostics; Production hides them and always rejects fabricated tuner input. Automated Playwright uses an explicit non-production build flag. A React error boundary handles unexpected render failures locally without external reporting or production stack disclosure.
+
+## ADR-023 — Reference output starts inside trusted activation and confirms rendering
+
+Status: accepted
+
+A production iPhone Safari report exposed a timing gap in ADR-016: context construction and resume were synchronous in the semantic click, but oscillator construction and start occurred only after awaiting resume. WebKit applies stricter transient-activation rules to starting Web Audio rendering. Reference activation now synchronously creates/connects a zero-gain voice and starts its oscillator in the trusted activation task, then awaits resume and confirms actual running state plus an advancing rendering clock before scheduling attack or publishing `playing`.
+
+Runtime constructor selection prefers `AudioContext`, falls back to `webkitAudioContext` only when present, and remains lazy. Context/voice generations reject stale events. Visibility loss invalidates output without automatic foreground playback; a later explicit gesture attempts recovery. Production diagnostics remain hidden by default but `audioDiagnostics=1` temporarily exposes read-only lifecycle data, a bounded local log, report copying, and an explicit protected A4 output test. It cannot enable fake microphone or practice data.
+
+## ADR-024 — Diagnose physical output with pre-destination samples and isolated comparisons
+
+Status: superseded by ADR-028
+
+Physical Safari 18.4 testing on iOS 18.4.1 showed that ADR-023's activation and rendering checks can all pass while both the persistent drone and same-engine output test remain inaudible. Control-node connections, an advancing context clock, and `AudioParam.value` do not prove that rendered buffers contain signal or that `AudioDestinationNode` reaches the physical route.
+
+The temporary `audioDiagnostics=1` surface therefore inserts a time-domain analyser on the actual persistent path immediately before destination. It classifies RMS/peak only after three consecutive 1,024-sample buffers at 8 Hz cross a `0.0001` threshold, using one interval and reusable memory. It also provides isolated ramped and constant-gain Web Audio paths, generated native HTML media, and explicit fresh-context comparison. Manual audibility annotations remain local and all paths avoid microphone data.
+
+These experiments are diagnostics rather than an automatic recovery policy. Active pre-destination samples do not prove speaker output; native media and physical observations determine the interpretation branch. Experimental `navigator.audioSession` information is capability-detected and read-only. No production envelope, output routing, or automatic context-recreation behavior changes until physical A/B evidence identifies the smallest safe repair.
+
+**Resolution (ADR-028):** the diagnostic tooling built here — the pre-destination analyser and the native-media/isolated-path comparisons — was sound engineering and is retained. The premise it was built to test, that inaudibility was a physical-output defect in the application's Web Audio graph, was wrong: the device's hardware mute switch was silencing the graph. The native-media comparison staying audible while Web Audio stayed silent, observed repeatedly during this investigation, is exactly the signature the mute switch produces, not evidence of a broken route.
+
+## ADR-025 — Preserve Web Audio ownership while measuring session transitions and improving harmonic audibility
+
+Status: superseded by ADR-028 (previously superseded by ADR-026)
+
+Physical iOS 18.4.1 testing showed that microphone capture can make an already digitally active reference drone physically audible. The microphone and drone use separate contexts, capture creates its context only after permission, and its source/analyser graph has no destination connection. The strongest supported explanation is therefore an implicit iOS audio-session/category or route transition caused by `getUserMedia`, rather than a dependency in the application graph.
+
+The temporary audio diagnostic mode now records a bounded cross-context timeline and permits explicit, capability-detected `playback` and `play-and-record` assignments with prior-value restoration. These assignments are not used in normal mode: the Audio Session API remains a Working Draft, and WebKit has documented microphone-capture failures when `playback` is left active. Web Audio remains the only production backend; neither microphone permission nor native-media fallback is selected without a successful physical A/B result.
+
+Mobile audibility is improved independently with one deterministic `PeriodicWave`. The selected note stays harmonic 1, all upper partials are integer multiples, and low/middle/high profiles reduce harmonic support as MIDI rises. Coefficients are normalized by their absolute sum with Web Audio normalization disabled. The existing 0.16 maximum master gain and volume semantics remain unchanged, so the conservative predicted peak cannot exceed 0.16. Unsupported periodic-wave construction falls back to the exact sine fundamental.
+
+**Resolution (ADR-028):** the `getUserMedia` correlation recorded here was real, but the mechanism was misattributed. Starting capture moves the page's audio session into a play-and-record category; per Apple's published category documentation, that category (like media playback) is not silenced by the hardware mute switch, while the category an idle Web Audio graph was apparently using is. The drone was never route- or graph-dependent on the microphone. The harmonic-profile work in this ADR is unrelated to audibility and remains correct.
+
+## ADR-026 — Prepare an inactive playback session before constructing reference output
+
+Status: superseded by ADR-028 (previously superseded by ADR-027)
+
+Physical iOS 18.4.1 testing established that a fresh-page drone has strong pre-destination samples but no physical output, while `getUserMedia` makes that same unrecreated drone audible immediately and it remains audible after capture stops. The microphone creates a separate input-only context after permission and never connects to destination. The implementation therefore has no application graph edge capable of waking the drone; the changing resource is WebKit's shared page/OS audio session and physical route.
+
+On a reference-key gesture, the production engine now capability-detects `navigator.audioSession`. When its state is not active and its type is not already `playback`, it assigns `playback` before constructing output. If a stopped output context is retained, the engine discards it after preparation; the replacement context, graph, zero-gain voice, and oscillator are created synchronously in the same trusted gesture. This is candidate A. An active session is never overwritten. The prior type is restored on the next task only while the session still contains the temporary `playback` value, which avoids leaving a capture-incompatible playback policy or overwriting another session owner.
+
+The fallback on browsers without the draft API is the unchanged lazy Web Audio path. The repair does not inspect the browser user agent, call `getUserMedia`, change master gain, change the exact fundamental, add a native-media backend, or couple drone ownership to microphone analysis. The now-resolved interactive session experiments and phase annotations are removed; the bounded transition timeline remains for physical verification.
+
+Physical iPhone Safari testing rejected this candidate: the temporary `playback` assignment plus fresh-context construction remained inaudible before microphone capture and introduced unreliable key presentation and foreground recovery. It must not run during normal reference activation.
+
+**Resolution (ADR-028):** this candidate targeted the theoretically correct idea — assign a category that Apple documents as exempt from the mute switch — and still measured as ineffective on device. Whether the Working-Draft `navigator.audioSession` write simply does not produce the same practical category change that `getUserMedia` triggers in this WebKit build, or something else prevented it from taking effect, is Unknown; this was not root-caused further once the actual variable (the physical switch) was identified. The rejection of this candidate as a production repair stands regardless: it did not help, and the real fix required no application change at all.
+
+## ADR-027 — Roll back session mutation and make reference state authoritative
+
+Status: superseded by ADR-028; the state-machine changes below remain accepted on their own merits
+
+Normal reference activation no longer writes `navigator.audioSession.type`. The playback-session plus context-recreation sequence remains available only as an explicitly labeled `audioDiagnostics=1` action. Neither normal nor diagnostic reference playback calls `getUserMedia`; microphone permission remains owned exclusively by the microphone control.
+
+The physical evidence locates the microphone wake-up before the microphone analysis context exists: `getUserMedia` resolves with a live track, the already-created drone becomes audible, and only afterward does the application create the separate input-only analysis context. Stopping its track and closing that input context does not silence the drone. The implementation therefore proves no graph, node, destination, or context-generation dependency between capture and output; the remaining explanation is a browser/platform audio-session or route transition outside the application graph. The exact undocumented platform mutation is not asserted.
+
+Reference presentation now derives from separate pressed, selected, pending, confirmed-sounding, needs-reactivation, and error fields. Selection is published synchronously before audio work. `activeMidi` is confirmed only after a running context and complete voice graph; pending starts use `pendingMidi`. Operation generations implement newest-command-wins semantics and prevent stale completions or failures from overwriting newer intent.
+
+Hidden/pagehide invalidates and cleans the current voice, clears transient key pressure, and marks the selected note as needing an explicit reactivation. Foreground events never play audio. The next explicit gesture closes the invalidated retained context and constructs a fresh generation before starting a voice. Healthy contexts are still retained across an ordinary Stop. Physical audibility remains an unverified acceptance gate.
+
+**Resolution (ADR-028):** removing the AudioSession-mutation workaround from the production path was the right call, but not because it fixed audibility — nothing about it ever affected the mute switch. It cost nothing to remove because it was doing nothing. The `pendingMidi`/`recoveryState` presentation-state split and the newest-command-wins serialization are unrelated to the audibility question, fix a real activation race, and remain accepted as-is. The diagnostics-gated AudioSession experiment kept here is now a documented negative result, not a working mechanism, and is a deletion candidate in a future engine/diagnostics cleanup. "Physical audibility remains an unverified acceptance gate" is no longer accurate as written — see ADR-028 for the verified result.
+
+## ADR-028 — Web Audio on iOS respects the hardware mute switch
+
+Status: accepted, verified on device
+
+Physical testing on one iPhone (clean tree at commit `68ea3e8`, ordinary Safari tab, hardware mute switch in ring/sound-enabled position, no microphone started) confirmed the reference drone is audible from a plain Web Audio graph with none of the ADR-024–ADR-027 workarounds applied. The symptom ADR-023 through ADR-027 investigated — "reference drone inaudible on iPhone Safari" — did not have an application-level cause. The switch was in silent position for the original report and for much of this investigation; Web Audio on iOS Safari honors that switch, so a fully connected, `running`, otherwise-healthy context produces no audible output while it is engaged.
+
+`HTMLAudioElement` does not honor the same switch. This is why the native-media diagnostic built under ADR-024 kept reporting audible results independent of drone state — that observation was accurate at the time and is now understood, not merely logged.
+
+This also reconciles the `getUserMedia` correlation from ADR-025/ADR-026: starting microphone capture moves the page's OS audio session into a recording category. Apple's published audio-session-category documentation distinguishes sound-effect/game-audio categories, which the switch silences, from playback and recording categories, which it does not. The drone becoming audible after `getUserMedia` was never a graph dependency, a route "wake-up," or an undocumented WebKit transition — it was a side effect of leaving the mute-switch-affected category. ADR-026's attempt to write `navigator.audioSession.type = 'playback'` targeted the same idea and, on paper, should have produced a comparable escape; that it measured as ineffective on device suggests the Working-Draft `navigator.audioSession` write did not produce the same practical category change that `getUserMedia` does in this WebKit build. The exact internal reason is Unknown — no WebKit source was inspected as part of this finding.
+
+Reference: Apple's documented audio-session-category behavior (sound-effect/game-audio categories silenced by the switch; media-playback categories not silenced) is treated here as background context for why the symptom behaves the way it does, not as a WebKit source-level citation.
+
+**What this changes:**
+
+- ADR-024 through ADR-027 investigated a cause that did not exist. Their diagnostic tooling (pre-destination analyser, isolated comparisons, native-media test, bounded lifecycle timeline) remains useful and is retained. Their causal conclusions are superseded by this entry.
+- The production removal of the AudioSession-mutation workaround (ADR-027) remains the right call independent of this finding: it never fixed anything, so removing it cost nothing.
+- The diagnostics-gated `navigator.audioSession` experiment (the "Prepare playback session, recreate context, and test" action) survives in the codebase as a documented negative result, not a working mechanism. It is a deletion candidate during a future engine/diagnostics cleanup; removing diagnostics tooling was out of scope for this correction.
+- `pendingMidi` and `recoveryState` (introduced while resolving ADR-027) are unaffected by this finding — they fix a real activation-race and lifecycle-messaging issue unrelated to audibility and remain correct.
+
+**What this does not establish:** this is one physical device, checked once, with the switch toggled by hand. It does not establish behavior across iOS versions, does not audit WebKit source, and does not rule out a future iOS release changing this behavior. Treat "Web Audio respects the mute switch" as the working assumption for this codebase, sourced from one manual verification plus Apple's published category documentation, not as an exhaustively tested platform guarantee.

@@ -619,6 +619,8 @@ h1 {
 }
 
 .reference-key {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -634,6 +636,7 @@ h1 {
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
+  transition: none;
 }
 
 .reference-key--accidental {
@@ -649,20 +652,25 @@ h1 {
   box-shadow: inset 0 0 0 1px #78dfcb;
 }
 
-.reference-key[aria-pressed='true']::before {
-  content: '•';
-  margin-right: auto;
-  color: #08705f;
+.reference-key[data-preparing='true'] {
+  border-color: #e7c47b;
+  color: #18130a;
+  background: #d8b66e;
+  box-shadow: inset 0 0 0 2px #f8e6bd;
 }
 
-.reference-key--accidental[aria-pressed='true']::before {
-  color: #78dfcb;
+.reference-key[data-needs-reactivation='true'] {
+  border-color: #b8c4d2;
+  color: #111820;
+  background: #95a3b3;
+  box-shadow: inset 0 0 0 2px #dce4ec;
 }
 
-.reference-key[data-pressed='true'] {
-  color: #07110f;
-  background: #78dfcb;
-  box-shadow: inset 0 0 0 2px #e5fff9;
+.reference-key[data-error='true'] {
+  border-color: #d69a9a;
+  color: #1c0c0c;
+  background: #c98d8d;
+  box-shadow: inset 0 0 0 2px #f0caca;
 }
 
 .reference-key[data-sounding='true'] {
@@ -672,16 +680,16 @@ h1 {
   box-shadow: inset 0 0 0 2px #08705f;
 }
 
-.reference-key[data-sounding='true']::after {
-  content: 'D';
-  margin-left: auto;
-  color: #07594d;
-  font-size: 0.46rem;
-}
-
-.reference-key[data-sounding='true'][data-pressed='true'] {
+.reference-key[data-pressed='true'] {
+  color: #07110f;
   background: #d2fff6;
   box-shadow: inset 0 0 0 2px #f5fffd;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .reference-key:hover {
+    filter: brightness(1.08);
+  }
 }
 
 .reference-key:focus-visible {
@@ -1214,10 +1222,10 @@ h1 {
 
 .reference-drone-diagnostics {
   margin-top: 0.55rem;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle, #343d49);
   border-radius: 0.65rem;
   padding: 0.45rem 0.6rem;
-  color: var(--text-muted);
+  color: var(--text-muted, #a8b2bf);
   font-size: 0.75rem;
 }
 
@@ -1245,6 +1253,112 @@ h1 {
   margin: 0;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+}
+
+.reference-audio-section {
+  margin-top: 0.65rem;
+  padding: 0.6rem;
+  border: 1px solid #2b333e;
+  border-radius: 0.55rem;
+  background: #0e1218;
+}
+
+.reference-audio-section h3,
+.reference-audio-section p {
+  margin: 0 0 0.55rem;
+}
+
+.reference-audio-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.reference-audio-action-grid button,
+.reference-audio-manual-results button,
+.reference-audio-section > button {
+  min-height: 44px;
+}
+
+.reference-audio-manual-results {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.reference-audio-manual-results fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid #343d49;
+  border-radius: 0.45rem;
+}
+
+.reference-audio-manual-results legend {
+  padding: 0 0.25rem;
+  font-weight: 700;
+}
+
+.reference-audio-manual-results button {
+  flex: 1 1 6rem;
+}
+
+.reference-audio-signal,
+.reference-audio-test-result {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.45rem;
+  background: #151b23;
+  overflow-wrap: anywhere;
+}
+
+.reference-audio-test-result p {
+  margin: 0;
+}
+
+.reference-audio-caution {
+  margin-top: 0.65rem !important;
+  color: #d0ad83;
+}
+
+.reference-audio-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.75rem;
+}
+
+.reference-audio-section textarea {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.55rem;
+  border: 1px solid var(--border-subtle, #343d49);
+  border-radius: 0.45rem;
+  color: var(--text-primary, #f5f7fa);
+  background: var(--surface-raised, #12161d);
+  font:
+    0.7rem/1.4 ui-monospace,
+    monospace;
+}
+
+.reference-audio-log {
+  max-height: 14rem;
+  margin: 0.65rem 0 0;
+  padding-left: 1.4rem;
+  overflow: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 420px) {
+  .reference-drone-diagnostics dl,
+  .reference-audio-action-grid,
+  .reference-audio-diagnostic-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .controls {

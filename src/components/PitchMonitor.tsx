@@ -9,6 +9,7 @@ import type {
 import { PitchGridCanvas } from './PitchGridCanvas';
 import { PitchHistoryControls } from './PitchHistoryControls';
 import { PitchRangeControls } from './PitchRangeControls';
+import type { AudioSessionDiagnosticTimeline } from '../types/audioDiagnostics';
 
 type PitchMonitorProps = {
   summary: PitchHistorySummary;
@@ -36,6 +37,8 @@ type PitchMonitorProps = {
   observationTimestampMs: number | null;
   practiceMicrophoneActive?: boolean;
   showReferenceDroneDiagnostics?: boolean;
+  showAudioDiagnostics?: boolean;
+  audioSessionTimeline?: AudioSessionDiagnosticTimeline | null;
 };
 
 export function PitchMonitor({
@@ -64,6 +67,8 @@ export function PitchMonitor({
   observationTimestampMs,
   practiceMicrophoneActive = active,
   showReferenceDroneDiagnostics = false,
+  showAudioDiagnostics = false,
+  audioSessionTimeline = null,
 }: PitchMonitorProps) {
   const relativeNewestMs =
     summary.oldestTimestampMs === null || summary.newestTimestampMs === null
@@ -159,6 +164,8 @@ export function PitchMonitor({
         observationTimestampMs={observationTimestampMs}
         practiceMicrophoneActive={practiceMicrophoneActive}
         showReferenceDroneDiagnostics={showReferenceDroneDiagnostics}
+        showAudioDiagnostics={showAudioDiagnostics}
+        audioSessionTimeline={audioSessionTimeline}
       />
     </section>
   );
