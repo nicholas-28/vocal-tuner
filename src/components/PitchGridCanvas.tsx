@@ -168,9 +168,8 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   const activateReferenceMidi = useCallback(
     (midiNote: number) => {
       if (practice.targetSelectionLocked) return;
-      const activation = toggleReferenceMidi(midiNote);
       selectReferenceMidi(midiNote);
-      void activation;
+      void toggleReferenceMidi(midiNote);
     },
     [practice.targetSelectionLocked, selectReferenceMidi, toggleReferenceMidi],
   );
@@ -197,7 +196,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
           onMoveFocus={referenceKeyboard.moveFocus}
           onFocusMidi={referenceKeyboard.setFocusedMidi}
           onActivateMidi={activateReferenceMidi}
-          activeDroneMidi={referenceDrone.snapshot.activeMidi}
+          droneSnapshot={referenceDrone.snapshot}
           selectionLocked={practice.targetSelectionLocked}
         />
         <figure
@@ -265,8 +264,8 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
           onPlayConstantGainOutputTest={() =>
             void referenceDrone.playConstantGainOutputTestFromUserGesture()
           }
-          onRecreateContext={() =>
-            void referenceDrone.recreateContextAndPlayOutputTestFromUserGesture()
+          onRecreateContext={
+            referenceDrone.recreateContextAndPlayOutputTestFromUserGesture
           }
           audioSessionTimeline={audioSessionTimeline}
         />
