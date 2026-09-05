@@ -78,6 +78,11 @@ export function MicrophoneControls({
       >
         {buttonLabel}
       </button>
+      {isRequesting && (
+        <button className="secondary-button" type="button" onClick={onStop}>
+          Cancel microphone
+        </button>
+      )}
       <p className="privacy-note">
         Your microphone audio is processed locally on this device and is not
         uploaded.

@@ -37,11 +37,12 @@ export const microphoneStateContent: Record<
   },
   'no-device': {
     status: 'Microphone unavailable',
-    guidance: 'No microphone was found.',
+    guidance:
+      'Microphone input is unavailable or was interrupted. Check your device, then try again.',
   },
   error: {
     status: 'Microphone error',
     guidance:
-      'The microphone could not be started. Check that it is available, then try again.',
+      'Microphone analysis could not start or was interrupted. Check that the microphone is available, then try again.',
   },
 };

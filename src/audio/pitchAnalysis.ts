@@ -5,6 +5,8 @@ export const pitchAnalysisConfig = {
   fftSize: 4096,
   analysisIntervalMs: 1000 / 30,
   publishIntervalMs: 1000 / 15,
+  startupTimeoutMs: 1000,
+  clockStallTimeoutMs: 250,
 } as const;
 
 export type PitchAnalysisHandle = {
@@ -26,89 +28,148 @@ export function startPitchAnalysis(
 ): PitchAnalysisHandle {
   const AudioContextClass = getAudioContextConstructor();
   const context = new AudioContextClass();
-  const source = context.createMediaStreamSource(stream);
-  const analyser = context.createAnalyser();
-  analyser.fftSize = pitchAnalysisConfig.fftSize;
-  analyser.smoothingTimeConstant = 0;
-  source.connect(analyser);
-
-  let samples: Float32Array | null = new Float32Array(analyser.fftSize);
-  let centeredBuffer: Float32Array | null = new Float32Array(analyser.fftSize);
-  let differenceBuffer: Float64Array | null = new Float64Array(
-    Math.floor(context.sampleRate / 65) + 1,
-  );
+  let source: MediaStreamAudioSourceNode | null = null;
+  let analyser: AnalyserNode | null = null;
+  let samples: Float32Array<ArrayBuffer> | null = null;
+  let centeredBuffer: Float32Array | null = null;
+  let differenceBuffer: Float64Array | null = null;
   let animationFrame: number | null = null;
   let lastAnalysisAt = -pitchAnalysisConfig.analysisIntervalMs;
   let lastPublishedAt = -pitchAnalysisConfig.publishIntervalMs;
+  let lastAudioTime = context.currentTime;
+  let lastProgressAt = performance.now();
+  let hasProgressed = false;
+  let hasRun = context.state === 'running';
   let stopped = false;
+  let stopPromise: Promise<void> | null = null;
 
-  const stop = async () => {
-    if (stopped) return;
+  const stop = (): Promise<void> => {
+    if (stopped) return stopPromise ?? Promise.resolve();
     stopped = true;
     if (animationFrame !== null) cancelAnimationFrame(animationFrame);
-    source.disconnect();
-    analyser.disconnect();
+    context.removeEventListener('statechange', onStateChange);
+    // Attempt every release even if an individual browser operation fails.
+    for (const node of [source, analyser]) {
+      try {
+        node?.disconnect();
+      } catch {
+        /* Already disconnected. */
+      }
+    }
     samples = null;
     centeredBuffer = null;
     differenceBuffer = null;
-    if (context.state !== 'closed') await context.close();
+    stopPromise = (async () => {
+      if (context.state !== 'closed') await context.close();
+    })();
+    // Failure callbacks cannot await cleanup; callers can still await stop().
+    void stopPromise.catch(() => undefined);
+    return stopPromise;
   };
 
-  if (context.state === 'suspended') {
-    void context.resume().catch(() => {
-      onError();
-      void stop();
-    });
+  const fail = () => {
+    if (stopped) return;
+    void stop();
+    onError();
+  };
+
+  function onStateChange() {
+    if (stopped) return;
+    if (context.state === 'running') hasRun = true;
+    else if (hasRun || context.state !== 'suspended') fail();
   }
 
   const analyze = (timestamp: number) => {
-    if (stopped || samples === null) return;
-
+    if (stopped || samples === null || analyser === null) return;
     try {
-      if (
+      onStateChange();
+      if (stopped) return;
+      const now = performance.now();
+      if (context.state !== 'running') {
+        if (now - lastProgressAt >= pitchAnalysisConfig.startupTimeoutMs) {
+          fail();
+          return;
+        }
+      } else if (
         timestamp - lastAnalysisAt >=
         pitchAnalysisConfig.analysisIntervalMs
       ) {
-        analyser.getFloatTimeDomainData(samples);
-        const detection = detectPitchYin(
-          samples,
-          context.sampleRate,
-          performance.now(),
-          {
+        lastAnalysisAt = timestamp;
+        const audioTime = context.currentTime;
+        if (!Number.isFinite(audioTime) || audioTime < lastAudioTime) {
+          fail();
+          return;
+        }
+        // A stable note is valid. Freshness comes from the render clock, never
+        // from comparing pitches or sample values. Repeated clock ticks do not
+        // receive new observation timestamps, even during the jitter allowance.
+        if (audioTime > lastAudioTime) {
+          lastAudioTime = audioTime;
+          lastProgressAt = now;
+          hasProgressed = true;
+          analyser.getFloatTimeDomainData(samples);
+          const detection = detectPitchYin(samples, context.sampleRate, now, {
             differenceBuffer: differenceBuffer ?? undefined,
             centeredBuffer: centeredBuffer ?? undefined,
-          },
-        );
-        lastAnalysisAt = timestamp;
-        if (
-          timestamp - lastPublishedAt >=
-          pitchAnalysisConfig.publishIntervalMs
+          });
+          if (
+            timestamp - lastPublishedAt >=
+            pitchAnalysisConfig.publishIntervalMs
+          ) {
+            onDetection(detection);
+            lastPublishedAt = timestamp;
+          }
+        } else if (
+          now - lastProgressAt >=
+          (hasProgressed
+            ? pitchAnalysisConfig.clockStallTimeoutMs
+            : pitchAnalysisConfig.startupTimeoutMs)
         ) {
-          onDetection(detection);
-          lastPublishedAt = timestamp;
+          fail();
+          return;
         }
       }
-      animationFrame = requestAnimationFrame(analyze);
+      if (!stopped) animationFrame = requestAnimationFrame(analyze);
     } catch {
-      onError();
-      void stop();
+      fail();
     }
   };
 
-  animationFrame = requestAnimationFrame(analyze);
-  return {
-    stop,
-    diagnostics: Object.freeze({
-      contextState: String(context.state),
-      sampleRate: Number.isFinite(context.sampleRate)
-        ? context.sampleRate
-        : null,
-      destinationChannelCount: Number.isFinite(context.destination.channelCount)
-        ? context.destination.channelCount
-        : null,
-      destinationConnected: false,
-    }),
-  };
+  try {
+    source = context.createMediaStreamSource(stream);
+    analyser = context.createAnalyser();
+    analyser.fftSize = pitchAnalysisConfig.fftSize;
+    analyser.smoothingTimeConstant = 0;
+    source.connect(analyser); // Deliberately no microphone destination connection.
+    samples = new Float32Array(analyser.fftSize);
+    centeredBuffer = new Float32Array(analyser.fftSize);
+    differenceBuffer = new Float64Array(
+      Math.floor(context.sampleRate / 65) + 1,
+    );
+    context.addEventListener('statechange', onStateChange);
+    if (context.state === 'suspended') {
+      void context.resume().catch(fail);
+    }
+    animationFrame = requestAnimationFrame(analyze);
+    return {
+      stop,
+      diagnostics: Object.freeze({
+        contextState: String(context.state),
+        sampleRate: Number.isFinite(context.sampleRate)
+          ? context.sampleRate
+          : null,
+        destinationChannelCount: Number.isFinite(
+          context.destination.channelCount,
+        )
+          ? context.destination.channelCount
+          : null,
+        destinationConnected: false,
+      }),
+    };
+  } catch (error) {
+    void stop();
+    throw error;
+  }
 }
 
 function getAudioContextConstructor(): AudioContextConstructor {

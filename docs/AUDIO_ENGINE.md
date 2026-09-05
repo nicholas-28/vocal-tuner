@@ -12,6 +12,28 @@ It is not intended for:
 - multiple simultaneous voices;
 - noisy rooms with loud music.
 
+## Microphone analysis lifecycle
+
+`useMicrophone` owns capture and the analysis handle. A synchronous command lock and generation token are acquired before Start awaits anything. Reentrant Starts are ignored while requesting, active, or stopping. Stop (including Cancel during acquisition), failure, and unmount invalidate the generation before releasing resources. Late stream resolutions are stopped immediately; late rejections, detections, and error callbacks cannot change a newer session. Browser permission requests cannot be aborted by the app: cancellation revokes ownership, and any subsequently granted tracks are stopped without creating an analysis graph.
+
+`startPitchAnalysis` owns its dedicated input AudioContext, source, analyser, scratch buffers, and RAF. Its only connection is source → analyser, never to the destination. Construction failure disconnects everything already created and requests context closure. Disposal is idempotent, removes the context listener, cancels the RAF, drops sample buffers, disconnects both nodes, and closes the context. The hook removes track listeners and stops every acquired track on Stop, failure, or unmount. Cleanup attempts continue if one release operation throws. Retry waits for an owned monitor's pending disposal; a rejected disposal on Stop reports an error and unknown context state instead of claiming closure. Browser close/track-stop failures cannot be forced to succeed by application code.
+
+### Trustworthy observations
+
+A suspended analyser can retain its previous samples. Reading those samples repeatedly and attaching new wall-clock timestamps manufactured fresh pitch evidence, including false practice evidence. Publication now requires a running context with a finite rendering clock that has advanced since the previous analysis, plus input tracks that have not ended or muted. Stable pitch and identical waveform values are legitimate; neither is used as a freshness heuristic.
+
+The existing RAF checks context state and the 30 Hz analysis gate. The initial context may be suspended while its one resume request completes; no observation is published until rendering advances. Startup without progress has a 1000 ms allowance. After progress begins, a repeated clock suppresses analysis/publication immediately, and 250 ms without progress ends the session. The allowance tolerates clock quantization and short scheduling jitter; it never republishes held samples. A long RAF scheduling gap does not itself fail if the audio clock progressed. Deadlines are evaluated on RAF callbacks, so they may be delayed while the browser suspends JavaScript. Context state events still invalidate the session when delivered.
+
+After the context has run, suspension, interruption, closure, or an unknown state immediately ends analysis. Non-finite/backward clock values, analyser exceptions, and resume rejection also fail. Track end/mute signals invalidate capture independently. These are lifecycle failures, not ordinary detector rejections. Ordinary fresh silence and low-confidence frames keep the existing raw detection and continuity/grace semantics. YIN thresholds, pitch conversion, and practice scoring rules are unchanged.
+
+### Failure and recovery
+
+The hook resets input level, raw/live pitch, continuity, and history ingestion synchronously, without waiting for asynchronous context closure. Existing App wiring removes target guidance and pauses practice when the microphone leaves active state; queued old observations cannot extend history or practice metrics. Retained history remains visible as inactive history. Analysis errors remain visible in raw diagnostics after reset.
+
+Recovery requires explicit Start, a new stream/analysis graph, and fresh rendering evidence. The microphone remains in the requesting state until its first fresh observation (including silence). Cancel is available during this wait. An existing practice session stays paused until the user resumes it. There is no automatic resume loop or browser-name sniffing, and reference-drone ownership is unchanged.
+
+The freshness checks add only context/clock reads and small track checks to existing scheduled work. Audio stays in local transient buffers; this policy adds no recording, persistence, sample logging, upload, backend, analytics, dependency, or independent polling loop. These browser signals cannot prove physical microphone freshness if a device/driver supplies stale audio while reporting a live track and progressing context. Physical iPhone Safari interruption/retry testing remains necessary, including app switching, screen locking, and input-route changes.
+
 ## Pitch detector
 
 The first implementation may use YIN, McLeod Pitch Method, or a maintained library implementing a comparable monophonic detector.

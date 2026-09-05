@@ -38,4 +38,18 @@ describe('microphone UI', () => {
     ).toHaveTextContent('Microphone active');
     expect(screen.getByRole('meter')).toHaveAttribute('aria-valuenow', '0.25');
   });
+  it('can cancel acquisition while the permission request is pending', () => {
+    const onStop = vi.fn();
+    const onStart = vi.fn();
+    render(
+      <MicrophoneControls
+        state="requesting"
+        onStart={onStart}
+        onStop={onStop}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel microphone' }));
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onStart).not.toHaveBeenCalled();
+  });
 });

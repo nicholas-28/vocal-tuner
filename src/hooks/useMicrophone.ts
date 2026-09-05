@@ -8,7 +8,10 @@ import {
   startPitchAnalysis,
   type PitchAnalysisHandle,
 } from '../audio/pitchAnalysis';
-import type { MicrophoneState } from '../types/microphone';
+import type {
+  MicrophoneErrorState,
+  MicrophoneState,
+} from '../types/microphone';
 import type { RawPitchDetection } from '../types/pitch';
 import type { MicrophoneAudioDiagnosticEvent } from '../types/audioDiagnostics';
 
@@ -44,86 +47,136 @@ export function useMicrophone(
   const [inputLevel, setInputLevel] = useState(0);
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
+  // The ref is the synchronous command lock; React state is presentation only.
+  const stateRef = useRef<MicrophoneState>('idle');
   const streamRef = useRef<MediaStream | null>(null);
   const monitorRef = useRef<PitchAnalysisHandle | null>(null);
-  const endedListenersRef = useRef<
-    Array<{ track: MediaStreamTrack; listener: () => void }>
+  const listenersRef = useRef<
+    Array<{
+      track: MediaStreamTrack;
+      type: string;
+      listener: () => void;
+    }>
   >([]);
   const operationRef = useRef(0);
   const mountedRef = useRef(true);
+  const cleanupPromiseRef = useRef<Promise<void>>(Promise.resolve());
 
-  const cleanup = useCallback(async () => {
-    operationRef.current += 1;
+  const transition = useCallback((next: MicrophoneState) => {
+    stateRef.current = next;
+    if (mountedRef.current) setState(next);
+  }, []);
 
-    for (const { track, listener } of endedListenersRef.current) {
-      track.removeEventListener('ended', listener);
-    }
-    endedListenersRef.current = [];
-
+  const cleanup = useCallback(() => {
+    // Revoke publications and detach ownership before any asynchronous work.
+    // Preserve this command's identity even if reset synchronously reenters Stop.
+    const operation = ++operationRef.current;
+    for (const { track, type, listener } of listenersRef.current)
+      track.removeEventListener(type, listener);
+    listenersRef.current = [];
     const stream = streamRef.current;
-    streamRef.current = null;
-    stream?.getTracks().forEach((track) => track.stop());
-
     const monitor = monitorRef.current;
+    streamRef.current = null;
     monitorRef.current = null;
-    await monitor?.stop();
-
-    callbacksRef.current.onAnalysisReset?.();
-    if (mountedRef.current) setInputLevel(0);
+    stopTracks(stream);
+    let closing: Promise<void>;
+    try {
+      closing = monitor?.stop() ?? Promise.resolve();
+    } catch {
+      closing = Promise.reject(new Error('Analysis cleanup failed'));
+    }
+    const result = Promise.allSettled([
+      cleanupPromiseRef.current,
+      closing,
+    ]).then((results) =>
+      results.every((entry) => entry.status === 'fulfilled'),
+    );
+    cleanupPromiseRef.current = result.then(() => undefined);
+    // Invalidation is synchronous, independent of AudioContext.close latency.
+    if (mountedRef.current) {
+      setInputLevel(0);
+      callbacksRef.current.onAnalysisReset?.();
+    }
+    return { operation, closing: result };
   }, []);
 
   const stop = useCallback(async () => {
-    if (state !== 'active') return;
-    setState('stopping');
-    await cleanup();
+    if (stateRef.current === 'idle' || stateRef.current === 'stopping') return;
+    transition('stopping');
+    const { operation, closing } = cleanup();
+    const released = await closing;
+    if (!mountedRef.current || operation !== operationRef.current) return;
     callbacksRef.current.onAudioDiagnosticEvent?.({
       label: 'after microphone Stop',
-      microphoneState: 'idle',
-      contextState: 'closed',
+      microphoneState: released ? 'idle' : 'error',
+      contextState: released ? 'closed' : 'unknown',
       sampleRate: null,
       destinationChannelCount: null,
       destinationConnected: false,
       activeTrackCount: 0,
       trackReadyState: 'none',
     });
-    if (mountedRef.current) setState('idle');
-  }, [cleanup, state]);
+    if (!mountedRef.current || operation !== operationRef.current) return;
+    transition(released ? 'idle' : 'error');
+  }, [cleanup, transition]);
 
   const start = useCallback(async () => {
-    if (state === 'requesting' || state === 'active' || state === 'stopping') {
+    if (
+      !mountedRef.current ||
+      ['requesting', 'active', 'stopping'].includes(stateRef.current)
+    )
       return;
-    }
-
-    await cleanup();
-    if (!mountedRef.current) return;
-
-    if (!services.isSupported()) {
-      setState('unsupported');
-      return;
-    }
-
-    const operation = operationRef.current;
-    setState('requesting');
-    callbacksRef.current.onAudioDiagnosticEvent?.({
-      label: 'before getUserMedia',
-      microphoneState: 'requesting',
-      contextState: 'unavailable',
-      sampleRate: null,
-      destinationChannelCount: null,
-      destinationConnected: false,
-      activeTrackCount: 0,
-      trackReadyState: 'none',
-    });
+    // Acquire the generation and command lock before the first await.
+    transition('requesting');
+    const { operation, closing } = cleanup();
+    const ownsOperation = () =>
+      mountedRef.current && operation === operationRef.current;
+    const fail = (next: MicrophoneErrorState, analysisError = false) => {
+      if (!ownsOperation()) return;
+      const invalidation = cleanup();
+      if (
+        !mountedRef.current ||
+        invalidation.operation !== operationRef.current
+      )
+        return;
+      transition(next);
+      if (analysisError) callbacksRef.current.onAnalysisError?.();
+    };
+    await closing;
+    if (!ownsOperation()) return;
 
     try {
-      const stream = await services.requestStream();
-      if (!mountedRef.current || operation !== operationRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
+      const supported = services.isSupported();
+      if (!ownsOperation()) return;
+      if (!supported) {
+        transition('unsupported');
         return;
       }
-
+      callbacksRef.current.onAudioDiagnosticEvent?.({
+        label: 'before getUserMedia',
+        microphoneState: 'requesting',
+        contextState: 'unavailable',
+        sampleRate: null,
+        destinationChannelCount: null,
+        destinationConnected: false,
+        activeTrackCount: 0,
+        trackReadyState: 'none',
+      });
+      if (!ownsOperation()) return;
+      const stream = await services.requestStream();
+      if (!ownsOperation()) {
+        stopTracks(stream);
+        return;
+      }
       streamRef.current = stream;
       const tracks = stream.getTracks();
+      if (
+        tracks.length === 0 ||
+        tracks.some((track) => track.readyState === 'ended' || track.muted)
+      ) {
+        fail('no-device');
+        return;
+      }
       callbacksRef.current.onAudioDiagnosticEvent?.({
         label: 'after getUserMedia resolved',
         microphoneState: 'requesting',
@@ -131,50 +184,60 @@ export function useMicrophone(
         sampleRate: null,
         destinationChannelCount: null,
         destinationConnected: false,
-        activeTrackCount: tracks.filter((track) => track.readyState !== 'ended')
-          .length,
-        trackReadyState:
-          tracks.map((track) => track.readyState || 'unknown').join(', ') ||
-          'none',
+        activeTrackCount: tracks.length,
+        trackReadyState: tracks
+          .map((track) => track.readyState || 'unknown')
+          .join(', '),
       });
-      const handleEnded = () => {
-        void cleanup().then(() => {
-          if (mountedRef.current) setState('no-device');
-        });
-      };
-
-      for (const track of stream.getTracks()) {
-        track.addEventListener('ended', handleEnded);
-        endedListenersRef.current.push({ track, listener: handleEnded });
+      if (!ownsOperation()) return;
+      for (const track of tracks) {
+        for (const type of ['ended', 'mute']) {
+          const listener = () => fail('no-device', true);
+          track.addEventListener(type, listener);
+          listenersRef.current.push({ track, type, listener });
+        }
       }
-
       callbacksRef.current.onSessionStarted?.();
-      monitorRef.current = services.startLevelMonitor(
+      if (!ownsOperation()) return;
+      const monitor = services.startLevelMonitor(
         stream,
         (detection) => {
-          if (!mountedRef.current || operation !== operationRef.current) return;
+          if (!ownsOperation()) return;
+          if (
+            tracks.some((track) => track.readyState === 'ended' || track.muted)
+          ) {
+            fail('no-device', true);
+            return;
+          }
+          // Active means the source has delivered fresh evidence, including silence.
+          if (stateRef.current !== 'active') transition('active');
           setInputLevel(detection.rms);
           callbacksRef.current.onDetection?.(detection);
         },
-        () => callbacksRef.current.onAnalysisError?.(),
+        () => fail('error', true),
       );
+      // A synchronous construction callback can invalidate the operation before
+      // its handle is returned. That handle still needs disposal.
+      if (!ownsOperation()) {
+        const disposing = monitor.stop();
+        cleanupPromiseRef.current = Promise.allSettled([
+          cleanupPromiseRef.current,
+          disposing,
+        ]).then(() => undefined);
+        return;
+      }
+      monitorRef.current = monitor;
       callbacksRef.current.onAudioDiagnosticEvent?.({
         label: 'after microphone AudioContext starts',
-        microphoneState: 'active',
-        contextState: monitorRef.current.diagnostics.contextState,
-        sampleRate: monitorRef.current.diagnostics.sampleRate,
-        destinationChannelCount:
-          monitorRef.current.diagnostics.destinationChannelCount,
-        destinationConnected:
-          monitorRef.current.diagnostics.destinationConnected,
-        activeTrackCount: tracks.filter((track) => track.readyState !== 'ended')
-          .length,
-        trackReadyState:
-          tracks.map((track) => track.readyState || 'unknown').join(', ') ||
-          'none',
+        microphoneState: stateRef.current,
+        ...monitor.diagnostics,
+        activeTrackCount: tracks.length,
+        trackReadyState: tracks
+          .map((track) => track.readyState || 'unknown')
+          .join(', '),
       });
-      setState('active');
     } catch (error) {
+      if (!ownsOperation()) return;
       callbacksRef.current.onAudioDiagnosticEvent?.({
         label: 'getUserMedia or microphone start failed',
         microphoneState: 'error',
@@ -185,11 +248,9 @@ export function useMicrophone(
         activeTrackCount: 0,
         trackReadyState: 'none',
       });
-      await cleanup();
-      if (import.meta.env.DEV) console.error('Microphone start failed', error);
-      if (mountedRef.current) setState(mapMicrophoneError(error));
+      fail(mapMicrophoneError(error), streamRef.current !== null);
     }
-  }, [cleanup, services, state]);
+  }, [cleanup, services, transition]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -200,4 +261,14 @@ export function useMicrophone(
   }, [cleanup]);
 
   return { state, inputLevel, start, stop };
+}
+
+function stopTracks(stream: MediaStream | null) {
+  for (const track of stream?.getTracks() ?? []) {
+    try {
+      track.stop();
+    } catch {
+      /* Still attempt every remaining track. */
+    }
+  }
 }
