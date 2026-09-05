@@ -251,7 +251,8 @@ describe('YIN pitch detector', () => {
       y1 = y0;
     }
     const signal = Float32Array.from({ length: sampleCount }, (_, index) => {
-      const fundamental = 0.5 * Math.sin((2 * Math.PI * 110 * index) / sampleRate);
+      const fundamental =
+        0.5 * Math.sin((2 * Math.PI * 110 * index) / sampleRate);
       const noiseValue = index < burstWidth ? burst[100 + index] : 0;
       return fundamental + burstAmplitude * noiseValue;
     });
