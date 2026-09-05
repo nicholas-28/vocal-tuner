@@ -85,6 +85,10 @@ Unsupported Web Audio, invalid notes, contexts that remain suspended, interrupte
 
 An operation token invalidates stale asynchronous starts and transitions. Shared resume and release promises prevent duplicate lifecycle work. A Stop or newer note request wins over an older pending request; a stale completion cannot abort the shared prepared voice or publish an obsolete error. Listener exceptions are isolated from engine state.
 
+Each voice separately tracks whether its initial attack has been scheduled. If another activation takes ownership of a zero-gain voice while resume is pending, the winning command schedules that voice's attack before publishing `playing`. This fixes the rapid-activation race where the newest MIDI was reported as playing but the reused voice stayed at zero gain. Ordinary note changes keep their existing frequency transition and do not retrigger the attack or create another oscillator.
+
+A release normally finishes through oscillator `onended`. If the context leaves `running` during release, the engine instead stops and disconnects that releasing voice immediately and settles the release promise without waiting for audio-clock progress. The same rule applies if release begins with an already non-running context. The next explicit activation replaces the invalidated output context; interruption never auto-plays. Explicit Stop finishes as `stopped` with no active/pending note. A completed release callback is idempotent, and the existing operation check prevents an older Stop completion from overwriting a newer activation. Physical audibility, including intentional zero master volume and iPhone Silent Mode, remains outside the `playing` graph/attack guarantee.
+
 React Strict Mode does not construct audio during its development-only setup cycle because engine creation remains lazy. Hook subscriptions are bound to engine identity, so a disposed instance cannot publish into a later owned instance. Mount/cleanup/remount regression coverage verifies that activation uses only the current engine.
 
 ## Development diagnostics

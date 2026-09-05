@@ -767,6 +767,164 @@ describe('reference drone engine', () => {
     });
   });
 
+  it.each([
+    [C4, A4],
+    [C4, A4, F_SHARP_4],
+  ])(
+    'attacks the winning prepared voice once during rapid pending activation %#',
+    async (...notes) => {
+      vi.useFakeTimers();
+      const context = new MockAudioContext('suspended');
+      context.resumeMode = 'deferred';
+      const engine = createReferenceDroneEngine({
+        contextFactory: () => asAudioContext(context),
+      });
+      const playingAttacks: number[] = [];
+      engine.subscribe((next) => {
+        if (next.status === 'playing')
+          playingAttacks.push(
+            context.gains[1]?.gain.linearRampToValueAtTime.mock.calls.filter(
+              ([value]) => value === 1,
+            ).length ?? 0,
+          );
+      });
+      const commands = notes.map((note) => engine.play(note));
+      expect(context.oscillators).toHaveLength(1);
+      expect(context.gains[1]?.gain.value).toBe(0);
+      expect(playingAttacks).toEqual([]);
+      context.resolveDeferredResume();
+      await vi.advanceTimersByTimeAsync(60);
+      const results = await Promise.all(commands);
+      expect(results.at(-1)).toEqual({ ok: true });
+      expect(engine.getSnapshot()).toMatchObject({
+        status: 'playing',
+        activeMidi: notes.at(-1)!.midiNote,
+        pendingMidi: null,
+      });
+      expect(
+        context.gains[1]?.gain.linearRampToValueAtTime,
+      ).toHaveBeenCalledExactlyOnceWith(1, context.currentTime + 0.05);
+      expect(context.gains[1]?.gain.value).toBe(1);
+      expect(playingAttacks.length).toBeGreaterThan(0);
+      expect(playingAttacks.every((count) => count === 1)).toBe(true);
+      expect(context.oscillators).toHaveLength(1);
+      expect(context.oscillators[0]?.start).toHaveBeenCalledOnce();
+      await engine.play(G4);
+      expect(
+        context.gains[1]?.gain.linearRampToValueAtTime,
+      ).toHaveBeenCalledOnce();
+      await engine.dispose();
+    },
+  );
+
+  it.each(['interrupted', 'suspended', 'closed'] as const)(
+    'settles Stop on %s during release without waiting for onended',
+    async (state) => {
+      const context = new MockAudioContext();
+      const replacement = new MockAudioContext();
+      const engine = createReferenceDroneEngine({
+        contextFactory: vi
+          .fn()
+          .mockReturnValueOnce(asAudioContext(context))
+          .mockReturnValueOnce(asAudioContext(replacement)),
+      });
+      await engine.play(A4);
+      const oscillator = context.oscillators[0]!;
+      let settled = false;
+      const stopping = engine.stop().then(() => {
+        settled = true;
+      });
+      const lateEnded = oscillator.onended!;
+      expect(engine.getSnapshot().status).toBe('stopping');
+      context.setState(state);
+      // Flush promise settlement without progressing either audio time or timers.
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+      expect(settled).toBe(true);
+      await stopping;
+      expect(engine.getSnapshot()).toMatchObject({
+        status: 'stopped',
+        activeMidi: null,
+        pendingMidi: null,
+        diagnostics: {
+          oscillatorStarted: false,
+          graphConnected: false,
+          voiceGenerationId: null,
+        },
+      });
+      expect(oscillator.disconnect).toHaveBeenCalledOnce();
+      expect(context.gains[1]?.disconnect).toHaveBeenCalledOnce();
+      expect(oscillator.onended).toBeNull();
+      await engine.play(G4);
+      expect(engine.getSnapshot()).toMatchObject({
+        status: 'playing',
+        activeMidi: G4.midiNote,
+      });
+      const restarted = engine.getSnapshot();
+      lateEnded();
+      context.setState('running');
+      expect(engine.getSnapshot()).toEqual(restarted);
+      expect(replacement.oscillators[0]?.stop).not.toHaveBeenCalled();
+      const finalStop = engine.stop();
+      replacement.oscillators[0]?.finish();
+      await finalStop;
+      await engine.dispose();
+    },
+  );
+
+  it('settles Stop for a shared prepared voice before resume completes', async () => {
+    const context = new MockAudioContext('suspended');
+    context.resumeMode = 'deferred';
+    const engine = createReferenceDroneEngine({
+      contextFactory: () => asAudioContext(context),
+    });
+    const first = engine.play(C4);
+    const second = engine.play(A4);
+    let settled = false;
+    const stopping = engine.stop().then(() => {
+      settled = true;
+    });
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    expect(settled).toBe(true);
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'stopped',
+      activeMidi: null,
+      pendingMidi: null,
+    });
+    expect(context.oscillators[0]?.disconnect).toHaveBeenCalledOnce();
+    expect(
+      context.gains[1]?.gain.linearRampToValueAtTime,
+    ).not.toHaveBeenCalled();
+    context.resolveDeferredResume();
+    await Promise.all([first, second, stopping]);
+    expect(engine.getSnapshot().status).toBe('stopped');
+    await engine.dispose();
+  });
+
+  it('cannot publish an interrupted Stop completion over a newer activation', async () => {
+    const context = new MockAudioContext();
+    const replacement = new MockAudioContext();
+    const engine = createReferenceDroneEngine({
+      contextFactory: vi
+        .fn()
+        .mockReturnValueOnce(asAudioContext(context))
+        .mockReturnValueOnce(asAudioContext(replacement)),
+    });
+    await engine.play(C4);
+    const stopping = engine.stop();
+    const lateEnded = context.oscillators[0]!.onended!;
+    context.setState('interrupted');
+    const starting = engine.play(A4);
+    await Promise.all([stopping, starting]);
+    lateEnded();
+    expect(engine.getSnapshot()).toMatchObject({
+      status: 'playing',
+      activeMidi: A4.midiNote,
+      pendingMidi: null,
+    });
+    expect(replacement.oscillators).toHaveLength(1);
+    expect(replacement.oscillators[0]?.stop).not.toHaveBeenCalled();
+    await engine.dispose();
+  });
   it('turns an unexpected state loss into an error and removes stale listeners', async () => {
     const context = new MockAudioContext();
     const engine = createReferenceDroneEngine({

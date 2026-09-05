@@ -48,6 +48,7 @@ type DroneVoice = {
   oscillatorConnected: boolean;
   gainConnected: boolean;
   started: boolean;
+  attackScheduled: boolean;
   timbre: ReferenceDroneTimbre;
   customTimbreApplied: boolean;
 };
@@ -511,6 +512,11 @@ export function createReferenceDroneEngine(
       typeof performance === 'undefined' ? Date.now() : performance.now();
     addLifecycleEvent('context statechange', contextState);
     debugLog('context state changed', { state: contextState });
+    if (contextState !== 'running' && releaseFinish) {
+      // A frozen audio clock may never deliver the scheduled oscillator end.
+      outputContextNeedsReplacement = true;
+      releaseFinish();
+    }
     if (
       snapshot.status === 'playing' ||
       snapshot.status === 'changing' ||
@@ -813,14 +819,24 @@ export function createReferenceDroneEngine(
       const finish = () => {
         if (finished) return;
         finished = true;
-        if (releaseFinish === finish) releaseFinish = null;
+        if (releaseFinish === finishEarly) releaseFinish = null;
         cleanupVoice(releasedVoice);
         debugLog('oscillator ended');
         resolve();
       };
-      releaseFinish = finish;
+      const finishEarly = () => {
+        if (finished) return;
+        safeStop(releasedVoice.oscillator);
+        finish();
+      };
+      releaseFinish = finishEarly;
       releasedVoice.oscillator.onended = finish;
       try {
+        if (!context || getContextState(context) !== 'running') {
+          outputContextNeedsReplacement = true;
+          finishEarly();
+          return;
+        }
         holdAutomation(releasedVoice.gain.gain, releaseAt);
         linearRamp(
           releasedVoice.gain.gain,
@@ -888,6 +904,7 @@ export function createReferenceDroneEngine(
         oscillatorConnected: false,
         gainConnected: false,
         started: false,
+        attackScheduled: false,
         timbre,
         customTimbreApplied,
       };
@@ -982,6 +999,7 @@ export function createReferenceDroneEngine(
   ) => {
     const currentTime = requireFiniteTime(graph.context);
     linearRamp(preparedVoice.gain.gain, 1, currentTime + config.attackSeconds);
+    preparedVoice.attackScheduled = true;
     const method =
       typeof preparedVoice.gain.gain.linearRampToValueAtTime === 'function'
         ? 'linearRampToValueAtTime'
@@ -1369,12 +1387,18 @@ export function createReferenceDroneEngine(
             frequencyHz: note.frequencyHz,
           });
         }
-      } else if (preparedVoice) {
-        scheduleVoiceAttack(preparedVoice, readyGraph);
+      }
+      const winningVoice = activeVoice ?? preparedVoice;
+      if (winningVoice && !winningVoice.attackScheduled) {
+        scheduleVoiceAttack(winningVoice, readyGraph);
+      }
+      if (disposed || commandOperation !== operation) {
+        return { ok: false, errorCode: 'audio-start-failed' };
       }
       if (
         getContextState(readyGraph.context) !== 'running' ||
-        !voice?.started ||
+        !voice?.attackScheduled ||
+        !voice.started ||
         !voice.oscillatorConnected ||
         !voice.gainConnected ||
         !destinationConnected
