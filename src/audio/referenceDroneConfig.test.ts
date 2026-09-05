@@ -18,16 +18,16 @@ describe('reference drone configuration', () => {
       transitionSeconds: 0.07,
       volumeSmoothingSeconds: 0.03,
       defaultVolume: 0.25,
-      maximumMasterGain: 0.16,
+      maximumMasterGain: 0.32,
     });
   });
 
   it('maps clamped UI volume linearly to the capped master gain', () => {
     expect(mapReferenceDroneVolumeToGain(0)).toBe(0);
-    expect(mapReferenceDroneVolumeToGain(0.25)).toBe(0.04);
-    expect(mapReferenceDroneVolumeToGain(1)).toBe(0.16);
+    expect(mapReferenceDroneVolumeToGain(0.25)).toBe(0.08);
+    expect(mapReferenceDroneVolumeToGain(1)).toBe(0.32);
     expect(mapReferenceDroneVolumeToGain(-1)).toBe(0);
-    expect(mapReferenceDroneVolumeToGain(2)).toBe(0.16);
+    expect(mapReferenceDroneVolumeToGain(2)).toBe(0.32);
     expect(normalizeReferenceDroneVolume(Number.NaN)).toBe(0.25);
     expect(normalizeReferenceDroneVolume(Number.POSITIVE_INFINITY)).toBe(0.25);
     expect(mapReferenceDroneVolumeToGain(0.75)).toBeGreaterThan(

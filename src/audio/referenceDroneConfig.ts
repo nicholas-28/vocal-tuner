@@ -7,6 +7,10 @@ import type {
 } from '../types/referenceDrone';
 import { createInitialSignalMeasurement } from './referenceDroneSignal';
 
+// With partial absolute-sum normalization <= 1, this leaves >= 9.8 dB
+// of peak headroom, including the pure-sine fallback.
+export const REFERENCE_DRONE_SAFE_MAX_GAIN = 0.32;
+
 export const DEFAULT_REFERENCE_DRONE_CONFIG: Readonly<ReferenceDroneConfig> = {
   oscillatorType: 'sine',
   attackSeconds: 0.05,
@@ -14,7 +18,7 @@ export const DEFAULT_REFERENCE_DRONE_CONFIG: Readonly<ReferenceDroneConfig> = {
   transitionSeconds: 0.07,
   volumeSmoothingSeconds: 0.03,
   defaultVolume: 0.25,
-  maximumMasterGain: 0.16,
+  maximumMasterGain: REFERENCE_DRONE_SAFE_MAX_GAIN,
 };
 
 export function createInitialAutomationDiagnostics(): ReferenceDroneAutomationDiagnostics {
@@ -158,7 +162,7 @@ export function isValidReferenceDroneConfig(
     config.defaultVolume <= 1 &&
     Number.isFinite(config.maximumMasterGain) &&
     config.maximumMasterGain > 0 &&
-    config.maximumMasterGain <= 0.2
+    config.maximumMasterGain <= REFERENCE_DRONE_SAFE_MAX_GAIN
   );
 }
 

@@ -530,3 +530,42 @@ test('reference keys accept immediate mixed input without duplicate keyboard cli
   await c4.tap();
   await expect(c4).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('offline WebKit release stays continuous and is silent before source termination', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    // No live destination: constant input exposes the envelope itself.
+    // Engine unit coverage asserts this same anchor/ramp/stop schedule.
+    const context = new OfflineAudioContext(1, 48000, 48000);
+    const source = context.createConstantSource();
+    const gain = context.createGain();
+    source.connect(gain).connect(context.destination);
+    gain.gain.setValueAtTime(0, 0);
+    gain.gain.linearRampToValueAtTime(1, 0.05);
+    source.start();
+    const paused = context.suspend(0.5);
+    const rendered = context.startRendering();
+    await paused;
+    const start = context.currentTime;
+    const held = gain.gain.value;
+    gain.gain.cancelAndHoldAtTime(start);
+    gain.gain.setValueAtTime(held, start);
+    gain.gain.linearRampToValueAtTime(0, start + 0.12);
+    source.stop(start + 0.12 + 128 / context.sampleRate);
+    await context.resume();
+    const samples = (await rendered).getChannelData(0);
+    const at = Math.round(start * context.sampleRate);
+    return {
+      before: samples[at - 1],
+      start: samples[at],
+      middle: samples[at + 2880],
+      silentPeak: Math.max(...samples.slice(at + 5760).map(Math.abs)),
+    };
+  });
+  expect(result.before).toBeCloseTo(1, 6);
+  expect(result.start).toBeCloseTo(result.before!, 6);
+  expect(result.middle).toBeCloseTo(0.5, 6);
+  expect(result.silentPeak).toBeLessThan(0.000001);
+});

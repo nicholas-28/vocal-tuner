@@ -212,14 +212,14 @@ describe('reference drone engine', () => {
         graphConnected: true,
         destinationConnected: true,
         oscillatorStarted: true,
-        masterGain: 0.04,
-        effectiveGain: 0.04,
+        masterGain: 0.08,
+        effectiveGain: 0.08,
         voiceGainTarget: 1,
         backend: 'web-audio',
         timbreProfile: 'light-harmonic-support',
       },
     });
-    expect(engine.getSnapshot().diagnostics.predictedPeak).toBeCloseTo(0.04);
+    expect(engine.getSnapshot().diagnostics.predictedPeak).toBeCloseTo(0.08);
     expect(context.oscillators[0]?.setPeriodicWave).toHaveBeenCalledOnce();
     expect(engine.getSnapshot().diagnostics.partials).toHaveLength(3);
     expect(context.gains[1]?.gain.setValueAtTime).toHaveBeenCalledWith(0, 10);
@@ -469,7 +469,7 @@ describe('reference drone engine', () => {
       activeMidi: null,
       diagnostics: { outputTestStatus: 'playing', frequencyHz: 440 },
     });
-    expect(context.gains[0]?.gain.value).toBe(0.04);
+    expect(context.gains[0]?.gain.value).toBe(0.08);
     await vi.advanceTimersByTimeAsync(1000);
     context.oscillators[0]?.finish();
     await expect(test).resolves.toEqual({ ok: true });
@@ -647,7 +647,7 @@ describe('reference drone engine', () => {
     expect(context.oscillators[0]?.setPeriodicWave).toHaveBeenCalledTimes(2);
     expect(engine.getSnapshot().diagnostics).toMatchObject({
       timbreProfile: 'low-harmonic-support',
-      predictedPeak: 0.04,
+      predictedPeak: 0.08,
     });
     expect(
       engine
@@ -658,7 +658,7 @@ describe('reference drone engine', () => {
       493.8833012561241,
     ]);
     engine.setVolume(1);
-    expect(engine.getSnapshot().diagnostics.predictedPeak).toBeCloseTo(0.16);
+    expect(engine.getSnapshot().diagnostics.predictedPeak).toBeCloseTo(0.32);
   });
 
   it('falls back to an exact sine when PeriodicWave construction fails', async () => {
@@ -673,7 +673,7 @@ describe('reference drone engine', () => {
     expect(context.oscillators[0]?.type).toBe('sine');
     expect(engine.getSnapshot().diagnostics).toMatchObject({
       timbreProfile: 'pure-sine-fallback',
-      predictedPeak: 0.04,
+      predictedPeak: 0.08,
     });
     expect(engine.getSnapshot().diagnostics.partials).toHaveLength(1);
     expect(engine.getSnapshot().diagnostics.partials[0]?.frequencyHz).toBe(440);
@@ -685,14 +685,14 @@ describe('reference drone engine', () => {
       contextFactory: () => asAudioContext(context),
     });
     await engine.play(A4);
-    expect(engine.getSnapshot().diagnostics.effectiveGain).toBe(0.04);
+    expect(engine.getSnapshot().diagnostics.effectiveGain).toBe(0.08);
     engine.setVolume(1);
     expect(engine.getSnapshot().diagnostics).toMatchObject({
-      masterGain: 0.16,
-      effectiveGain: 0.16,
+      masterGain: 0.32,
+      effectiveGain: 0.32,
     });
     expect(context.gains[0]?.gain.setTargetAtTime).toHaveBeenLastCalledWith(
-      0.16,
+      0.32,
       10,
       0.03,
     );
@@ -718,7 +718,7 @@ describe('reference drone engine', () => {
     });
     engine.setVolume(0.5);
     expect(master.cancelScheduledValues).toHaveBeenCalledWith(10);
-    expect(master.linearRampToValueAtTime).toHaveBeenCalledWith(0.08, 10.03);
+    expect(master.linearRampToValueAtTime).toHaveBeenCalledWith(0.16, 10.03);
   });
 
   it('invalidates a suspended start when Stop wins the race', async () => {
@@ -946,6 +946,31 @@ describe('reference drone engine', () => {
     expect(engine.getSnapshot()).toEqual(disposedSnapshot);
   });
 
+  it('anchors a sustained or partial-attack release at the current gain and reaches zero before termination', async () => {
+    for (const heldGain of [1, 0.4]) {
+      const context = new MockAudioContext();
+      const engine = createReferenceDroneEngine({
+        contextFactory: () => asAudioContext(context),
+      });
+      await engine.play(A4);
+      context.currentTime = 12;
+      const gain = context.gains[1]!.gain;
+      gain.value = heldGain;
+      const stopping = engine.stop();
+      expect(gain.cancelAndHoldAtTime).toHaveBeenCalledWith(12);
+      // A ramp must start at Stop, not interpolate from the old attack endpoint.
+      expect(gain.setValueAtTime).toHaveBeenLastCalledWith(heldGain, 12);
+      expect(gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, 12.12);
+      const stopAt = context.oscillators[0]!.stop.mock.calls[0]![0] as number;
+      expect(stopAt).toBeGreaterThan(12.12);
+      expect(stopAt - 12.12).toBeLessThanOrEqual(0.01);
+      expect(gain.setTargetAtTime).not.toHaveBeenCalled();
+      context.oscillators[0]!.finish();
+      await stopping;
+      await engine.dispose();
+    }
+  });
+
   it('fades Stop, retains the context, and disconnects ended voice nodes', async () => {
     const context = new MockAudioContext();
     const engine = createReferenceDroneEngine({
@@ -954,7 +979,7 @@ describe('reference drone engine', () => {
     await engine.play(A4);
     const oscillator = context.oscillators[0];
     const stopping = engine.stop();
-    expect(oscillator?.stop).toHaveBeenCalledWith(10.12);
+    expect(oscillator?.stop).toHaveBeenCalledWith(10.12 + 128 / 48_000);
     oscillator?.finish();
     await stopping;
     expect(engine.getSnapshot().status).toBe('stopped');

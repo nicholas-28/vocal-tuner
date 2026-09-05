@@ -837,13 +837,21 @@ export function createReferenceDroneEngine(
           finishEarly();
           return;
         }
-        holdAutomation(releasedVoice.gain.gain, releaseAt);
+        const releaseGain = releasedVoice.gain.gain;
+        const heldGain = releaseGain.value;
+        holdAutomation(releaseGain, releaseAt);
+        // Anchor the new ramp here even when the previous attack ended long ago.
+        setParamValue(releaseGain, heldGain, releaseAt);
         linearRamp(
           releasedVoice.gain.gain,
           0,
           releaseAt + config.releaseSeconds,
         );
-        releasedVoice.oscillator.stop(releaseAt + config.releaseSeconds);
+        // Leave one render quantum of exact silence before source termination.
+        const sampleRate = context.sampleRate || 48_000;
+        releasedVoice.oscillator.stop(
+          releaseAt + config.releaseSeconds + 128 / sampleRate,
+        );
       } catch {
         safeStop(releasedVoice.oscillator);
         finish();

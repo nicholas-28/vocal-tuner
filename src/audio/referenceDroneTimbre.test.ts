@@ -1,3 +1,4 @@
+import { DEFAULT_REFERENCE_DRONE_CONFIG } from './referenceDroneConfig';
 import { describe, expect, it } from 'vitest';
 import {
   createReferenceDroneTimbre,
@@ -44,6 +45,30 @@ describe('reference drone harmonic timbre', () => {
     expect(middle.partials[1]?.relativeAmplitude).toBeGreaterThan(
       high.partials[1]?.relativeAmplitude ?? 0,
     );
+  });
+
+  it('bounds sampled peaks and every partial subset below the safe master ceiling', () => {
+    for (const midi of [36, 48, 69]) {
+      const timbre = createReferenceDroneTimbre(midi, 440);
+      const coefficients = Array.from(timbre.periodicWaveImag);
+      const max = DEFAULT_REFERENCE_DRONE_CONFIG.maximumMasterGain;
+      // Absolute-sum bound also covers band-limiting that removes high partials.
+      expect(
+        coefficients.reduce((sum, value) => sum + Math.abs(value), 0) * max,
+      ).toBeLessThan(0.321);
+      let peak = 0;
+      for (let frame = 0; frame < 65536; frame += 1) {
+        const phase = (2 * Math.PI * frame) / 65536;
+        const sample = coefficients.reduce(
+          (sum, value, harmonic) => sum + value * Math.sin(harmonic * phase),
+          0,
+        );
+        peak = Math.max(peak, Math.abs(sample) * max);
+      }
+      expect(peak).toBeGreaterThan(0.2);
+      expect(peak).toBeLessThanOrEqual(max);
+      expect(20 * Math.log10(peak)).toBeLessThan(-9.8);
+    }
   });
 
   it('normalizes the worst-case partial sum to preserve master headroom', () => {

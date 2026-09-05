@@ -2,7 +2,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { startPitchAnalysis } from '../audio/pitchAnalysis';
 import { createPitchDetection } from '../test/pitchFixture';
-import { installReferenceDroneAudioMock } from '../test/referenceDroneAudioMock';
+import {
+  TestReferenceDroneAudioContext,
+  installReferenceDroneAudioMock,
+} from '../test/referenceDroneAudioMock';
 import type { RawPitchDetection } from '../types/pitch';
 import { App } from './App';
 
@@ -62,8 +65,29 @@ it('clears live pitch and guidance, stops history, and pauses practice after ana
     screen.getByRole('button', { name: 'Reference note A4, 440.0 hertz' }),
   );
   await act(async () => {
+    await Promise.resolve();
+  });
+  const droneContext = TestReferenceDroneAudioContext.instances[0]!;
+  const master = droneContext.gains[0]!.gain;
+  const voiceGain = droneContext.gains[1]!.gain;
+  const masterBefore = master.value;
+  const voiceBefore = voiceGain.value;
+  const connectionsBefore = [...droneContext.connections];
+  const setMaster = vi.spyOn(master, 'setTargetAtTime');
+  const rampMaster = vi.spyOn(master, 'linearRampToValueAtTime');
+  const setVoice = vi.spyOn(voiceGain, 'setValueAtTime');
+  const rampVoice = vi.spyOn(voiceGain, 'linearRampToValueAtTime');
+  await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start microphone' }));
   });
+  expect(master.value).toBe(masterBefore);
+  expect(voiceGain.value).toBe(voiceBefore);
+  expect(droneContext.connections).toEqual(connectionsBefore);
+  expect(TestReferenceDroneAudioContext.instances).toEqual([droneContext]);
+  expect(setMaster).not.toHaveBeenCalled();
+  expect(rampMaster).not.toHaveBeenCalled();
+  expect(setVoice).not.toHaveBeenCalled();
+  expect(rampVoice).not.toHaveBeenCalled();
   act(() =>
     publish(
       createPitchDetection({

@@ -160,7 +160,7 @@ describe('App', () => {
     expect(diagnostics).toHaveTextContent('Graph connectedyes');
     expect(diagnostics).toHaveTextContent('Destination connectedyes');
     expect(diagnostics).toHaveTextContent('Oscillator startedyes');
-    expect(diagnostics).toHaveTextContent('Effective gain0.040');
+    expect(diagnostics).toHaveTextContent('Effective gain0.080');
     fireEvent.click(screen.getByRole('button', { name: 'C2–C4' }));
     expect(screen.getByRole('button', { name: 'C2–C4' })).toHaveAttribute(
       'aria-pressed',

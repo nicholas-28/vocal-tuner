@@ -287,7 +287,7 @@ test('loads the initial tuner screen', async ({ page }) => {
   ).toContainText('running');
   await expect(
     page.getByLabel('Reference-drone diagnostics values'),
-  ).toContainText('0.040');
+  ).toContainText('0.080');
   await page
     .getByRole('button', {
       name: 'Reference note C4, 261.6 hertz, reference drone sounding',

@@ -36,7 +36,7 @@ The timbre is range-aware and preserves the selected frequency as harmonic 1:
 - MIDI 48–60 inclusive: `1.00, 0.24, 0.10, 0.04`;
 - above MIDI 60: `1.00, 0.12, 0.04`.
 
-Every partial frequency is an exact integer multiple of the fundamental. Coefficients are divided by their absolute sum, so the conservative worst-case waveform peak is at most `1.0` before the unchanged voice/master gains. At 100% UI volume the predicted peak is therefore at most `0.16`, with no distortion, noise, subharmonics, fundamental shift, or OS-volume manipulation. A note transition ramps the one oscillator's fundamental and updates its periodic wave, so every partial follows the same pitch transition while target guidance remains tied to selected MIDI.
+Every partial frequency is an exact integer multiple of the fundamental. Coefficients are divided by their absolute sum, so the conservative worst-case waveform peak is at most `1.0` before the voice/master gains. At 100% UI volume the predicted peak is therefore at most `0.32`, with no distortion, noise, subharmonics, fundamental shift, or OS-volume manipulation. A note transition ramps the one oscillator's fundamental and updates its periodic wave, so every partial follows the same pitch transition while target guidance remains tied to selected MIDI.
 
 Issue 012 manual testing exposed a false-positive playback defect: the first engine treated a fulfilled `resume()` promise as sufficient and published `playing` without checking that the context had actually reached `running`. A suspended or interrupted context could therefore own a valid-looking but silent graph. The original mocks concealed this by always changing state to `running`.
 
@@ -57,11 +57,13 @@ Any construction, connection, automation, or start failure disconnects all parti
 
 ## Envelopes, transition, and volume
 
-The voice uses a 50 ms attack and 120 ms release to reduce clicks. A different-note activation ramps oscillator frequency over 70 ms. Master-volume changes use a 30 ms gain ramp. All automation begins from the current parameter value before scheduling its target.
+The voice uses a 50 ms attack and 120 ms release to reduce clicks. A different-note activation ramps oscillator frequency over 70 ms. Master-volume changes use a 30 ms time constant with `setTargetAtTime` (or a 30 ms linear fallback); this smoothing is separate from the exact-zero Stop release. All automation begins from the current parameter value before scheduling its target.
 
-The UI volume is normalized from 0–100%. It maps linearly to a deliberately conservative maximum master gain of `0.16`; the default 25% setting therefore produces `0.04` master gain. Per-voice gain remains responsible for the attack and release envelope.
+The UI volume is normalized from 0–100%. It maps linearly to a deliberately conservative maximum master gain of `0.32`; the default 25% setting therefore produces `0.08` master gain. Per-voice gain remains responsible for the attack and release envelope. 100% means maximum safe app reference level, not full digital scale. The cap increased from 0.16 to 0.32 (+6.02 dB); 25% remains the default slider setting. The absolute-sum bound leaves at least 9.8 dB peak headroom, including pure-sine fallback. Sampled low/middle/high profile output peaks at maximum are approximately 0.237/0.242/0.275; diagnostic analyser peaks should remain below the conservative 0.32 bound. Analyser measurements depend on note, phase, and buffer, not a fixed expected RMS.
 
-The voice envelope target is exactly `1.0`, so the steady-state effective gain is the protected master gain: `0.04` by default and `0.16` at 100%. A 0% setting intentionally produces an effective gain of zero while the engine may remain logically playing. Volume automation uses `setTargetAtTime` when available and a linear fallback otherwise. Attack, release, and note transitions use linear ramps with safe `setValueAtTime` fallbacks. `cancelAndHoldAtTime` is capability-detected and falls back to cancel-plus-current-value scheduling.
+Absolute-sum normalization attenuates the low-profile fundamental to about 0.662 (middle 0.725, high 0.862). It is conservative compared with the actual waveform peaks but remains unchanged to preserve timbre and a robust bound even if high partials are removed by band-limiting. More software level cannot overcome the phone speaker's low-frequency response. Capture-related loudness changes may also reflect platform session/routing behavior; code inspection and the mocked app-start regression show no drone gain/context/connection mutation when microphone capture starts. No capture coupling or audio-session workaround is introduced.
+
+The voice envelope target is exactly `1.0`, so the steady-state effective gain is the protected master gain: `0.08` by default and `0.32` at 100%. A 0% setting intentionally produces an effective gain of zero while the engine may remain logically playing. Volume automation uses `setTargetAtTime` when available and a linear fallback otherwise. Attack, release, and note transitions use linear ramps with safe `setValueAtTime` fallbacks. `cancelAndHoldAtTime` is capability-detected and falls back to cancel-plus-current-value scheduling.
 
 ## Range, microphone, and history independence
 
@@ -107,7 +109,7 @@ Concise transition logging is available in development and Preview with `?droneD
 
 ## Cleanup and privacy
 
-Stop ramps the voice to silence, schedules oscillator stop, and disconnects voice nodes after `onended`. Disposal invalidates pending work, cancels scheduled automation, stops and disconnects any voice, disconnects the master gain, closes the dedicated context, and clears listeners. Cleanup is idempotent.
+Stop captures the current voice gain, cancels/holds automation, and explicitly anchors that value at Stop time before a 120 ms linear ramp to exact zero. Without that anchor, a sustained note's new ramp can interpolate from the old attack endpoint: a silent WebKit offline experiment reproduced an immediate 1.0 → 0.21 gain jump. Oscillator termination follows one 128-frame render quantum after zero (about 2.7 ms at 48 kHz), then `onended` disconnects the voice. Non-running-context release settlement and stale callback ownership remain unchanged. Disposal invalidates pending work, cancels scheduled automation, stops and disconnects any voice, disconnects the master gain, closes the dedicated context, and clears listeners. Cleanup is idempotent.
 
 The oscillator is generated locally. No microphone audio or synthesized audio is recorded, stored, logged, uploaded, or sent to a backend.
 
@@ -129,3 +131,7 @@ Playback creates no animation loop and no audio-rate React update. Diagnostic sa
 - native media remains a diagnostic comparison; any product fallback requires a separate successful physical A/B result.
 
 A later issue may add a small locally synthesized timbre choice while preserving the one-voice, gain-protected, dependency-free architecture.
+
+## Physical acceptance for Stop and level
+
+With iPhone Silent Mode OFF, play A4 and Stop, listening specifically for the final click; repeat 10 times. Repeat with C3, G3, and C4. Change notes while playing and confirm transitions remain smooth. Compare the previous maximum with the new 100% level. Start microphone capture while the drone plays and note any perceived level change. Perform this on the built-in speaker and headphones if available. Automated envelope/headroom checks do not establish subjective clicklessness or loudness.
