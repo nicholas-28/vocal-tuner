@@ -485,3 +485,48 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   ).toBe(true);
   expect(pageErrors).toEqual([]);
 });
+
+test('reference keys accept immediate mixed input without duplicate keyboard clicks', async ({
+  page,
+}) => {
+  // Keep this input regression silent; selection is independent of audio support.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'AudioContext', {
+      value: undefined,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'webkitAudioContext', {
+      value: undefined,
+      configurable: true,
+    });
+  });
+  await page.goto('/');
+  const c4 = page.locator('.reference-key[data-midi="60"]');
+  const g4 = page.locator('.reference-key[data-midi="67"]');
+  await page.evaluate(() => {
+    const keys = document.querySelector('.reference-keyboard')!;
+    keys.setAttribute('data-observed-clicks', '0');
+    keys.addEventListener('click', () => {
+      keys.setAttribute(
+        'data-observed-clicks',
+        String(Number(keys.getAttribute('data-observed-clicks')) + 1),
+      );
+    });
+  });
+  await c4.focus();
+  await page.keyboard.press('Space');
+  await expect(c4).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.reference-keyboard')).toHaveAttribute(
+    'data-observed-clicks',
+    '0',
+  );
+  await g4.click();
+  await expect(g4).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.reference-keyboard')).toHaveAttribute(
+    'data-observed-clicks',
+    '1',
+  );
+  await c4.tap();
+  await expect(c4).toHaveAttribute('aria-pressed', 'true');
+});

@@ -51,21 +51,6 @@ export function ReferenceKeyboard({
   const keyboardRef = useRef<HTMLDivElement>(null);
   const keyRefs = useRef(new Map<number, HTMLButtonElement>());
   const hadFocusWithinRef = useRef(false);
-  const suppressCompatibilityClickRef = useRef(false);
-  const suppressCompatibilityClickTimerRef = useRef<number | null>(null);
-
-  const suppressCompatibilityClick = () => {
-    suppressCompatibilityClickRef.current = true;
-    if (suppressCompatibilityClickTimerRef.current !== null) {
-      window.clearTimeout(suppressCompatibilityClickTimerRef.current);
-    }
-    // WebKit may dispatch the compatibility click in a later task.
-    suppressCompatibilityClickTimerRef.current = window.setTimeout(() => {
-      suppressCompatibilityClickRef.current = false;
-      suppressCompatibilityClickTimerRef.current = null;
-    }, 500);
-  };
-
   useEffect(() => {
     const releaseForVisibilityLoss = () => {
       if (document.visibilityState === 'hidden') onReleaseAll();
@@ -80,9 +65,6 @@ export function ReferenceKeyboard({
         'visibilitychange',
         releaseForVisibilityLoss,
       );
-      if (suppressCompatibilityClickTimerRef.current !== null) {
-        window.clearTimeout(suppressCompatibilityClickTimerRef.current);
-      }
       onReleaseAll();
     };
   }, [onReleaseAll]);
@@ -209,23 +191,13 @@ export function ReferenceKeyboard({
                   event.preventDefault();
                   if (onEndKeyboardPress(key.midiNote)) {
                     if (!selectionLocked) onActivateMidi(key.midiNote);
-                    suppressCompatibilityClick();
                   }
                 }
               }}
               onClick={() => {
-                // Click is the sole completed pointer activation. Enter/Space
-                // activate on keyup, so consume only their follow-up click.
-                if (suppressCompatibilityClickRef.current) {
-                  suppressCompatibilityClickRef.current = false;
-                  if (suppressCompatibilityClickTimerRef.current !== null) {
-                    window.clearTimeout(
-                      suppressCompatibilityClickTimerRef.current,
-                    );
-                    suppressCompatibilityClickTimerRef.current = null;
-                  }
-                  return;
-                }
+                // Enter/Space cancel their own native click at keydown/keyup.
+                // Every independently dispatched click remains an activation,
+                // including pointer, assistive, and programmatic clicks.
                 if (selectionLocked) return;
                 onActivateMidi(key.midiNote);
               }}

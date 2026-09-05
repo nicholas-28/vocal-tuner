@@ -14,7 +14,7 @@ The presentation states are intentionally separate:
 - `activeMidi` describes only a confirmed sounding drone;
 - `recoveryState` (`'ready' | 'needs-reactivation'`) and error state describe a selected note that is not sounding, and whether it needs an explicit gesture to resume.
 
-The explicit **Start selected** control restarts a stopped selection, **Stop reference drone** silences the voice, and the volume slider controls future and current playback. Pointer cancellation never activates a note. Keyboard auto-repeat and compatibility clicks are suppressed so one gesture produces one activation.
+The explicit **Start selected** control restarts a stopped selection, **Stop reference drone** silences the voice, and the volume slider controls future and current playback. Pointer cancellation never activates a note. Enter/Space activate on keyup; their keydown and keyup default actions are canceled to prevent native compatibility clicks, and auto-repeat does not add activations. There is no elapsed-time click suppression: subsequent pointer/touch, assistive, and programmatic clicks remain independent commands, even on the same key.
 
 ## Web Audio ownership and graph
 

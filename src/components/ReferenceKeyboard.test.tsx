@@ -156,13 +156,57 @@ describe('ReferenceKeyboard', () => {
     expect(soundingC4).toHaveAttribute('aria-current', 'true');
     fireEvent.keyDown(soundingC4, { key: 'Enter', repeat: false });
     fireEvent.keyUp(soundingC4, { key: 'Enter' });
-    fireEvent.click(soundingC4);
     expect(onActivateMidi).toHaveBeenCalledTimes(2);
     fireEvent.keyDown(soundingC4, { key: ' ', repeat: false });
     fireEvent.keyUp(soundingC4, { key: ' ' });
-    fireEvent.click(soundingC4);
     expect(onActivateMidi).toHaveBeenCalledTimes(3);
   });
+
+  it.each([60, 67])(
+    'accepts an immediate pointer activation on MIDI %s after Space',
+    (midi) => {
+      const activate = vi.fn();
+      render(<Harness range={middleRange} onActivateMidi={activate} />);
+      const c4 = document.querySelector<HTMLButtonElement>('[data-midi="60"]')!;
+      const target = document.querySelector<HTMLButtonElement>(
+        `[data-midi="${midi}"]`,
+      )!;
+      fireEvent.keyDown(c4, { key: ' ' });
+      fireEvent.keyUp(c4, { key: ' ' });
+      fireEvent.pointerDown(target, { pointerId: 9 });
+      fireEvent.pointerUp(target, { pointerId: 9 });
+      fireEvent.click(target, { detail: 1 });
+      expect(activate.mock.calls).toEqual([[60], [midi]]);
+      fireEvent.keyDown(target, { key: 'Enter' });
+      fireEvent.keyUp(target, { key: 'Enter' });
+      expect(activate.mock.calls).toEqual([[60], [midi], [midi]]);
+    },
+  );
+
+  it.each([' ', 'Enter'])(
+    'cancels native %s activation, ignores repeats, and accepts independent zero-detail clicks',
+    (key) => {
+      const activate = vi.fn();
+      render(<Harness range={middleRange} onActivateMidi={activate} />);
+      const c4 = document.querySelector<HTMLButtonElement>('[data-midi="60"]')!;
+      const g4 = document.querySelector<HTMLButtonElement>('[data-midi="67"]')!;
+      expect(fireEvent.keyDown(c4, { key })).toBe(false);
+      expect(fireEvent.keyDown(c4, { key, repeat: true })).toBe(false);
+      expect(activate).not.toHaveBeenCalled();
+      expect(fireEvent.keyUp(c4, { key })).toBe(false);
+      fireEvent.keyUp(c4, { key });
+      expect(activate.mock.calls).toEqual([[60]]);
+      // fireEvent does not synthesize native keyboard default actions. These
+      // are independent click commands, not browser compatibility clicks.
+      fireEvent.click(c4, { detail: 0 });
+      fireEvent.click(g4, { detail: 0 });
+      expect(activate.mock.calls).toEqual([[60], [60], [67]]);
+      fireEvent.keyDown(g4, { key });
+      fireEvent.blur(window);
+      fireEvent.keyUp(g4, { key });
+      expect(activate).toHaveBeenCalledTimes(3);
+    },
+  );
 
   it('releases on cancellation, lost capture, blur, and range change', () => {
     const { rerender } = render(<Harness range={middleRange} />);
