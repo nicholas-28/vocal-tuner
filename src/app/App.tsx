@@ -1,4 +1,6 @@
 import { useEffect, useMemo } from 'react';
+import { createAnalysisDurationProbe } from '../pitch/analysisDurationProbe';
+import { AnalysisPerformanceDiagnostics } from '../components/AnalysisPerformanceDiagnostics';
 import { PitchMonitor } from '../components/PitchMonitor';
 import { PitchDiagnostics } from '../components/PitchDiagnostics';
 import { DeveloperBuildInfo } from '../components/DeveloperBuildInfo';
@@ -46,12 +48,22 @@ export function App() {
       window.removeEventListener('blur', onBlur);
     };
   }, [audioSessionTimeline]);
+  const analysisDurationProbe = useMemo(
+    () =>
+      runtimeFeatures.showAudioDiagnostics
+        ? createAnalysisDurationProbe()
+        : null,
+    [runtimeFeatures.showAudioDiagnostics],
+  );
   const pitch = usePitchDetection();
   const continuity = usePitchContinuity();
   const history = usePitchHistory();
   const visiblePitchRange = useVisiblePitchRange();
   const { state, inputLevel, start, stop } = useMicrophone(undefined, {
+    onObservation: (detection) =>
+      analysisDurationProbe?.record(detection.analysisDurationMs),
     onSessionStarted: () => {
+      analysisDurationProbe?.reset();
       continuity.reset();
       history.startSession();
     },
@@ -113,6 +125,9 @@ export function App() {
         }
         measurementTimestampMs={readoutTimestampMs}
       />
+      {analysisDurationProbe && (
+        <AnalysisPerformanceDiagnostics probe={analysisDurationProbe} />
+      )}
       {runtimeFeatures.showDeveloperDiagnostics && (
         <PitchDiagnostics
           diagnostics={pitch.diagnostics}

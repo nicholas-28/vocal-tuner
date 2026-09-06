@@ -97,5 +97,12 @@ test('production deployment loads safely without activating public mock flags', 
   expect(await page.locator('html').innerHTML()).not.toMatch(
     /\/Users\/|[A-Za-z]:\\Users\\|token|secret/i,
   );
+  await expect(
+    page.getByText('Pitch analysis performance', { exact: true }),
+  ).toBeVisible();
+  await page.goto('/');
+  await expect(
+    page.getByText('Pitch analysis performance', { exact: true }),
+  ).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });

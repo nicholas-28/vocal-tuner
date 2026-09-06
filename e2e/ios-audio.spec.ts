@@ -412,6 +412,10 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   await expect(page.getByLabel('Microphone status')).toContainText(
     'Microphone active',
   );
+  await page.getByText('Pitch analysis performance', { exact: true }).click();
+  const timing = page.getByLabel('Pitch analysis timing');
+  await expect(timing).toBeVisible();
+  await expect(timing.locator('dd').first()).not.toHaveText('0');
   await expect(panel).toContainText('after getUserMedia resolved');
   await expect(panel).toContainText('after microphone AudioContext starts');
   await page.getByRole('button', { name: 'Stop microphone' }).click();

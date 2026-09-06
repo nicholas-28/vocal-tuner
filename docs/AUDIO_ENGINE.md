@@ -34,6 +34,10 @@ Recovery requires explicit Start, a new stream/analysis graph, and fresh renderi
 
 The freshness checks add only context/clock reads and small track checks to existing scheduled work. Audio stays in local transient buffers; this policy adds no recording, persistence, sample logging, upload, backend, analytics, dependency, or independent polling loop. These browser signals cannot prove physical microphone freshness if a device/driver supplies stale audio while reporting a live track and progressing context. Physical iPhone Safari interruption/retry testing remains necessary, including app switching, screen locking, and input-route changes.
 
+## Realtime observation boundary
+
+Every computed detector observation also reaches the React-independent PitchSource before the existing 15 Hz UI throttle. `useMicrophone` owns the source and supplies its existing operation generation, invalidating on Stop/failure/unmount. Current-frame musical interpretation is separate from the unchanged React continuity/history/practice path. Reads do not allocate or advance freshness. See [PitchSource](PITCH_SOURCE.md) for timestamps, age checks, bounded retention, synthetic fixtures, and opt-in analysis-duration diagnostics.
+
 ## Pitch detector
 
 The first implementation may use YIN, McLeod Pitch Method, or a maintained library implementing a comparable monophonic detector.

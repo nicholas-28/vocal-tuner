@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { PitchAnalysisHandle } from '../audio/pitchAnalysis';
 import { createPitchDetection } from '../test/pitchFixture';
 import type { RawPitchDetection } from '../types/pitch';
@@ -45,6 +45,115 @@ function createServices(
 describe('useMicrophone', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  it('exposes only subscription and reads to microphone consumers', () => {
+    const { stream } = createStream();
+    const { result } = renderHook(() => useMicrophone(createServices(stream)));
+    const source = result.current.pitchSource;
+    expectTypeOf<keyof typeof source>().toEqualTypeOf<
+      'subscribe' | 'getLatest' | 'getRecent'
+    >();
+    expect(Object.keys(source).sort()).toEqual([
+      'getLatest',
+      'getRecent',
+      'subscribe',
+    ]);
+    expect(source.subscribe).toBeTypeOf('function');
+    expect(source.getLatest).toBeTypeOf('function');
+    expect(source.getRecent).toBeTypeOf('function');
+  });
+
+  it('keeps realtime publications and 120 RAF-style reads outside React, with microphone session ownership', async () => {
+    const { stream } = createStream();
+    const services = createServices(stream);
+    const monitors: Array<{
+      ui: (d: RawPitchDetection) => void;
+      realtime: (d: RawPitchDetection) => void;
+      fail: () => void;
+    }> = [];
+    services.startLevelMonitor = vi.fn((_stream, ui, fail, realtime) => {
+      monitors.push({ ui, fail, realtime: realtime! });
+      return {
+        stop: vi.fn().mockResolvedValue(undefined),
+        diagnostics: analysisDiagnostics,
+      };
+    });
+    let renders = 0;
+    const presentation = vi.fn();
+    const { result, unmount } = renderHook(() => {
+      renders += 1;
+      return useMicrophone(services, { onDetection: presentation });
+    });
+    const source = result.current.pitchSource;
+    expect(source.getLatest()).toBeNull();
+    await act(() => result.current.start());
+    const afterStart = renders;
+    const receive = vi.fn();
+    const unsubscribe = source.subscribe(receive);
+    for (let index = 0; index < 4; index += 1) {
+      monitors[0]!.realtime(
+        createPitchDetection({ timestampMs: 100 + index * 40 }),
+      );
+    }
+    expect(renders).toBe(afterStart);
+    expect(presentation).not.toHaveBeenCalled();
+    expect(receive).toHaveBeenCalledTimes(4);
+    const sample = source.getLatest()!;
+    const generation = sample.sessionGeneration;
+    const recent = source.getRecent(10000);
+    for (let frame = 0; frame < 120; frame += 1)
+      expect(source.getLatest()).toBe(sample);
+    expect(renders).toBe(afterStart);
+    expect(receive).toHaveBeenCalledTimes(4);
+    expect(source.getRecent(10000)).toEqual(recent);
+    act(() => monitors[0]!.ui(createPitchDetection({ timestampMs: 220 })));
+    expect(presentation).toHaveBeenCalledOnce();
+    expect(result.current.state).toBe('active');
+    await act(() => result.current.stop());
+    expect(source.getLatest()).toMatchObject({
+      freshness: 'inactive',
+      timestampMs: 220,
+      sessionGeneration: generation,
+      frequencyHz: null,
+    });
+    monitors[0]!.realtime(createPitchDetection({ timestampMs: 500 }));
+    expect(source.getLatest()?.freshness).toBe('inactive');
+    await act(() => result.current.start());
+    expect(result.current.pitchSource).toBe(source);
+    expect(source.getLatest()!.sessionGeneration).toBeGreaterThan(generation);
+    act(() => {
+      monitors[1]!.realtime(createPitchDetection({ timestampMs: 600 }));
+      monitors[0]!.realtime(createPitchDetection({ timestampMs: 700 }));
+      monitors[0]!.fail();
+    });
+    expect(source.getLatest()?.timestampMs).toBe(600);
+    act(() => monitors[1]!.fail());
+    expect(source.getLatest()).toMatchObject({
+      timestampMs: 600,
+      freshness: 'stale',
+      frequencyHz: null,
+    });
+    await act(() => result.current.start());
+    monitors[2]!.realtime(createPitchDetection({ timestampMs: 800 }));
+    unmount();
+    expect(source.getLatest()?.freshness).toBe('inactive');
+    monitors[2]!.realtime(createPitchDetection({ timestampMs: 900 }));
+    expect(source.getLatest()?.timestampMs).toBe(800);
+    unsubscribe();
+  });
+
+  it('honors Stop reentered from the source session notification before constructing analysis', async () => {
+    const { stream } = createStream();
+    const services = createServices(stream);
+    const { result } = renderHook(() => useMicrophone(services));
+    const unsubscribe = result.current.pitchSource.subscribe((sample) => {
+      if (sample?.timestampMs === null) void result.current.stop();
+    });
+    await act(() => result.current.start());
+    expect(services.startLevelMonitor).not.toHaveBeenCalled();
+    expect(result.current.pitchSource.getLatest()?.freshness).toBe('inactive');
+    unsubscribe();
   });
 
   it('starts idle and reports unsupported browsers after a start attempt', async () => {

@@ -12,6 +12,7 @@ import type {
   MicrophoneErrorState,
   MicrophoneState,
 } from '../types/microphone';
+import { createPitchSource } from '../pitch/pitchSource';
 import type { RawPitchDetection } from '../types/pitch';
 import type { MicrophoneAudioDiagnosticEvent } from '../types/audioDiagnostics';
 
@@ -22,10 +23,13 @@ export type MicrophoneServices = {
     stream: MediaStream,
     onDetection: (detection: RawPitchDetection) => void,
     onError: () => void,
+    onObservation?: (detection: RawPitchDetection) => void,
   ) => PitchAnalysisHandle;
 };
 
 type MicrophoneAnalysisCallbacks = {
+  // Realtime metadata callback: consumers must not schedule React updates here.
+  onObservation?: (detection: RawPitchDetection) => void;
   onSessionStarted?: () => void;
   onDetection?: (detection: RawPitchDetection) => void;
   onAnalysisError?: () => void;
@@ -43,6 +47,7 @@ export function useMicrophone(
   services: MicrophoneServices = defaultServices,
   callbacks: MicrophoneAnalysisCallbacks = {},
 ) {
+  const [pitchSourceController] = useState(() => createPitchSource());
   const [state, setState] = useState<MicrophoneState>('idle');
   const [inputLevel, setInputLevel] = useState(0);
   const callbacksRef = useRef(callbacks);
@@ -67,38 +72,43 @@ export function useMicrophone(
     if (mountedRef.current) setState(next);
   }, []);
 
-  const cleanup = useCallback(() => {
-    // Revoke publications and detach ownership before any asynchronous work.
-    // Preserve this command's identity even if reset synchronously reenters Stop.
-    const operation = ++operationRef.current;
-    for (const { track, type, listener } of listenersRef.current)
-      track.removeEventListener(type, listener);
-    listenersRef.current = [];
-    const stream = streamRef.current;
-    const monitor = monitorRef.current;
-    streamRef.current = null;
-    monitorRef.current = null;
-    stopTracks(stream);
-    let closing: Promise<void>;
-    try {
-      closing = monitor?.stop() ?? Promise.resolve();
-    } catch {
-      closing = Promise.reject(new Error('Analysis cleanup failed'));
-    }
-    const result = Promise.allSettled([
-      cleanupPromiseRef.current,
-      closing,
-    ]).then((results) =>
-      results.every((entry) => entry.status === 'fulfilled'),
-    );
-    cleanupPromiseRef.current = result.then(() => undefined);
-    // Invalidation is synchronous, independent of AudioContext.close latency.
-    if (mountedRef.current) {
-      setInputLevel(0);
-      callbacksRef.current.onAnalysisReset?.();
-    }
-    return { operation, closing: result };
-  }, []);
+  const cleanup = useCallback(
+    (freshness: 'stale' | 'inactive' = 'inactive') => {
+      // Revoke publications and detach ownership before any asynchronous work.
+      // Preserve this command's identity even if reset synchronously reenters Stop.
+      const operation = ++operationRef.current;
+      for (const { track, type, listener } of listenersRef.current)
+        track.removeEventListener(type, listener);
+      listenersRef.current = [];
+      const stream = streamRef.current;
+      const monitor = monitorRef.current;
+      streamRef.current = null;
+      monitorRef.current = null;
+      stopTracks(stream);
+      let closing: Promise<void>;
+      try {
+        closing = monitor?.stop() ?? Promise.resolve();
+      } catch {
+        closing = Promise.reject(new Error('Analysis cleanup failed'));
+      }
+      const result = Promise.allSettled([
+        cleanupPromiseRef.current,
+        closing,
+      ]).then((results) =>
+        results.every((entry) => entry.status === 'fulfilled'),
+      );
+      cleanupPromiseRef.current = result.then(() => undefined);
+      // Source invalidation also runs on unmount, without touching React state.
+      pitchSourceController.invalidate(freshness);
+      // Invalidation is synchronous, independent of AudioContext.close latency.
+      if (mountedRef.current) {
+        setInputLevel(0);
+        callbacksRef.current.onAnalysisReset?.();
+      }
+      return { operation, closing: result };
+    },
+    [pitchSourceController],
+  );
 
   const stop = useCallback(async () => {
     if (stateRef.current === 'idle' || stateRef.current === 'stopping') return;
@@ -133,7 +143,7 @@ export function useMicrophone(
       mountedRef.current && operation === operationRef.current;
     const fail = (next: MicrophoneErrorState, analysisError = false) => {
       if (!ownsOperation()) return;
-      const invalidation = cleanup();
+      const invalidation = cleanup(analysisError ? 'stale' : 'inactive');
       if (
         !mountedRef.current ||
         invalidation.operation !== operationRef.current
@@ -197,6 +207,8 @@ export function useMicrophone(
           listenersRef.current.push({ track, type, listener });
         }
       }
+      pitchSourceController.beginSession(operation);
+      if (!ownsOperation()) return;
       callbacksRef.current.onSessionStarted?.();
       if (!ownsOperation()) return;
       const monitor = services.startLevelMonitor(
@@ -215,6 +227,17 @@ export function useMicrophone(
           callbacksRef.current.onDetection?.(detection);
         },
         () => fail('error', true),
+        (detection) => {
+          if (!ownsOperation()) return;
+          if (
+            tracks.some((track) => track.readyState === 'ended' || track.muted)
+          ) {
+            fail('no-device', true);
+            return;
+          }
+          pitchSourceController.publish(detection, operation);
+          if (ownsOperation()) callbacksRef.current.onObservation?.(detection);
+        },
       );
       // A synchronous construction callback can invalidate the operation before
       // its handle is returned. That handle still needs disposal.
@@ -250,7 +273,7 @@ export function useMicrophone(
       });
       fail(mapMicrophoneError(error), streamRef.current !== null);
     }
-  }, [cleanup, services, transition]);
+  }, [cleanup, pitchSourceController, services, transition]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -260,7 +283,13 @@ export function useMicrophone(
     };
   }, [cleanup]);
 
-  return { state, inputLevel, start, stop };
+  return {
+    state,
+    inputLevel,
+    start,
+    stop,
+    pitchSource: pitchSourceController.source,
+  };
 }
 
 function stopTracks(stream: MediaStream | null) {

@@ -25,6 +25,7 @@ export function startPitchAnalysis(
   stream: MediaStream,
   onDetection: (detection: RawPitchDetection) => void,
   onError: () => void,
+  onObservation?: (detection: RawPitchDetection) => void,
 ): PitchAnalysisHandle {
   const AudioContextClass = getAudioContextConstructor();
   const context = new AudioContextClass();
@@ -112,6 +113,9 @@ export function startPitchAnalysis(
             differenceBuffer: differenceBuffer ?? undefined,
             centeredBuffer: centeredBuffer ?? undefined,
           });
+          // Realtime consumers receive every computed observation before the UI gate.
+          onObservation?.(detection);
+          if (stopped) return;
           if (
             timestamp - lastPublishedAt >=
             pitchAnalysisConfig.publishIntervalMs

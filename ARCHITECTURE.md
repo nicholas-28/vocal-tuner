@@ -3,16 +3,17 @@
 ## High-level pipeline
 
 ```text
-Microphone
-  → Audio capture
-  → Frame extraction
-  → Pitch detection
-  → Confidence and silence filtering
-  → Pitch stabilization
-  → Music-theory conversion
-  → Timeline buffer
-  → Canvas rendering
+Microphone → source/analyser → YIN + confidence/silence acceptance (≤30 Hz)
+                                ├─ musical interpretation → PitchSource
+                                │                            → realtime reads (60/120 Hz)
+                                └─ UI publication (≤15 Hz)
+                                    → React continuity / musical pitch
+                                    ├─ text, cents, target guidance
+                                    ├─ timestamped history → Canvas RAF
+                                    └─ practice observation effects
 ```
+
+The realtime boundary is current-frame detector evidence, before continuity or visual smoothing. It uses microphone session generations, immutable snapshots and a 256-observation ring. `getLatest()` allocates nothing and does not update React; consumers also check observation age before using pitch as fresh evidence. Existing UI, practice and history keep their publication cadence. The production analyser uses RAF, not an AudioWorklet. See [PitchSource](docs/PITCH_SOURCE.md) for the current data-flow audit, complete contract, lifecycle and diagnostic timing policy.
 
 ## Technology choices
 
@@ -69,30 +70,7 @@ src/
 
 ## Core data model
 
-```ts
-export type RawPitchFrame = {
-  timestampMs: number;
-  frequencyHz: number | null;
-  confidence: number;
-  rms: number;
-};
-
-export type DetectedPitch = {
-  timestampMs: number;
-  frequencyHz: number;
-  midi: number;
-  noteName: string;
-  octave: number;
-  cents: number;
-  confidence: number;
-};
-
-export type RenderedPitchPoint = {
-  timestampMs: number;
-  midi: number | null;
-  confidence: number;
-};
-```
+The current types are `RawPitchDetection` (detector evidence), `PitchSample` (immutable realtime observation plus accepted musical values), `PitchContinuityState`/`PitchContinuityDecision` (UI uncertainty and history ingestion), `MusicalPitch` (music theory), and `PitchHistory` (visual retention). PitchSource's `raw` preserves the detector result; its nullable musical fields never contain held continuity pitch. See `src/pitch/pitchSource.ts` and `src/types/`.
 
 ## Important separation
 

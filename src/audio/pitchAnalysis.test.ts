@@ -89,6 +89,44 @@ describe('pitch analysis graph', () => {
     expect(MockAudioContext.current.close).toHaveBeenCalledOnce();
   });
 
+  it('delivers every analysis before the presentation throttle and skips frozen render samples', async () => {
+    const presentation = vi.fn();
+    const observation = vi.fn();
+    const handle = startPitchAnalysis(
+      {} as MediaStream,
+      presentation,
+      vi.fn(),
+      observation,
+    );
+    for (const timestamp of [100, 140, 180, 220]) frame(timestamp);
+    expect(observation.mock.calls.map(([value]) => value.timestampMs)).toEqual([
+      100, 140, 180, 220,
+    ]);
+    expect(presentation.mock.calls.map(([value]) => value.timestampMs)).toEqual(
+      [100, 180],
+    );
+    frame(260, 0.22);
+    expect(observation).toHaveBeenCalledTimes(4);
+    expect(
+      MockAudioContext.current.analyser.getFloatTimeDomainData,
+    ).toHaveBeenCalledTimes(4);
+    await handle.stop();
+    frame(300);
+    expect(observation).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not publish presentation after a realtime consumer synchronously stops analysis', async () => {
+    const presentation = vi.fn();
+    const handle = startPitchAnalysis(
+      {} as MediaStream,
+      presentation,
+      vi.fn(),
+      () => void handle.stop(),
+    );
+    frame(100);
+    expect(presentation).not.toHaveBeenCalled();
+  });
+
   it.each(['suspended', 'interrupted', 'closed', 'unknown'])(
     'invalidates %s without republishing frozen samples',
     async (state) => {
