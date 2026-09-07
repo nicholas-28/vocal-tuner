@@ -20,11 +20,15 @@ describe('TunerReadout', () => {
       'aria-valuetext',
       'Pitch is +7.9 cents sharp of the nearest note.',
     );
-    const marker = container.querySelector<HTMLElement>('.cents-meter__marker');
-    expect(Number.parseFloat(marker?.style.left ?? '')).toBeCloseTo(57.8514, 4);
+    const tension = container.querySelector<SVGElement>(
+      '.cents-meter__tension',
+    );
+    expect(
+      Number.parseFloat(tension?.getAttribute('data-endpoint') ?? ''),
+    ).toBeCloseTo(57.8514, 4);
   });
 
-  it('returns every musical value and the marker to neutral without pitch', () => {
+  it('returns every musical value and the tension to neutral without pitch', () => {
     const { container } = render(<TunerReadout pitch={null} />);
     expect(
       screen.getByLabelText('Current note: unavailable'),
@@ -34,7 +38,7 @@ describe('TunerReadout', () => {
     expect(
       screen.getByRole('meter', { name: 'Nearest-note cents meter' }),
     ).not.toHaveAttribute('aria-valuenow');
-    expect(container.querySelector('.cents-meter__marker')).toHaveAttribute(
+    expect(container.querySelector('.cents-meter__tension')).toHaveAttribute(
       'data-visible',
       'false',
     );

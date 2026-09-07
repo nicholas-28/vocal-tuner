@@ -175,30 +175,32 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(page.locator('.cents-meter__classification')).toHaveText(
     'Sharp',
   );
-  const marker = page.locator('.cents-meter__marker');
-  const heldMarkerPosition = await marker.evaluate(
-    (element) => (element as HTMLElement).style.left,
+  const tension = page.locator('.cents-meter__tension');
+  const heldTensionPosition = await tension.evaluate(
+    (element) => element.getAttribute('data-endpoint') ?? '',
   );
   await setCentsMeterDemo(frequencyAtMidi(69.12), 'uncertain', 234);
   await expect(centsMeter).toHaveClass(/cents-meter--uncertain/);
   expect(
-    await marker.evaluate((element) => (element as HTMLElement).style.left),
-  ).toBe(heldMarkerPosition);
+    await tension.evaluate(
+      (element) => element.getAttribute('data-endpoint') ?? '',
+    ),
+  ).toBe(heldTensionPosition);
   await setCentsMeterDemo(null, 'unvoiced', null);
-  await expect(marker).toHaveAttribute('data-visible', 'false');
+  await expect(tension).toHaveAttribute('data-visible', 'false');
   await setCentsMeterDemo(frequencyAtMidi(59.49), 'voiced', 300);
   await expect
     .poll(() =>
-      marker.evaluate((element) =>
-        Number.parseFloat((element as HTMLElement).style.left),
+      tension.evaluate((element) =>
+        Number.parseFloat(element.getAttribute('data-endpoint') ?? ''),
       ),
     )
     .toBeCloseTo(99, 4);
   await setCentsMeterDemo(frequencyAtMidi(59.51), 'voiced', 367);
   await expect
     .poll(() =>
-      marker.evaluate((element) =>
-        Number.parseFloat((element as HTMLElement).style.left),
+      tension.evaluate((element) =>
+        Number.parseFloat(element.getAttribute('data-endpoint') ?? ''),
       ),
     )
     .toBeCloseTo(1, 4);
@@ -622,4 +624,83 @@ test('loads the initial tuner screen', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(centsMeter).toHaveAttribute('data-reduced-motion', 'true');
   expect(pageErrors).toEqual([]);
+});
+
+test('keeps centered tension anchored and contained on mobile and wide screens', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/?centsMeterDemo=1');
+  const meter = page.getByRole('meter', { name: 'Nearest-note cents meter' });
+  const center = meter.locator('.cents-meter__center');
+  const tension = meter.locator('.cents-meter__tension');
+  await expect(meter).toHaveAttribute('data-reduced-motion', 'true');
+  let timestampMs = 0;
+  for (const width of [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    const track = (await meter.locator('.cents-meter__track').boundingBox())!;
+    const centerBefore = (await center.boundingBox())!;
+    expect(centerBefore.x + centerBefore.width / 2).toBeCloseTo(
+      track.x + track.width / 2,
+      1,
+    );
+    if (width === 768)
+      expect((await meter.boundingBox())!.width).toBeGreaterThan(576);
+    for (const cents of [-49, -25, -5, 0, 5, 25, 49]) {
+      timestampMs += 67;
+      await page.evaluate(
+        ({ cents, timestampMs }) =>
+          window.dispatchEvent(
+            new CustomEvent('vocal-tuner:cents-meter-demo', {
+              detail: {
+                frequencyHz: 440 * 2 ** (cents / 1200),
+                status: 'voiced',
+                timestampMs,
+              },
+            }),
+          ),
+        { cents, timestampMs },
+      );
+      await expect
+        .poll(async () => Number(await tension.getAttribute('data-endpoint')))
+        .toBeCloseTo(50 + cents, 4);
+      const centerAfter = (await center.boundingBox())!;
+      expect(centerAfter.x).toBe(centerBefore.x);
+      const bounds = await tension.locator('path').evaluate((path) => {
+        const box = path.getBoundingClientRect();
+        return { left: box.left, right: box.right };
+      });
+      if (cents !== 0) {
+        expect(bounds.left).toBeGreaterThanOrEqual(track.x - 0.1);
+        expect(bounds.right).toBeLessThanOrEqual(track.x + track.width + 0.1);
+      } else {
+        await expect(tension.locator('path')).toHaveAttribute('d', '');
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      if (width === 320 && [-25, 0, 25].includes(cents)) {
+        await meter.screenshot({
+          path: testInfo.outputPath(`centered-tension-${cents}.png`),
+        });
+      }
+    }
+    await expect(meter.getByText('← Flat')).toBeVisible();
+    await expect(
+      meter.getByText('Nearest note', { exact: true }),
+    ).toBeVisible();
+    await expect(meter.getByText('Sharp →')).toBeVisible();
+  }
+  expect(
+    await tension.evaluate(
+      (element) => getComputedStyle(element).animationName,
+    ),
+  ).toBe('none');
+  expect(
+    await tension.evaluate(
+      (element) => getComputedStyle(element).transitionDuration,
+    ),
+  ).toBe('0s');
 });

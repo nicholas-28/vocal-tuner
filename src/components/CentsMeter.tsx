@@ -5,6 +5,8 @@ import {
   centsToMeterPercent,
   classifyCents,
 } from '../tuner/centsDisplaySmoothing';
+import { MAXIMUM_CENTS, MINIMUM_CENTS } from '../tuner/centsDisplayConfig';
+import { getCentsTensionGeometry } from '../tuner/centsTensionGeometry';
 import type { PitchContinuityStatus } from '../types/pitchContinuity';
 
 type CentsMeterProps = {
@@ -36,17 +38,33 @@ export function CentsMeter({
     continuityStatus,
     reducedMotion,
   });
-  const classification = classifyCents(rawCents);
-  const markerPercent =
-    displayCents === null ? null : centsToMeterPercent(displayCents);
+  // Continuity owns held observations. Never expose a leftover smoothed value
+  // as evidence when the current presentation observation is absent/invalid.
+  const hasMeasurement =
+    continuityStatus !== 'unvoiced' &&
+    rawCents !== null &&
+    Number.isFinite(rawCents) &&
+    noteMidi !== null &&
+    Number.isInteger(noteMidi) &&
+    timestampMs !== null &&
+    Number.isFinite(timestampMs) &&
+    timestampMs >= 0;
+  const measuredCents = hasMeasurement ? rawCents : null;
+  const classification = classifyCents(measuredCents);
+  const geometry = getCentsTensionGeometry(
+    hasMeasurement ? displayCents : null,
+  );
+  const beyondScale =
+    measuredCents !== null &&
+    (measuredCents < MINIMUM_CENTS || measuredCents > MAXIMUM_CENTS);
   const classificationText =
     continuityStatus === 'unvoiced' || classification === null
       ? 'No pitch'
       : continuityStatus === 'uncertain'
         ? `${classificationLabels[classification]} · briefly uncertain`
-        : classificationLabels[classification];
+        : `${classificationLabels[classification]}${beyondScale ? ' · beyond scale' : ''}`;
   const accessibleDescription = getAccessibleDescription(
-    rawCents,
+    measuredCents,
     classification,
     continuityStatus,
   );
@@ -56,9 +74,13 @@ export function CentsMeter({
       className={`cents-meter cents-meter--${continuityStatus}${classification ? ` cents-meter--${classification}` : ''}`}
       role="meter"
       aria-label="Nearest-note cents meter"
-      aria-valuemin={-50}
-      aria-valuemax={50}
-      aria-valuenow={rawCents ?? undefined}
+      aria-valuemin={MINIMUM_CENTS}
+      aria-valuemax={MAXIMUM_CENTS}
+      aria-valuenow={
+        measuredCents === null
+          ? undefined
+          : Math.max(MINIMUM_CENTS, Math.min(MAXIMUM_CENTS, measuredCents))
+      }
       aria-valuetext={accessibleDescription}
       data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
@@ -68,28 +90,34 @@ export function CentsMeter({
           <span className="cents-meter__in-tune-zone" />
           {SCALE_TICKS.map((tick) => (
             <span
-              className={`cents-meter__tick${tick === 0 ? ' cents-meter__tick--center' : ''}`}
+              className="cents-meter__tick"
               key={tick}
               style={{ left: `${centsToMeterPercent(tick)}%` }}
             />
           ))}
-          <span
-            className="cents-meter__marker"
-            data-visible={markerPercent === null ? 'false' : 'true'}
-            style={{
-              left: `${markerPercent ?? 50}%`,
-            }}
-          />
+          <svg
+            className="cents-meter__tension"
+            viewBox="0 0 100 48"
+            preserveAspectRatio="none"
+            data-visible={geometry === null ? 'false' : 'true'}
+            data-direction={geometry?.direction ?? 'center'}
+            data-endpoint={geometry?.endpointPercent}
+          >
+            <path d={geometry?.path ?? ''} />
+          </svg>
+          <span className="cents-meter__center" />
         </div>
         <div className="cents-meter__tick-labels" aria-label="Cents scale">
           {SCALE_TICKS.map((tick) => (
-            <span key={tick}>{tick > 0 ? `+${tick}` : tick}</span>
+            <span key={tick} style={{ left: `${centsToMeterPercent(tick)}%` }}>
+              {tick > 0 ? `+${tick}` : tick}
+            </span>
           ))}
         </div>
         <div className="cents-meter__direction-labels" aria-hidden="true">
-          <span>Flat</span>
-          <span>In tune</span>
-          <span>Sharp</span>
+          <span>← Flat</span>
+          <span>Nearest note</span>
+          <span>Sharp →</span>
         </div>
       </div>
       <span className="visually-hidden">{accessibleDescription}</span>
@@ -112,7 +140,11 @@ function getAccessibleDescription(
     classification === 'in-tune'
       ? `${formatCents(rawCents)}, in tune with the nearest note`
       : `${formatCents(rawCents)} ${classificationLabels[classification].toLowerCase()} of the nearest note`;
+  const overflow =
+    rawCents < MINIMUM_CENTS || rawCents > MAXIMUM_CENTS
+      ? ' Beyond the displayed ±50-cent scale.'
+      : '';
   return continuityStatus === 'uncertain'
-    ? `Last measured pitch was ${measurement} and is briefly uncertain.`
-    : `Pitch is ${measurement}.`;
+    ? `Last measured pitch was ${measurement} and is briefly uncertain.${overflow}`
+    : `Pitch is ${measurement}.${overflow}`;
 }
