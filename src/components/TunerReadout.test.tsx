@@ -12,13 +12,15 @@ describe('TunerReadout', () => {
       />,
     );
     expect(screen.getByLabelText('Current note: A4')).toHaveTextContent('A4');
+    expect(screen.getByText('Pitch detected')).toBeInTheDocument();
+    expect(screen.queryByText('Stable')).not.toBeInTheDocument();
     expect(screen.getByText('442.0 Hz')).toBeInTheDocument();
     expect(screen.getByText('+7.9 cents')).toBeInTheDocument();
     expect(
       screen.getByRole('meter', { name: 'Nearest-note cents meter' }),
     ).toHaveAttribute(
       'aria-valuetext',
-      'Pitch is +7.9 cents sharp of the nearest note.',
+      'Pitch is +7.9 cents, in tune with the nearest note.',
     );
     const tension = container.querySelector<SVGElement>(
       '.cents-meter__tension',

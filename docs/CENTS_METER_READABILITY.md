@@ -2,9 +2,9 @@
 
 ## Audit and interaction
 
-The primary readout previously asked the singer to follow a circular marker on a ±50-cent track. It already had useful signed raw cents, frequency, nearest-note naming, continuity labels, and display-only smoothing. Those remain; a tapered ribbon replaces the moving marker and rounded track. The quiet horizontal guide, fixed center line, and shaded ±5-cent zone give the eye a stable reference.
+The primary readout previously asked the singer to follow a circular marker on a ±50-cent track. It already had useful signed raw cents, frequency, nearest-note naming, continuity labels, and display-only smoothing. Those remain; a tapered ribbon replaces the moving marker and rounded track. The quiet horizontal guide, fixed center line, shaded ±10-cent in-tune zone, and inner ±5-cent center zone give the eye a stable reference.
 
-Flat extends left from center; sharp extends right. The ribbon contracts in both length and thickness through zero, then grows on the other side. There is no minimum displacement or dead zone. In-tune input gives the fixed center a calm mint accent without a pulse. Warm sand on the left and lavender on the right reinforce direction, while position, arrow labels, and Flat/In tune/Sharp text communicate it without color. Frequency and signed cents remain secondary to the note and spatial feedback.
+Flat extends left from center; sharp extends right. The ribbon contracts in both length and thickness through zero, then grows on the other side. There is no minimum displacement or dead zone. In-tune input gives the fixed center a calm mint accent without a pulse. Warm sand on the left and lavender on the right reinforce direction, while position, arrow labels, and Dead center/In tune/Close/Flat/Sharp text communicate it without color. Frequency and signed cents remain secondary to the note and spatial feedback.
 
 The center explicitly means the **nearest note**, not the separately selected reference target. Reference playback and selection do not retarget this visual. The historical scrolling graph still answers “what happened through time”; selected-target guidance and practice keep their existing measurement, tolerance, smoothing, and scoring behavior.
 
@@ -12,7 +12,7 @@ The center explicitly means the **nearest note**, not the separately selected re
 
 Raw cents remain `(fractionalMidi - nearestMidi) * 100` using A4 = 440 Hz and `Math.round` nearest-note selection. The useful nearest-note interval is −50 to +50 cents: beyond a half-semitone, a different note becomes nearest. Expanding the numeric scale would waste space and reduce precision. Instead, the primary meter now fills available readout width up to **44 rem**, previously 36 rem, without expanding the page or sacrificing iPhone safe-area padding.
 
-Mapping is linear: zero is always 50% of the track, and each cent spans 1% of track width. −50/−25/0/+25/+50 labels preserve scale. The inclusive ±5-cent shaded region is visual guidance only, unchanged from the previous meter; it creates no score or target metric. Small displacements remain visible inside it.
+Mapping is linear: zero is always 50% of the track, and each cent spans 1% of track width. −50/−25/0/+25/+50 labels preserve scale. The shared calibration now uses inclusive ±5 cents for dead center, ±10 for in tune, and ±25 for close. These feedback bands create no exercise score. See [calibration and performance baseline](PITCH_CALIBRATION_PERFORMANCE.md) for the policy and evidence. Small displacements remain visible inside it.
 
 `getCentsTensionGeometry` bounds the ribbon endpoint to the track and generates a tapered path in a 100 × 48 viewBox. Nonfinite/null values produce no geometry. Defensive out-of-range input clamps the visual and accessible numeric range, while the accessible sentence retains the actual raw cents and says it exceeds the scale. Visible classification also says “beyond scale.” Normal nearest-note conversion already stays within the range; a continuous slide past a nearest-note boundary updates the note label and resets the display to that new note's cents.
 

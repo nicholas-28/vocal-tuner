@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as detector from './pitchDetector';
 import { pitchAnalysisConfig, startPitchAnalysis } from './pitchAnalysis';
 
 describe('pitch analysis graph', () => {
   const callbacks: FrameRequestCallback[] = [];
   let now = 0;
   let constructionFailure = false;
+  let contextSampleRate = 48_000;
 
   class MockAudioContext extends EventTarget {
     static current: MockAudioContext;
     state = 'running';
     currentTime = 0;
-    sampleRate = 48_000;
+    sampleRate = contextSampleRate;
     destination = { channelCount: 2 };
     source = { connect: vi.fn(), disconnect: vi.fn() };
     analyser = {
@@ -19,7 +21,8 @@ describe('pitch analysis graph', () => {
       disconnect: vi.fn(),
       getFloatTimeDomainData: vi.fn((samples: Float32Array) => {
         for (let index = 0; index < samples.length; index += 1)
-          samples[index] = 0.5 * Math.sin((2 * Math.PI * 220 * index) / 48_000);
+          samples[index] =
+            0.5 * Math.sin((2 * Math.PI * 220 * index) / this.sampleRate);
       }),
     };
     constructor() {
@@ -49,6 +52,7 @@ describe('pitch analysis graph', () => {
     callbacks.length = 0;
     now = 0;
     constructionFailure = false;
+    contextSampleRate = 48_000;
     vi.spyOn(performance, 'now').mockImplementation(() => now);
     vi.stubGlobal('AudioContext', MockAudioContext);
     vi.stubGlobal(
@@ -64,6 +68,25 @@ describe('pitch analysis graph', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+
+  it.each([44_100, 48_000, 96_000])(
+    'reuses the YIN difference buffer at %s Hz across voiced analyses',
+    async (sampleRate) => {
+      contextSampleRate = sampleRate;
+      const detect = vi.spyOn(detector, 'detectPitchYin');
+      const fill = vi.spyOn(Float64Array.prototype, 'fill');
+      const handle = startPitchAnalysis({} as MediaStream, vi.fn(), vi.fn());
+      frame(100);
+      frame(200);
+      const provided = detect.mock.calls[0][3]!.differenceBuffer;
+      expect(detect.mock.calls[1][3]!.differenceBuffer).toBe(provided);
+      expect(fill.mock.contexts.map((buffer) => buffer === provided)).toEqual([
+        true,
+        true,
+      ]);
+      await handle.stop();
+    },
+  );
 
   it('publishes sustained pitch only from progressing audio and releases every resource', async () => {
     const onDetection = vi.fn();

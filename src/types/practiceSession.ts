@@ -19,6 +19,10 @@ export type PracticeMetrics = Readonly<{
   noPitchMs: number;
   unobservedMs: number;
   pauseCount: number;
+  /** Time-weighted raw target cents, independent of band occupancy. */
+  pitchMeanCents: number;
+  /** Sum of squared deviations from the running mean, weighted in ms. */
+  pitchM2CentsSquaredMs: number;
 }>;
 
 export type ActivePracticeSession = PracticeMetrics &

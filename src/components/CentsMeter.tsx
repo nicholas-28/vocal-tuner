@@ -1,3 +1,7 @@
+import {
+  PITCH_CALIBRATION,
+  classifyPitchAccuracy,
+} from '../calibration/pitchCalibration';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useSmoothedCentsDisplay } from '../hooks/useSmoothedCentsDisplay';
 import { formatCents } from '../music/pitchDisplay';
@@ -54,6 +58,15 @@ export function CentsMeter({
   const geometry = getCentsTensionGeometry(
     hasMeasurement ? displayCents : null,
   );
+  const accuracy = classifyPitchAccuracy(measuredCents);
+  const feedbackLabel =
+    accuracy === 'dead-center'
+      ? 'Dead center'
+      : accuracy === 'close'
+        ? `Close · ${classification === 'flat' ? 'flat' : 'sharp'}`
+        : classification
+          ? classificationLabels[classification]
+          : 'No pitch';
   const beyondScale =
     measuredCents !== null &&
     (measuredCents < MINIMUM_CENTS || measuredCents > MAXIMUM_CENTS);
@@ -61,8 +74,8 @@ export function CentsMeter({
     continuityStatus === 'unvoiced' || classification === null
       ? 'No pitch'
       : continuityStatus === 'uncertain'
-        ? `${classificationLabels[classification]} · briefly uncertain`
-        : `${classificationLabels[classification]}${beyondScale ? ' · beyond scale' : ''}`;
+        ? `${feedbackLabel} · briefly uncertain`
+        : `${feedbackLabel}${beyondScale ? ' · beyond scale' : ''}`;
   const accessibleDescription = getAccessibleDescription(
     measuredCents,
     classification,
@@ -82,12 +95,26 @@ export function CentsMeter({
           : Math.max(MINIMUM_CENTS, Math.min(MAXIMUM_CENTS, measuredCents))
       }
       aria-valuetext={accessibleDescription}
+      data-accuracy={accuracy ?? 'unavailable'}
       data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
       <p className="cents-meter__classification">{classificationText}</p>
       <div className="cents-meter__scale">
         <div className="cents-meter__track" aria-hidden="true">
-          <span className="cents-meter__in-tune-zone" />
+          <span
+            className="cents-meter__in-tune-zone"
+            style={{
+              left: `${centsToMeterPercent(-PITCH_CALIBRATION.inTuneCents)}%`,
+              width: `${centsToMeterPercent(PITCH_CALIBRATION.inTuneCents)! - centsToMeterPercent(-PITCH_CALIBRATION.inTuneCents)!}%`,
+            }}
+          />
+          <span
+            className="cents-meter__dead-center-zone"
+            style={{
+              left: `${centsToMeterPercent(-PITCH_CALIBRATION.deadCenterCents)}%`,
+              width: `${centsToMeterPercent(PITCH_CALIBRATION.deadCenterCents)! - centsToMeterPercent(-PITCH_CALIBRATION.deadCenterCents)!}%`,
+            }}
+          />
           {SCALE_TICKS.map((tick) => (
             <span
               className="cents-meter__tick"
@@ -120,6 +147,10 @@ export function CentsMeter({
           <span>Sharp →</span>
         </div>
       </div>
+      <p className="cents-meter__calibration">
+        Center ±{PITCH_CALIBRATION.deadCenterCents} · In tune ±
+        {PITCH_CALIBRATION.inTuneCents} cents
+      </p>
       <span className="visually-hidden">{accessibleDescription}</span>
     </div>
   );

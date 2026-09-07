@@ -10,8 +10,18 @@ export function AnalysisPerformanceDiagnostics({
   const milliseconds = (value: number | null) =>
     value === null ? '—' : `${value.toFixed(2)} ms`;
   return (
-    <details className="diagnostics">
+    <details className="diagnostics analysis-performance">
       <summary>Pitch analysis performance</summary>
+      <p>
+        p50 is the typical analysis time (the median). p95 means 95% of these
+        analyses finished within that time.
+      </p>
+      <p>
+        These values cover the latest 128 analyses, not the whole session.
+        Maximum is the slowest in this window; Above 8 ms counts analyses taking
+        more than 8 ms. This measures computation, not microphone-to-screen
+        delay.
+      </p>
       <dl aria-label="Pitch analysis timing">
         <dt>Rolling observations (up to 128)</dt>
         <dd>{summary.count}</dd>

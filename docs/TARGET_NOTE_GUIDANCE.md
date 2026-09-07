@@ -8,7 +8,7 @@ The persistent `selectedMidi` from the reference keyboard is the target. It is a
 
 Nearest-note cents and target-relative cents are intentionally separate.
 
-- Nearest-note cents compare accepted fractional MIDI with its rounded nearest MIDI note and remain approximately within ±50. They continue to drive the primary Flat / In tune / Sharp readout and its ±5 visual zone.
+- Nearest-note cents compare accepted fractional MIDI with its rounded nearest MIDI note and remain approximately within ±50. They continue to drive the primary nearest-note readout with shared ±5 dead-center, ±10 in-tune, and ±25 close feedback.
 - `targetRelativeCents` compare the same accepted fractional MIDI with the explicitly selected target MIDI. They are unbounded and never wrap at a nearest-note boundary.
 
 The target calculation is:
@@ -19,13 +19,13 @@ Thus A#4 against A4 is +100 cents, G#4 against A4 is −100 cents, and A5 agains
 
 ## Direction, tolerance, and distance
 
-The centralized target tolerance is inclusive ±10 cents:
+The target tolerance uses the shared `PITCH_CALIBRATION.inTuneCents`, currently inclusive ±10 cents. These are provisional product feedback bands, not a universal singing standard; see [calibration baseline](PITCH_CALIBRATION_PERFORMANCE.md).
 
 - less than −10: below target, “Raise the pitch”;
 - −10 through +10: “On target”;
 - greater than +10: above target, “Lower the pitch”.
 
-Distance bands are `on-target` at |cents| ≤ 10, `close` at 10 < |cents| ≤ 35, `far` at 35 < |cents| < 100, and `different-note` at |cents| ≥ 100. Separately, |cents| < 50 is the target-note neighborhood; at 50 cents or more the pitch is at least as close to a neighboring equal-tempered note.
+Distance bands are `on-target` at |cents| ≤ 10, `close` at 10 < |cents| ≤ 25, `far` at 25 < |cents| < 100, and `different-note` at |cents| ≥ 100. Separately, |cents| < 50 is the target-note neighborhood; at 50 cents or more the pitch is at least as close to a neighboring equal-tempered note.
 
 ## Meter and formatting
 

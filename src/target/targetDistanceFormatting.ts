@@ -1,3 +1,4 @@
+import { TARGET_TOLERANCE_CENTS } from './targetPitchConfig';
 import type { TargetPitchDirection } from '../types/targetPitch';
 
 export function formatTargetDistance(
@@ -7,7 +8,8 @@ export function formatTargetDistance(
   if (!Number.isFinite(targetRelativeCents) || targetLabel.length === 0)
     return null;
   const absoluteCents = Math.abs(targetRelativeCents);
-  if (absoluteCents <= 10) return `Within 10 cents of ${targetLabel}`;
+  if (absoluteCents <= TARGET_TOLERANCE_CENTS)
+    return `Within ${TARGET_TOLERANCE_CENTS} cents of ${targetLabel}`;
   const relation = targetRelativeCents < 0 ? 'below' : 'above';
   if (absoluteCents < 100)
     return `${absoluteCents.toFixed(1)} cents ${relation} ${targetLabel}`;

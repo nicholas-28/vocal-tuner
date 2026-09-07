@@ -40,8 +40,8 @@ describe('cents meter mapping and classification', () => {
     [-5, 'in-tune'],
     [0, 'in-tune'],
     [5, 'in-tune'],
-    [-5.001, 'flat'],
-    [5.001, 'sharp'],
+    [-10.001, 'flat'],
+    [10.001, 'sharp'],
   ] as const)('classifies %s cents as %s', (cents, classification) => {
     expect(classifyCents(cents)).toBe(classification);
   });

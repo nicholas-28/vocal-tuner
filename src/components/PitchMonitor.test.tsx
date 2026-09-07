@@ -541,7 +541,11 @@ describe('PitchMonitor history diagnostics', () => {
     expect(screen.getByText('Practice running')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Finish practice' }));
     expect(screen.getByText('Practice completed')).toBeInTheDocument();
-    expect(screen.getByText(/Not enough measured voice/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Not enough measured voice to calculate time in the target band.',
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Practice again' }));
     expect(screen.getByText('Practice ready')).toBeInTheDocument();
     expect(

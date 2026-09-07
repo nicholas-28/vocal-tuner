@@ -175,6 +175,26 @@ h1 {
   background: #70d5c1;
 }
 
+.analysis-performance p {
+  margin: 0.65rem 0;
+  color: #a8b2bf;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.analysis-performance dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.analysis-performance dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .readout {
   padding: 0.8rem 0 0.4rem;
   text-align: center;
@@ -254,12 +274,23 @@ h1 {
   background: linear-gradient(#46505f, #46505f) center / 100% 1px no-repeat;
 }
 
-.cents-meter__in-tune-zone {
+.cents-meter__in-tune-zone,
+.cents-meter__dead-center-zone {
   position: absolute;
-  inset: 0.2rem auto 0.2rem 45%;
-  width: 10%;
+  top: 0.2rem;
+  bottom: 0.2rem;
   border-radius: 0.5rem;
   background: rgb(112 213 193 / 7%);
+}
+
+.cents-meter__dead-center-zone {
+  background: rgb(112 213 193 / 9%);
+}
+
+.cents-meter__calibration {
+  margin: 0.45rem 0 0;
+  color: #9aa5b4;
+  font-size: 0.7rem;
 }
 
 .cents-meter__tick {

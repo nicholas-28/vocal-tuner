@@ -24,6 +24,8 @@ const session: ActivePracticeSession = {
   noPitchMs: 500,
   unobservedMs: 200,
   pauseCount: 0,
+  pitchMeanCents: -4,
+  pitchM2CentsSquaredMs: 8000,
   timelineEvents: [],
 };
 
@@ -117,8 +119,12 @@ describe('TargetPracticeSession', () => {
     expect(screen.getByText('Practice running')).toBeVisible();
     expect(screen.getByText(/Practice target locked to A4/)).toBeVisible();
     expect(screen.getByLabelText('Live practice metrics')).toHaveTextContent(
-      'On-target share60.0%',
+      'Time in ±10-cent band60.0%',
     );
+    expect(
+      screen.getByLabelText('Pitch center and variation'),
+    ).toHaveTextContent('Average offset-4.0 centsPitch spread2.0 cents');
+    expect(screen.getByText(/Time in this band is not a grade/)).toBeVisible();
     expect(screen.getByText('Current observation: On target')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Pause practice' }));
     fireEvent.click(screen.getByRole('button', { name: 'Finish practice' }));
@@ -195,15 +201,13 @@ describe('TargetPracticeSession', () => {
       />,
     );
     expect(screen.getByText('Practice completed')).toBeVisible();
-    expect(screen.getByText('On-target share: 60.0%')).toBeVisible();
+    expect(screen.getByText('Time in ±10-cent band: 60.0%')).toBeVisible();
     expect(
       screen.getByLabelText('Completed practice summary'),
     ).toHaveTextContent(
       'Briefly uncertain0.3 sNo pitch0.5 sUnobserved0.2 sPauses1',
     );
-    expect(document.body).not.toHaveTextContent(
-      /score|grade|recording|replay/i,
-    );
+    expect(document.body).not.toHaveTextContent(/score|recording|replay/i);
     expect(
       screen.getByRole('heading', { name: 'Session timeline' }),
     ).toBeVisible();
@@ -248,7 +252,11 @@ describe('TargetPracticeSession', () => {
         model={model({ state: { status: 'completed', summary } })}
       />,
     );
-    expect(screen.getByText(/Not enough measured voice/)).toBeVisible();
+    expect(
+      screen.getByText(
+        'Not enough measured voice to calculate time in the target band.',
+      ),
+    ).toBeVisible();
     expect(screen.queryByText(/0\.0%/)).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import type { RawPitchDetection } from '../types/pitch';
-import { detectPitchYin } from './pitchDetector';
+import { detectPitchYin, pitchDetectorConfig } from './pitchDetector';
 
 export const pitchAnalysisConfig = {
   fftSize: 4096,
@@ -148,7 +148,8 @@ export function startPitchAnalysis(
     samples = new Float32Array(analyser.fftSize);
     centeredBuffer = new Float32Array(analyser.fftSize);
     differenceBuffer = new Float64Array(
-      Math.floor(context.sampleRate / 65) + 1,
+      Math.ceil(context.sampleRate / pitchDetectorConfig.minimumFrequencyHz) +
+        1,
     );
     context.addEventListener('statechange', onStateChange);
     if (context.state === 'suspended') {

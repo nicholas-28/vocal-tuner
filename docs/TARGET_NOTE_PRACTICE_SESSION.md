@@ -49,7 +49,7 @@ Observed categories are:
 - `no-pitch`: continuity is confirmed unvoiced;
 - `unobserved`: initial, post-resume, or evidence-cap time without sufficient observation.
 
-The existing Issue 015 tolerance and raw comparison are authoritative. Display-smoothed marker cents never enter practice calculations.
+The explicitly named `PRACTICE_BAND_CENTS` uses shared `inTuneCents` (±10). This is instantaneous band occupancy, not an exercise success rule. Display-smoothed marker cents never enter practice calculations.
 
 The state machine maintains:
 
@@ -70,7 +70,9 @@ Silence and uncertainty are not off-target voice and do not reduce the share den
 onTargetShare = onTargetMs / measurableVoicedMs
 ```
 
-The share is clamped to 0–1 for defensive formatting and shown with one decimal percentage. When measurable voice is zero, the value is `null` and the UI says there is not enough measured voice; it never fabricates 0%. A nonzero sample shorter than one second is labeled “Very short measured sample” without hiding its metrics.
+The share is clamped to 0–1 for defensive formatting and shown with one decimal percentage under “Time in ±10-cent band.” When measurable voice is zero, the value is `null` and the UI says there is not enough measured voice; it never fabricates 0%. A nonzero sample shorter than one second is labeled “Very short measured sample” without hiding its metrics.
+
+Live and completed displays also show session-wide time-weighted average signed cents (pitch-center bias) and standard deviation around that mean (pitch spread). Weighted Welford updates use exactly the same capped measured intervals as the counters; uncertainty, silence, pauses and unobserved time contribute no pitch. Two scalar accumulators retain raw precision without a sample history. Null measured duration displays unavailable statistics. These descriptive metrics do not classify vibrato or stability, and a centered mean alone can hide random motion or an approach. See [calibration baseline](PITCH_CALIBRATION_PERFORMANCE.md).
 
 The summary shows target, active practice, measured voice, on-target and off-target time, on-target share, uncertain time, no-pitch time, unobserved time, and pause count. Durations below a minute use tenths of a second; longer durations use `m:ss`, with a long-form accessible description.
 
@@ -98,6 +100,7 @@ Metric arithmetic remains O(1). Issue 017 appends immutable timestamp/category e
 
 - One fixed selected note per session; no melody, scale, or automatic sequence.
 - Inclusive ±10 cents is not configurable.
+- Narrow-band occupancy is cadence/phase sensitive during vibrato and must not become a future game score.
 - Metrics depend on detector and continuity quality and do not judge vocal tone, breath, vibrato, or technique.
 - Background tabs and microphone interruptions become unobserved after the evidence cap but still need device testing.
 - Drone sound may be detected acoustically; no source separation is attempted.

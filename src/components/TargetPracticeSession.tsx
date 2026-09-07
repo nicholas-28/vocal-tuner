@@ -1,3 +1,7 @@
+import { PRACTICE_BAND_CENTS } from '../practice/practiceSessionConfig';
+import { summarizePracticePitch } from '../practice/practicePitchStatistics';
+import { formatCents } from '../music/pitchDisplay';
+import type { PracticeMetrics as PracticeMetricsData } from '../types/practiceSession';
 import type { TargetPracticeSessionModel } from '../hooks/useTargetPracticeSession';
 import {
   formatOnTargetShare,
@@ -26,6 +30,11 @@ export function TargetPracticeSession({ model }: TargetPracticeSessionProps) {
           {formatStateLabel(model)}
         </span>
       </div>
+      <p className="practice-session__guidance">
+        On target means within ±{PRACTICE_BAND_CENTS} cents of the selected
+        note. Time in this band is not a grade; vibrato can leave it while
+        staying centered.
+      </p>
       {model.state.status === 'idle' && <IdlePractice model={model} />}
       {(model.state.status === 'running' || model.state.status === 'paused') &&
         model.displaySession && (
@@ -87,6 +96,7 @@ function ActivePractice({
         </p>
       )}
       <PracticeMetrics session={session} />
+      <PitchStatistics metrics={session} />
       <p className="practice-session__observation">
         Current observation: {paused ? 'Paused' : formatObservation(session)}
       </p>
@@ -145,7 +155,7 @@ function PracticeMetrics({ session }: { session: ActivePracticeSession }) {
         emphasized
       />
       <Metric
-        label="On-target share"
+        label={`Time in ±${PRACTICE_BAND_CENTS}-cent band`}
         value={formatOnTargetShare(share) ?? 'Not enough measured voice'}
       />
     </dl>
@@ -168,10 +178,12 @@ function CompletedPractice({
       </p>
       {share === null ? (
         <p className="practice-session__guidance">
-          Not enough measured voice to calculate an on-target share.
+          Not enough measured voice to calculate time in the target band.
         </p>
       ) : (
-        <p className="practice-session__share">On-target share: {share}</p>
+        <p className="practice-session__share">
+          Time in ±{PRACTICE_BAND_CENTS}-cent band: {share}
+        </p>
       )}
       {summary.measurableVoicedMs > 0 && summary.measurableVoicedMs < 1000 && (
         <p className="practice-session__guidance">
@@ -213,6 +225,7 @@ function CompletedPractice({
         />
         <Metric label="Pauses" value={String(summary.pauseCount)} />
       </dl>
+      <PitchStatistics metrics={summary} />
       <PracticeSessionTimeline summary={summary} />
       <p className="visually-hidden">
         Active practice {formatPracticeDurationLong(summary.activeElapsedMs)}.
@@ -222,6 +235,38 @@ function CompletedPractice({
       <button type="button" className="practice-button" onClick={onReset}>
         Practice again
       </button>
+    </>
+  );
+}
+
+function PitchStatistics({ metrics }: { metrics: PracticeMetricsData }) {
+  const pitch = summarizePracticePitch(metrics);
+  return (
+    <>
+      <dl
+        className="practice-session__metrics"
+        aria-label="Pitch center and variation"
+      >
+        <Metric
+          label="Average offset"
+          value={
+            pitch ? formatCents(pitch.meanCents) : 'Not enough measured voice'
+          }
+        />
+        <Metric
+          label="Pitch spread"
+          value={
+            pitch
+              ? `${pitch.spreadCents.toFixed(1)} cents`
+              : 'Not enough measured voice'
+          }
+        />
+      </dl>
+      <p className="practice-session__guidance">
+        Average offset shows the pitch center over this session. Spread shows
+        variation around it, including vibrato; a centered average alone does
+        not mean a steady note.
+      </p>
     </>
   );
 }

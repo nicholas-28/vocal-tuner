@@ -1,3 +1,7 @@
+import {
+  TARGET_METER_LIMIT_CENTS,
+  TARGET_TOLERANCE_CENTS,
+} from '../target/targetPitchConfig';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTargetCentsDisplay } from '../hooks/useTargetCentsDisplay';
 import { formatFrequency } from '../music/pitchDisplay';
@@ -131,16 +135,23 @@ function TargetMeasurementContent({
         className="target-meter"
         role="meter"
         aria-label="Selected-target cents meter"
-        aria-valuemin={-50}
-        aria-valuemax={50}
+        aria-valuemin={-TARGET_METER_LIMIT_CENTS}
+        aria-valuemax={TARGET_METER_LIMIT_CENTS}
         aria-valuenow={Math.max(
-          -50,
-          Math.min(50, measurement.targetRelativeCents),
+          -TARGET_METER_LIMIT_CENTS,
+          Math.min(TARGET_METER_LIMIT_CENTS, measurement.targetRelativeCents),
         )}
         aria-valuetext={accessibleText}
         data-off-scale={offScale ?? 'false'}
       >
-        <span className="target-meter__zone" aria-hidden="true" />
+        <span
+          className="target-meter__zone"
+          aria-hidden="true"
+          style={{
+            left: `${50 - (50 * TARGET_TOLERANCE_CENTS) / TARGET_METER_LIMIT_CENTS}%`,
+            width: `${(100 * TARGET_TOLERANCE_CENTS) / TARGET_METER_LIMIT_CENTS}%`,
+          }}
+        />
         <span className="target-meter__center" aria-hidden="true" />
         <span
           className="target-meter__marker"
@@ -161,9 +172,9 @@ function TargetMeasurementContent({
         </span>
       </div>
       <div className="target-meter__labels" aria-hidden="true">
-        <span>Below −50</span>
-        <span>Target</span>
-        <span>Above +50</span>
+        <span>Below −{TARGET_METER_LIMIT_CENTS}</span>
+        <span>Target ±{TARGET_TOLERANCE_CENTS}</span>
+        <span>Above +{TARGET_METER_LIMIT_CENTS}</span>
       </div>
     </div>
   );

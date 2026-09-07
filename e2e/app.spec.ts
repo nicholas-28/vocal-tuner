@@ -167,13 +167,15 @@ test('loads the initial tuner screen', async ({ page }) => {
     'Pitch is +4.0 cents, in tune with the nearest note.',
   );
   await expect(page.locator('.cents-meter__classification')).toHaveText(
-    'In tune',
+    'Dead center',
   );
   await setCentsMeterDemo(frequencyAtMidi(68.88), 'voiced', 167);
-  await expect(page.locator('.cents-meter__classification')).toHaveText('Flat');
+  await expect(page.locator('.cents-meter__classification')).toHaveText(
+    'Close · flat',
+  );
   await setCentsMeterDemo(frequencyAtMidi(69.12), 'voiced', 234);
   await expect(page.locator('.cents-meter__classification')).toHaveText(
-    'Sharp',
+    'Close · sharp',
   );
   const tension = page.locator('.cents-meter__tension');
   const heldTensionPosition = await tension.evaluate(
@@ -496,7 +498,13 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     practicePanel.getByLabel('Completed practice summary'),
   ).toContainText('Measured voice');
-  await expect(practicePanel.getByText(/On-target share:/)).toBeVisible();
+  await expect(practicePanel.getByText(/Time in ±10-cent band:/)).toBeVisible();
+  await expect(
+    practicePanel.getByLabel('Pitch center and variation'),
+  ).toBeVisible();
+  await expect(
+    practicePanel.getByText(/Time in this band is not a grade/),
+  ).toBeVisible();
   const timeline = practicePanel.getByLabel('Practice events');
   await expect(
     practicePanel.getByRole('heading', { name: 'Session timeline' }),
@@ -540,9 +548,7 @@ test('loads the initial tuner screen', async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
-  await expect(practicePanel).not.toContainText(
-    /score|grade|recording|replay/i,
-  );
+  await expect(practicePanel).not.toContainText(/score|recording|replay/i);
   await practicePanel.getByRole('button', { name: 'Practice again' }).click();
   await expect(practicePanel.getByText('Practice ready')).toBeVisible();
   await expect(

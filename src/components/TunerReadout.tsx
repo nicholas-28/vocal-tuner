@@ -38,7 +38,7 @@ export function TunerReadout({
         {continuityStatus === 'uncertain'
           ? `Briefly uncertain · last measured ${Math.round(lastAcceptedAgeMs ?? 0)} ms ago`
           : continuityStatus === 'voiced'
-            ? 'Stable'
+            ? 'Pitch detected'
             : 'No pitch'}
       </p>
       <div className="pitch-details">

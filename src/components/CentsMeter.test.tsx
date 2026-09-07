@@ -5,6 +5,31 @@ import { CentsMeter } from './CentsMeter';
 describe('CentsMeter', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('shows the wider in-tune band separately from the dead-center zone', () => {
+    const { container } = render(
+      <CentsMeter
+        rawCents={7}
+        noteMidi={69}
+        timestampMs={100}
+        continuityStatus="voiced"
+      />,
+    );
+    expect(screen.getByText('In tune', { selector: 'p' })).toBeVisible();
+    expect(screen.getByRole('meter')).toHaveAttribute(
+      'data-accuracy',
+      'in-tune',
+    );
+    expect(container.querySelector('.cents-meter__in-tune-zone')).toHaveStyle({
+      left: '40%',
+      width: '20%',
+    });
+    const inner = container.querySelector<HTMLElement>(
+      '.cents-meter__dead-center-zone',
+    );
+    expect(Number.parseFloat(inner!.style.left)).toBeCloseTo(45, 8);
+    expect(Number.parseFloat(inner!.style.width)).toBeCloseTo(10, 8);
+  });
+
   it('anchors tension at the center and keeps the accessible value bounded', () => {
     const { container } = render(
       <CentsMeter
@@ -38,7 +63,9 @@ describe('CentsMeter', () => {
         continuityStatus="voiced"
       />,
     );
-    expect(screen.getByText('In tune', { selector: 'p' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Dead center', { selector: 'p' }),
+    ).toBeInTheDocument();
     for (const label of ['-50', '-25', '0', '+25', '+50'])
       expect(screen.getByText(label)).toBeInTheDocument();
     expect(
@@ -59,8 +86,8 @@ describe('CentsMeter', () => {
   });
 
   it.each([
-    [-12, 'Flat', '38'],
-    [12, 'Sharp', '62'],
+    [-12, 'Close · flat', '38'],
+    [12, 'Close · sharp', '62'],
   ] as const)('shows %s raw cents as %s', async (rawCents, label, left) => {
     const { container } = render(
       <CentsMeter
@@ -106,7 +133,7 @@ describe('CentsMeter', () => {
       screen.getByRole('meter', { name: 'Nearest-note cents meter' }),
     ).toHaveAttribute(
       'aria-valuetext',
-      'Last measured pitch was +10.0 cents sharp of the nearest note and is briefly uncertain.',
+      'Last measured pitch was +10.0 cents, in tune with the nearest note and is briefly uncertain.',
     );
   });
 
@@ -147,9 +174,11 @@ describe('CentsMeter', () => {
       'data-reduced-motion',
       'true',
     );
-    expect(screen.getByText('Sharp', { selector: 'p' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Close · sharp', { selector: 'p' }),
+    ).toBeInTheDocument();
   });
-  it.each([-5, 0, 5])(
+  it.each([-10, -5, 0, 5, 10])(
     'keeps the center calm within the inclusive tolerance (%s)',
     (rawCents) => {
       render(

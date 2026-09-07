@@ -56,8 +56,8 @@ describe('target pitch comparison', () => {
   it.each([
     [10, 'on-target'],
     [10.001, 'close'],
-    [35, 'close'],
-    [35.001, 'far'],
+    [25, 'close'],
+    [25.001, 'far'],
     [99.999, 'far'],
     [100, 'different-note'],
     [-100, 'different-note'],

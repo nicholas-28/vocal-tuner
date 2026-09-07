@@ -1,4 +1,4 @@
-import { classifyTargetDirection } from '../target/targetPitchComparison';
+import { accumulatePracticePitch } from './practicePitchStatistics';
 import type {
   ActivePracticeSession,
   PracticeControlAvailability,
@@ -13,7 +13,10 @@ import type {
   PracticeTimelineEvent,
   PracticeTimelineEventType,
 } from '../types/practiceTimeline';
-import { MAX_ACCOUNTABLE_PRACTICE_INTERVAL_MS } from './practiceSessionConfig';
+import {
+  MAX_ACCOUNTABLE_PRACTICE_INTERVAL_MS,
+  PRACTICE_BAND_CENTS,
+} from './practiceSessionConfig';
 
 const EMPTY_METRICS: PracticeMetrics = {
   activeElapsedMs: 0,
@@ -24,6 +27,8 @@ const EMPTY_METRICS: PracticeMetrics = {
   noPitchMs: 0,
   unobservedMs: 0,
   pauseCount: 0,
+  pitchMeanCents: 0,
+  pitchM2CentsSquaredMs: 0,
 };
 
 export function createIdlePracticeSession(): PracticeSessionState {
@@ -33,10 +38,12 @@ export function createIdlePracticeSession(): PracticeSessionState {
 export function createPracticeObservation(
   targetRelativeCents: number,
 ): PracticeObservation | null {
-  const direction = classifyTargetDirection(targetRelativeCents);
-  if (direction === null) return null;
+  if (!Number.isFinite(targetRelativeCents)) return null;
   return {
-    kind: direction === 'on-target' ? 'on-target' : 'off-target',
+    kind:
+      Math.abs(targetRelativeCents) <= PRACTICE_BAND_CENTS
+        ? 'on-target'
+        : 'off-target',
     targetRelativeCents,
   };
 }
@@ -235,7 +242,13 @@ export function practiceMetricsAreCoherent(metrics: PracticeMetrics): boolean {
     metrics.unobservedMs,
     metrics.pauseCount,
   ];
-  if (values.some((value) => !isValidDuration(value))) return false;
+  if (
+    values.some((value) => !isValidDuration(value)) ||
+    !Number.isFinite(metrics.pitchMeanCents) ||
+    !Number.isFinite(metrics.pitchM2CentsSquaredMs) ||
+    metrics.pitchM2CentsSquaredMs < -1e-6
+  )
+    return false;
   const tolerance = 1e-6;
   return (
     Math.abs(
@@ -303,12 +316,22 @@ function addObservationDuration(
     case 'on-target':
       return {
         ...session,
+        ...accumulatePracticePitch(
+          session,
+          session.currentObservation.targetRelativeCents,
+          durationMs,
+        ),
         measurableVoicedMs: session.measurableVoicedMs + durationMs,
         onTargetMs: session.onTargetMs + durationMs,
       };
     case 'off-target':
       return {
         ...session,
+        ...accumulatePracticePitch(
+          session,
+          session.currentObservation.targetRelativeCents,
+          durationMs,
+        ),
         measurableVoicedMs: session.measurableVoicedMs + durationMs,
         offTargetMs: session.offTargetMs + durationMs,
       };
@@ -345,6 +368,8 @@ function createSummary(
     noPitchMs: session.noPitchMs,
     unobservedMs: session.unobservedMs,
     pauseCount: session.pauseCount,
+    pitchMeanCents: session.pitchMeanCents,
+    pitchM2CentsSquaredMs: session.pitchM2CentsSquaredMs,
     onTargetShare: calculateOnTargetShare(
       session.onTargetMs,
       session.measurableVoicedMs,
