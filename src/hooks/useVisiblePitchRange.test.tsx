@@ -37,3 +37,15 @@ describe('useVisiblePitchRange', () => {
     expect(invalid.result.current.range).toEqual({ lowMidi: 48, highMidi: 72 });
   });
 });
+
+it('keeps zoom centered, supports centering the voice explicitly, and resets', () => {
+  const { result } = renderHook(() => useVisiblePitchRange());
+  act(() => result.current.zoom(12));
+  expect(result.current.range).toEqual({ lowMidi: 54, highMidi: 66 });
+  act(() => result.current.center(69.3));
+  expect(result.current.range).toEqual({ lowMidi: 63, highMidi: 75 });
+  act(() => result.current.zoom(36));
+  expect(result.current.range).toEqual({ lowMidi: 48, highMidi: 84 });
+  act(() => result.current.reset());
+  expect(result.current.range).toEqual({ lowMidi: 48, highMidi: 72 });
+});

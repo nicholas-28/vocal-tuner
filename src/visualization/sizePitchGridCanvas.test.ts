@@ -26,3 +26,32 @@ describe('sizePitchGridCanvas', () => {
     expect(canvas.style.height).toBe('400px');
   });
 });
+
+it('does not erase an unchanged canvas when guides change', () => {
+  let writes = 0;
+  const canvas = {
+    get width() {
+      return 640;
+    },
+    set width(_value: number) {
+      writes++;
+    },
+    get height() {
+      return 800;
+    },
+    set height(_value: number) {
+      writes++;
+    },
+    style: {},
+  } as HTMLCanvasElement;
+  const viewport = createPitchGridViewport({
+    ...DEFAULT_PITCH_GRID_RANGE,
+    ...DEFAULT_PITCH_GRID_LAYOUT,
+    widthCssPx: 320,
+    heightCssPx: 400,
+    devicePixelRatio: 2,
+    presentTimeXRatio: 0.96,
+  })!;
+  sizePitchGridCanvas(canvas, viewport);
+  expect(writes).toBe(0);
+});

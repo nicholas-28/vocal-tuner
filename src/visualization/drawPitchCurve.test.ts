@@ -19,6 +19,7 @@ function mockContext() {
     clip: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    bezierCurveTo: vi.fn(),
     stroke: vi.fn(),
     arc: vi.fn(),
     fill: vi.fn(),
@@ -54,7 +55,7 @@ describe('drawPitchCurve', () => {
       view,
       [point(19_800, 60), point(19_900, 60.5), point(20_000, 61)],
       20_000,
-      DEFAULT_PITCH_CURVE_CONFIG,
+      { ...DEFAULT_PITCH_CURVE_CONFIG, interpolation: 'linear' },
     );
     expect(context.save).toHaveBeenCalledOnce();
     expect(context.restore).toHaveBeenCalledOnce();
@@ -96,7 +97,7 @@ describe('drawPitchCurve', () => {
         point(19_800, 62),
       ],
       20_000,
-      DEFAULT_PITCH_CURVE_CONFIG,
+      { ...DEFAULT_PITCH_CURVE_CONFIG, interpolation: 'linear' },
     );
     expect(context.moveTo).toHaveBeenCalledOnce();
     expect(context.lineTo).toHaveBeenCalledOnce();
@@ -112,13 +113,36 @@ describe('drawPitchCurve', () => {
       ...DEFAULT_PITCH_CURVE_CONFIG,
       strokeWidthCssPx: 0,
     });
-    drawPitchCurve(
-      context,
-      { ...view, graphWidth: Number.NaN },
-      [],
-      20_000,
-      DEFAULT_PITCH_CURVE_CONFIG,
-    );
+    drawPitchCurve(context, { ...view, graphWidth: Number.NaN }, [], 20_000, {
+      ...DEFAULT_PITCH_CURVE_CONFIG,
+      interpolation: 'linear',
+    });
     expect(context.save).not.toHaveBeenCalled();
   });
+});
+
+it('uses bounded cubic paths only inside valid runs, with no extension toward now', async () => {
+  const { createPitchCurveBreaks } = await import('./pitchCurveBreaks');
+  const context = mockContext(),
+    breaks = createPitchCurveBreaks();
+  breaks.record(19_850, true);
+  drawPitchCurve(
+    context,
+    view,
+    [
+      point(19_700, 60),
+      point(19_800, 60.2),
+      point(19_900, 61),
+      point(19_967, 61.1),
+    ],
+    20_000,
+    DEFAULT_PITCH_CURVE_CONFIG,
+    breaks,
+  );
+  expect(context.moveTo).toHaveBeenCalledTimes(2);
+  expect(context.bezierCurveTo).toHaveBeenCalledTimes(2);
+  expect(context.lineTo).not.toHaveBeenCalled();
+  expect(vi.mocked(context.bezierCurveTo).mock.calls.at(-1)![4]).toBeLessThan(
+    view.presentTimeX,
+  );
 });

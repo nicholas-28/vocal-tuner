@@ -50,12 +50,9 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: 'Pause history' }),
     ).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'C3–C5' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByLabelText('Pitch span')).toHaveValue('24');
     expect(
-      screen.getByRole('button', { name: 'Reset graph range' }),
+      screen.getByRole('button', { name: 'Center my voice' }),
     ).toBeDisabled();
     expect(
       screen.getByRole('img', {
@@ -161,11 +158,11 @@ describe('App', () => {
     expect(diagnostics).toHaveTextContent('Destination connectedyes');
     expect(diagnostics).toHaveTextContent('Oscillator startedyes');
     expect(diagnostics).toHaveTextContent('Effective gain0.080');
-    fireEvent.click(screen.getByRole('button', { name: 'C2–C4' }));
-    expect(screen.getByRole('button', { name: 'C2–C4' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    fireEvent.click(screen.getByText('Position · C3–C5'));
+    fireEvent.change(screen.getByLabelText('Graph center note'), {
+      target: { value: '48' },
+    });
+    expect(screen.getByLabelText('Graph center note')).toHaveValue('48');
     expect(
       screen.getByRole('img', {
         name: 'Live pitch history from C2 to C4 over the last 15 seconds.',
@@ -192,9 +189,6 @@ describe('App', () => {
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reset graph range' }));
-    expect(screen.getByRole('button', { name: 'C3–C5' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByLabelText('Pitch span')).toHaveValue('24');
   });
 });

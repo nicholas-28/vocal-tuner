@@ -5,6 +5,9 @@ import type {
 } from '../types/visiblePitchRange';
 import {
   OCTAVE_SEMITONES,
+  centerVisiblePitchRange,
+  zoomVisiblePitchRange,
+  type PitchZoomSpan,
   areVisiblePitchRangesEqual,
   canShiftVisiblePitchRange,
   createDefaultVisiblePitchRange,
@@ -59,7 +62,22 @@ export function useVisiblePitchRange(
   );
   const shiftUpOctave = useCallback(() => shiftByOctaves(1), [shiftByOctaves]);
 
+  const zoom = useCallback((span: PitchZoomSpan) => {
+    setRange((current) => zoomVisiblePitchRange(current, span) ?? current);
+  }, []);
+  const center = useCallback((midi: number) => {
+    setRange(
+      (current) =>
+        centerVisiblePitchRange(
+          midi,
+          (current.highMidi - current.lowMidi) as PitchZoomSpan,
+        ) ?? current,
+    );
+  }, []);
+
   return {
+    zoom,
+    center,
     range,
     selectedPresetId,
     canShiftDown: canShiftVisiblePitchRange(range, -OCTAVE_SEMITONES),

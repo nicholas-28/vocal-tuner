@@ -10,6 +10,8 @@ export const MINIMUM_VISIBLE_MIDI = 36;
 export const MAXIMUM_VISIBLE_MIDI = 84;
 export const VISIBLE_RANGE_SPAN_SEMITONES = 24;
 export const OCTAVE_SEMITONES = 12;
+export const PITCH_ZOOM_SPANS = [12, 24, 36] as const;
+export type PitchZoomSpan = (typeof PITCH_ZOOM_SPANS)[number];
 export const DEFAULT_VISIBLE_PITCH_RANGE_PRESET_ID: VisiblePitchRangePresetId =
   'middle';
 
@@ -36,7 +38,7 @@ export function isValidVisiblePitchRange(
     Number.isInteger(range.highMidi) &&
     range.lowMidi >= MINIMUM_VISIBLE_MIDI &&
     range.highMidi <= MAXIMUM_VISIBLE_MIDI &&
-    range.highMidi - range.lowMidi === VISIBLE_RANGE_SPAN_SEMITONES
+    PITCH_ZOOM_SPANS.includes((range.highMidi - range.lowMidi) as PitchZoomSpan)
   );
 }
 
@@ -113,4 +115,26 @@ export function isMidiVisibleInRange(
   range: VisiblePitchRange,
 ): boolean {
   return getPitchRangePosition(midi, range) === 'inside';
+}
+
+/** Zoom is viewport-only. Keep the requested span even when centering meets a limit. */
+export function centerVisiblePitchRange(
+  centerMidi: number,
+  span: PitchZoomSpan,
+): VisiblePitchRange | null {
+  if (!Number.isFinite(centerMidi) || !PITCH_ZOOM_SPANS.includes(span))
+    return null;
+  const lowMidi = Math.max(
+    MINIMUM_VISIBLE_MIDI,
+    Math.min(MAXIMUM_VISIBLE_MIDI - span, Math.round(centerMidi) - span / 2),
+  );
+  return { lowMidi, highMidi: lowMidi + span };
+}
+
+export function zoomVisiblePitchRange(
+  range: VisiblePitchRange,
+  span: PitchZoomSpan,
+): VisiblePitchRange | null {
+  if (!isValidVisiblePitchRange(range)) return null;
+  return centerVisiblePitchRange((range.lowMidi + range.highMidi) / 2, span);
 }

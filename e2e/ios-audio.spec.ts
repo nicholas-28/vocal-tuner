@@ -402,7 +402,8 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   await expect(recreateButton).toBeEnabled({ timeout: 2500 });
   expect(await panel.textContent()).not.toBe(generationBefore);
 
-  await page.getByRole('button', { name: 'C2–C4' }).click();
+  await page.getByText('Position · C3–C5', { exact: true }).click();
+  await page.getByLabel('Graph center note').selectOption('48');
   const c2 = page.getByRole('button', {
     name: 'Reference note C2, 65.4 hertz',
   });

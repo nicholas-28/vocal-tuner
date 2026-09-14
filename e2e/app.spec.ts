@@ -557,36 +557,22 @@ test('loads the initial tuner screen', async ({ page }) => {
   await expect(
     page.getByText('Start the microphone to begin pitch history.'),
   ).toBeVisible();
-  await expect(page.getByLabel('Pitch history summary')).toContainText('15 s');
+  await expect(page.getByLabel('Pitch history summary')).toContainText('30 s');
   await expect(
     page.getByRole('button', { name: 'Clear history' }),
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Pause history' }),
   ).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'C3–C5' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(
-    page.getByRole('button', { name: 'Shift graph down one octave' }),
-  ).toBeEnabled();
-  await expect(
-    page.getByRole('button', { name: 'Shift graph up one octave' }),
-  ).toBeEnabled();
-  await page.getByRole('button', { name: 'C2–C4' }).click();
+  await expect(page.getByLabel('Pitch span')).toHaveValue('24');
+  await page.getByText('Position · C3–C5', { exact: true }).click();
+  await page.getByLabel('Graph center note').selectOption('48');
   await expect(
     page.getByRole('img', {
       name: 'Live pitch history from C2 to C4 over the last 15 seconds.',
     }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'C2–C4' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(
-    page.getByRole('button', { name: 'Shift graph down one octave' }),
-  ).toBeDisabled();
+  await expect(page.getByLabel('Graph center note')).toHaveValue('48');
   await expect(
     page.getByRole('button', { name: 'Reference note C2, 65.4 hertz' }),
   ).toBeVisible();
@@ -709,4 +695,145 @@ test('keeps centered tension anchored and contained on mobile and wide screens',
       (element) => getComputedStyle(element).transitionDuration,
     ),
   ).toBe('0s');
+});
+
+test('graph zoom and detailed views stay faithful and fit narrow mobile screens', async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => {
+    const signal = { silent: false, startedAt: performance.now() };
+    Object.defineProperty(window, '__graphSignal', { value: signal });
+    class Node {
+      channelCount = 2;
+      connect() {
+        return this;
+      }
+      disconnect() {}
+    }
+    class Analyser extends Node {
+      fftSize = 4096;
+      smoothingTimeConstant = 0;
+      getFloatTimeDomainData(samples: Float32Array) {
+        const time = (performance.now() - signal.startedAt) / 1000;
+        const midi =
+          69 +
+          0.23 * Math.sin(time * 2 * Math.PI * 5) +
+          0.5 * Math.sin(time * 2 * Math.PI * 0.3);
+        const frequency = 440 * 2 ** ((midi - 69) / 12);
+        for (let i = 0; i < samples.length; i++)
+          samples[i] = signal.silent
+            ? 0
+            : 0.3 * Math.sin((2 * Math.PI * frequency * i) / 48000);
+      }
+    }
+    class Context extends EventTarget {
+      state = 'running';
+      sampleRate = 48000;
+      destination = new Node();
+      get currentTime() {
+        return performance.now() / 1000;
+      }
+      createAnalyser() {
+        return new Analyser();
+      }
+      createMediaStreamSource() {
+        return new Node();
+      }
+      async close() {
+        this.state = 'closed';
+      }
+    }
+    Object.defineProperty(window, 'AudioContext', {
+      configurable: true,
+      value: Context,
+    });
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({
+          getTracks: () => [
+            Object.assign(new EventTarget(), { readyState: 'live', stop() {} }),
+          ],
+        }),
+      },
+    });
+  });
+  const errors: Error[] = [];
+  page.on('pageerror', (error) => errors.push(error));
+  await page.goto('/');
+  await page.getByLabel('Time window').selectOption('5000');
+  await page.getByRole('button', { name: 'Start microphone' }).click();
+  await expect(page.getByLabel('Microphone status')).toContainText(
+    'Microphone active',
+  );
+  await page.getByRole('button', { name: 'Center my voice' }).click();
+  await page.getByLabel('Pitch span').selectOption('12');
+  await page.waitForTimeout(1800);
+  await page.evaluate(() => {
+    (
+      window as Window & { __graphSignal: { silent: boolean } }
+    ).__graphSignal.silent = true;
+  });
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    (
+      window as Window & { __graphSignal: { silent: boolean } }
+    ).__graphSignal.silent = false;
+  });
+  await page.waitForTimeout(700);
+  await page.getByRole('button', { name: 'Pause history' }).click();
+  const summary = await page.getByLabel('Pitch history summary').textContent();
+  const curve = page.getByTestId('pitch-curve-canvas');
+  const before = await curve.evaluate((canvas) =>
+    (canvas as HTMLCanvasElement).toDataURL(),
+  );
+  await page.waitForTimeout(150);
+  expect(
+    await curve.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
+  ).toBe(before);
+  for (const width of [320, 390, 1360]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const span of ['12', '24', '36']) {
+      await page.getByLabel('Pitch span').selectOption(span);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      const key = await page.locator('.reference-key').first().boundingBox();
+      const graph = await page.getByTestId('pitch-grid-canvas').boundingBox();
+      expect(key!.y).toBeCloseTo(graph!.y + 8, 0);
+    }
+    await page.getByLabel('Pitch span').selectOption('12');
+    for (const control of [
+      page.getByLabel('Pitch span'),
+      page.getByLabel('Time window'),
+      page.getByRole('button', { name: 'Center my voice' }),
+      page.getByRole('button', { name: 'Taller graph' }),
+    ]) {
+      const box = await control.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+    }
+    const height = (await curve.boundingBox())!.height;
+    await page.getByRole('button', { name: 'Taller graph' }).click();
+    await expect
+      .poll(async () => (await curve.boundingBox())!.height)
+      .toBeGreaterThan(height);
+    await page
+      .locator('.pitch-visualization')
+      .screenshot({ path: testInfo.outputPath(`pitch-graph-${width}.png`) });
+    if (width === 1360)
+      expect((await curve.boundingBox())!.width).toBeGreaterThan(1000);
+    await page.getByRole('button', { name: 'Taller graph' }).click();
+  }
+  await page.getByText('Line & guides', { exact: true }).click();
+  await page.getByLabel('Line style').selectOption('linear');
+  for (const seconds of ['5000', '15000', '30000'])
+    await page.getByLabel('Time window').selectOption(seconds);
+  expect(await page.getByLabel('Pitch history summary').textContent()).toBe(
+    summary,
+  );
+  await page.getByRole('button', { name: 'Stop microphone' }).click();
+  expect(errors).toEqual([]);
 });

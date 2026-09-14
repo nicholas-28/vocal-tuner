@@ -1,5 +1,8 @@
+import type { PitchCurveBreaks } from '../visualization/pitchCurveBreaks';
+import { drawPitchTarget } from '../visualization/drawPitchTarget';
 import {
   memo,
+  useState,
   useCallback,
   useLayoutEffect,
   useMemo,
@@ -40,6 +43,7 @@ import { TargetPitchGuidance } from './TargetPitchGuidance';
 import { TargetPracticeSession } from './TargetPracticeSession';
 
 type PitchGridCanvasProps = Partial<MidiRange> & {
+  curveBreaks?: PitchCurveBreaks;
   history: PitchHistory;
   active: boolean;
   captureState: PitchHistoryCaptureState;
@@ -60,6 +64,7 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
   history,
+  curveBreaks,
   active,
   captureState,
   sessionVersion,
@@ -78,6 +83,10 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   presentationSilence = false,
   audioSessionTimeline = null,
 }: PitchGridCanvasProps) {
+  const [interpolation, setInterpolation] = useState<'linear' | 'monotone'>(
+    'monotone',
+  );
+  const [showTarget, setShowTarget] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const curveCanvasRef = useRef<HTMLCanvasElement>(null);
   const { elementRef, size } = useCanvasViewport<HTMLDivElement>();
@@ -138,8 +147,16 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
     sizePitchGridCanvas(canvas, viewport);
     sizePitchGridCanvas(curveCanvas, viewport);
     const context = canvas.getContext('2d');
-    if (context) drawPitchGrid(context, viewport, DEFAULT_PITCH_GRID_STYLE);
-  }, [viewport]);
+    if (context) {
+      drawPitchGrid(context, viewport, DEFAULT_PITCH_GRID_STYLE);
+      if (showTarget)
+        drawPitchTarget(
+          context,
+          viewport,
+          referenceKeyboard.state.selectedMidi,
+        );
+    }
+  }, [viewport, showTarget, referenceKeyboard.state.selectedMidi]);
 
   const drawCurve = useCallback(
     (referenceTimeMs: number) => {
@@ -147,12 +164,20 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
       if (!curveCanvas || !viewport) return;
       const context = curveCanvas.getContext('2d');
       if (!context) return;
-      drawPitchCurve(context, viewport, history.points, referenceTimeMs, {
-        ...DEFAULT_PITCH_CURVE_CONFIG,
-        visibleDurationMs,
-      });
+      drawPitchCurve(
+        context,
+        viewport,
+        history.points,
+        referenceTimeMs,
+        {
+          ...DEFAULT_PITCH_CURVE_CONFIG,
+          visibleDurationMs,
+          interpolation,
+        },
+        curveBreaks,
+      );
     },
-    [history.points, viewport, visibleDurationMs],
+    [history.points, viewport, visibleDurationMs, interpolation, curveBreaks],
   );
 
   usePitchCurveAnimation({
@@ -178,10 +203,39 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
 
   return (
     <div className="pitch-visualization-block">
+      <details className="graph-display-options">
+        <summary>Line &amp; guides</summary>
+        <label>
+          Line style
+          <select
+            aria-label="Line style"
+            value={interpolation}
+            onChange={(event) =>
+              setInterpolation(event.target.value as 'linear' | 'monotone')
+            }
+          >
+            <option value="monotone">Smooth through samples</option>
+            <option value="linear">Straight through samples</option>
+          </select>
+        </label>
+        <label className="graph-checkbox">
+          <input
+            type="checkbox"
+            checked={showTarget}
+            onChange={(event) => setShowTarget(event.target.checked)}
+          />
+          Selected target guide
+        </label>
+        <p>
+          Blank regions may be silence, uncertainty, or pitch outside this view.
+          The guide marks your selected reference note.
+        </p>
+      </details>
       <div
         className="pitch-visualization"
         style={
           {
+            '--pitch-min-height': `${Math.max(384, (highMidi - lowMidi + 1) * 12 + 16)}px`,
             '--pitch-grid-top-padding': `${DEFAULT_PITCH_GRID_LAYOUT.topPaddingCssPx}px`,
             '--pitch-grid-bottom-padding': `${DEFAULT_PITCH_GRID_LAYOUT.bottomPaddingCssPx}px`,
           } as CSSProperties
@@ -222,6 +276,17 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
               data-testid="pitch-curve-canvas"
               aria-hidden="true"
             />
+          </div>
+          <div
+            className="pitch-grid__time-axis"
+            aria-label="Graph time scale"
+            style={{ width: viewport ? `${viewport.presentTimeX}px` : '96%' }}
+          >
+            <span>−{visibleDurationMs / 1000} s</span>
+            <span>−{visibleDurationMs / 2000} s</span>
+            <span>
+              {!active || captureState.status === 'paused' ? 'Latest' : 'Now'}
+            </span>
           </div>
           {history.points.every((point) => point.kind !== 'pitch') && (
             <figcaption>

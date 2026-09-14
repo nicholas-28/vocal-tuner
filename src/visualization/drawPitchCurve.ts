@@ -1,3 +1,5 @@
+import type { PitchCurveBreaks } from './pitchCurveBreaks';
+import { interpolatePitchCurve } from './pitchCurveInterpolation';
 import type { PitchCurveConfig } from '../types/pitchCurve';
 import type { PitchGridViewport } from '../types/pitchGrid';
 import type { PitchHistoryPoint } from '../types/pitchHistory';
@@ -16,6 +18,7 @@ export function drawPitchCurve(
   points: readonly PitchHistoryPoint[],
   referenceTimeMs: number,
   config: PitchCurveConfig,
+  breaks?: PitchCurveBreaks,
 ): void {
   if (
     !isValidPitchCurveConfig(config) ||
@@ -55,6 +58,7 @@ export function drawPitchCurve(
       referenceTimeMs,
       config.visibleDurationMs,
       config.maxConnectIntervalMs,
+      breaks,
     );
     const strokeWidth = getCrispStrokeWidth(
       config.strokeWidthCssPx,
@@ -84,19 +88,30 @@ export function drawPitchCurve(
         continue;
       }
 
-      context.beginPath();
-      for (let index = 0; index < segment.length; index += 1) {
-        const point = segment[index];
-        const x = timestampToX(
+      const vertices = segment.map((point) => ({
+        x: timestampToX(
           point.timestampMs,
           referenceTimeMs,
           viewport,
           config.visibleDurationMs,
-        );
-        const y = midiToY(point.midi ?? Number.NaN, viewport);
-        if (x === null || y === null) continue;
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
+        )!,
+        y: midiToY(point.midi!, viewport)!,
+      }));
+      context.beginPath();
+      context.moveTo(vertices[0].x, vertices[0].y);
+      if (config.interpolation === 'monotone') {
+        for (const curve of interpolatePitchCurve(vertices)) {
+          context.bezierCurveTo(
+            curve.control1.x,
+            curve.control1.y,
+            curve.control2.x,
+            curve.control2.y,
+            curve.to.x,
+            curve.to.y,
+          );
+        }
+      } else {
+        for (const point of vertices.slice(1)) context.lineTo(point.x, point.y);
       }
       context.stroke();
     }

@@ -20,13 +20,9 @@ const emptySummary: PitchHistorySummary = {
 
 const defaultRangeProps = {
   visibleRange: { lowMidi: 48, highMidi: 72 },
-  selectedRangePresetId: 'middle' as const,
-  canShiftRangeDown: true,
-  canShiftRangeUp: true,
+  onZoomRange: vi.fn(),
+  onCenterRange: vi.fn(),
   currentMidi: null,
-  onSelectRangePreset: vi.fn(),
-  onShiftRangeDown: vi.fn(),
-  onShiftRangeUp: vi.fn(),
   onResetRange: vi.fn(),
   detectedPitch: null,
   continuityStatus: 'unvoiced' as const,
@@ -264,7 +260,6 @@ describe('PitchMonitor history diagnostics', () => {
         onResume={vi.fn()}
         {...defaultRangeProps}
         visibleRange={{ lowMidi: 36, highMidi: 60 }}
-        selectedRangePresetId="low"
       />,
     );
     expect(
@@ -437,7 +432,6 @@ describe('PitchMonitor history diagnostics', () => {
       <PitchMonitor
         {...sharedProps}
         visibleRange={{ lowMidi: 36, highMidi: 60 }}
-        selectedRangePresetId="low"
       />,
     );
     expect(
@@ -552,4 +546,56 @@ describe('PitchMonitor history diagnostics', () => {
       screen.getByText('Selected target: A4 · 440.0 Hz'),
     ).toBeInTheDocument();
   });
+});
+
+it('changes time and height without touching stored history or capture controls', () => {
+  const history = Object.freeze({
+    points: Object.freeze([
+      {
+        timestampMs: 29_000,
+        midi: 60,
+        frequencyHz: 261.6,
+        confidence: 0.9,
+        kind: 'pitch' as const,
+      },
+    ]),
+  });
+  const before = JSON.stringify(history),
+    onClear = vi.fn(),
+    onPause = vi.fn();
+  render(
+    <PitchMonitor
+      history={history}
+      summary={{ ...emptySummary, totalPoints: 1, pitchPoints: 1 }}
+      active={false}
+      captureState={{
+        status: 'recording',
+        accumulatedPausedDurationMs: 0,
+        resumeBoundaryEffectiveMs: null,
+      }}
+      sessionVersion={1}
+      toEffectiveTimestamp={(t) => t}
+      durationMs={30_000}
+      onClear={onClear}
+      onPause={onPause}
+      onResume={vi.fn()}
+      {...defaultRangeProps}
+    />,
+  );
+  for (const seconds of [5, 30, 15]) {
+    fireEvent.change(screen.getByLabelText('Time window'), {
+      target: { value: String(seconds * 1000) },
+    });
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'aria-label',
+      `Live pitch history from C3 to C5 over the last ${seconds} seconds.`,
+    );
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Taller graph' }));
+  expect(screen.getByRole('region', { name: 'Pitch monitor' })).toHaveClass(
+    'monitor--tall',
+  );
+  expect(JSON.stringify(history)).toBe(before);
+  expect(onClear).not.toHaveBeenCalled();
+  expect(onPause).not.toHaveBeenCalled();
 });

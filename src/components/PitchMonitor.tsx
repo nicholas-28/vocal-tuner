@@ -1,11 +1,15 @@
+import {
+  DEFAULT_PITCH_VIEW_WINDOW_MS,
+  PITCH_VIEW_WINDOWS_MS,
+} from '../visualization/pitchCurveConfig';
+import { useState } from 'react';
+import type { PitchZoomSpan } from '../visualization/visiblePitchRange';
+import type { PitchCurveBreaks } from '../visualization/pitchCurveBreaks';
 import type { PitchHistory, PitchHistorySummary } from '../types/pitchHistory';
 import type { PitchHistoryCaptureState } from '../types/pitchHistoryCapture';
 import type { MusicalPitch } from '../types/musicalPitch';
 import type { PitchContinuityStatus } from '../types/pitchContinuity';
-import type {
-  VisiblePitchRange,
-  VisiblePitchRangePresetId,
-} from '../types/visiblePitchRange';
+import type { VisiblePitchRange } from '../types/visiblePitchRange';
 import { PitchGridCanvas } from './PitchGridCanvas';
 import { PitchHistoryControls } from './PitchHistoryControls';
 import { PitchRangeControls } from './PitchRangeControls';
@@ -23,13 +27,10 @@ type PitchMonitorProps = {
   onPause: () => void;
   onResume: () => void;
   visibleRange: VisiblePitchRange;
-  selectedRangePresetId: VisiblePitchRangePresetId | null;
-  canShiftRangeDown: boolean;
-  canShiftRangeUp: boolean;
+  onZoomRange: (span: PitchZoomSpan) => void;
+  onCenterRange: (midi: number) => void;
+  curveBreaks?: PitchCurveBreaks;
   currentMidi: number | null;
-  onSelectRangePreset: (id: VisiblePitchRangePresetId) => void;
-  onShiftRangeDown: () => void;
-  onShiftRangeUp: () => void;
   onResetRange: () => void;
   detectedPitch: MusicalPitch | null;
   continuityStatus: PitchContinuityStatus;
@@ -54,13 +55,10 @@ export function PitchMonitor({
   onPause,
   onResume,
   visibleRange,
-  selectedRangePresetId,
-  canShiftRangeDown,
-  canShiftRangeUp,
+  onZoomRange,
+  onCenterRange,
+  curveBreaks,
   currentMidi,
-  onSelectRangePreset,
-  onShiftRangeDown,
-  onShiftRangeUp,
   onResetRange,
   detectedPitch,
   continuityStatus,
@@ -72,13 +70,21 @@ export function PitchMonitor({
   presentationSilence = false,
   audioSessionTimeline = null,
 }: PitchMonitorProps) {
+  const [windowMs, setWindowMs] = useState<number>(
+    DEFAULT_PITCH_VIEW_WINDOW_MS,
+  );
+  const [tall, setTall] = useState(false);
+  const visibleDurationMs = Math.min(windowMs, durationMs);
   const relativeNewestMs =
     summary.oldestTimestampMs === null || summary.newestTimestampMs === null
       ? null
       : summary.newestTimestampMs - summary.oldestTimestampMs;
 
   return (
-    <section className="monitor" aria-label="Pitch monitor">
+    <section
+      className={`monitor${tall ? ' monitor--tall' : ''}`}
+      aria-label="Pitch monitor"
+    >
       <div className="monitor__heading">
         <div>
           <h2>Pitch history</h2>
@@ -104,61 +110,48 @@ export function PitchMonitor({
           onClear={onClear}
         />
       </div>
-      <dl className="history-summary" aria-label="Pitch history summary">
-        <div>
-          <dt>Capture</dt>
-          <dd>{captureState.status}</dd>
-        </div>
-        <div>
-          <dt>Total</dt>
-          <dd>{summary.totalPoints}</dd>
-        </div>
-        <div>
-          <dt>Pitch / gaps</dt>
-          <dd>
-            {summary.pitchPoints} / {summary.gapPoints}
-          </dd>
-        </div>
-        <div>
-          <dt>Retained</dt>
-          <dd>{(summary.retainedDurationMs / 1000).toFixed(1)} s</dd>
-        </div>
-        <div>
-          <dt>Maximum</dt>
-          <dd>{durationMs / 1000} s</dd>
-        </div>
-        <div>
-          <dt>Latest</dt>
-          <dd>{summary.latestKind ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Relative time</dt>
-          <dd>
-            {relativeNewestMs === null
-              ? '—'
-              : `0–${relativeNewestMs.toFixed(0)} ms`}
-          </dd>
-        </div>
-      </dl>
+      <div className="graph-view-controls">
+        <label>
+          Time window
+          <select
+            aria-label="Time window"
+            value={visibleDurationMs}
+            onChange={(event) => setWindowMs(Number(event.target.value))}
+          >
+            {PITCH_VIEW_WINDOWS_MS.filter((ms) => ms <= durationMs).map(
+              (ms) => (
+                <option value={ms} key={ms}>
+                  {ms / 1000} s
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="secondary-button"
+          aria-pressed={tall}
+          onClick={() => setTall((value) => !value)}
+        >
+          Taller graph
+        </button>
+      </div>
       <PitchRangeControls
         range={visibleRange}
-        selectedPresetId={selectedRangePresetId}
-        canShiftDown={canShiftRangeDown}
-        canShiftUp={canShiftRangeUp}
+        onZoom={onZoomRange}
+        onCenter={onCenterRange}
         currentMidi={currentMidi}
-        onSelectPreset={onSelectRangePreset}
-        onShiftDown={onShiftRangeDown}
-        onShiftUp={onShiftRangeUp}
         onReset={onResetRange}
       />
       <PitchGridCanvas
+        curveBreaks={curveBreaks}
         presentationSilence={presentationSilence}
         history={history}
         active={active}
         captureState={captureState}
         sessionVersion={sessionVersion}
         toEffectiveTimestamp={toEffectiveTimestamp}
-        visibleDurationMs={durationMs}
+        visibleDurationMs={visibleDurationMs}
         lowMidi={visibleRange.lowMidi}
         highMidi={visibleRange.highMidi}
         detectedPitch={detectedPitch}
@@ -170,6 +163,45 @@ export function PitchMonitor({
         showAudioDiagnostics={showAudioDiagnostics}
         audioSessionTimeline={audioSessionTimeline}
       />
+      <details className="history-details">
+        <summary>History details</summary>
+        <dl className="history-summary" aria-label="Pitch history summary">
+          <div>
+            <dt>Capture</dt>
+            <dd>{captureState.status}</dd>
+          </div>
+          <div>
+            <dt>Total</dt>
+            <dd>{summary.totalPoints}</dd>
+          </div>
+          <div>
+            <dt>Pitch / gaps</dt>
+            <dd>
+              {summary.pitchPoints} / {summary.gapPoints}
+            </dd>
+          </div>
+          <div>
+            <dt>Retained</dt>
+            <dd>{(summary.retainedDurationMs / 1000).toFixed(1)} s</dd>
+          </div>
+          <div>
+            <dt>Maximum</dt>
+            <dd>{durationMs / 1000} s</dd>
+          </div>
+          <div>
+            <dt>Latest</dt>
+            <dd>{summary.latestKind ?? '—'}</dd>
+          </div>
+          <div>
+            <dt>Relative time</dt>
+            <dd>
+              {relativeNewestMs === null
+                ? '—'
+                : `0–${relativeNewestMs.toFixed(0)} ms`}
+            </dd>
+          </div>
+        </dl>
+      </details>
     </section>
   );
 }

@@ -105,3 +105,24 @@ describe('visible pitch range model', () => {
     expect(resolveVisiblePitchRangePreset('unknown')).toBeNull();
   });
 });
+
+it.each([12, 24, 36] as const)(
+  'zooms to %s semitones around the visible center and clamps without changing span',
+  async (span) => {
+    const { centerVisiblePitchRange, zoomVisiblePitchRange } =
+      await import('./visiblePitchRange');
+    expect(zoomVisiblePitchRange({ lowMidi: 48, highMidi: 72 }, span)).toEqual({
+      lowMidi: 60 - span / 2,
+      highMidi: 60 + span / 2,
+    });
+    expect(centerVisiblePitchRange(0, span)).toEqual({
+      lowMidi: 36,
+      highMidi: 36 + span,
+    });
+    expect(centerVisiblePitchRange(120, span)).toEqual({
+      lowMidi: 84 - span,
+      highMidi: 84,
+    });
+    expect(centerVisiblePitchRange(NaN, span)).toBeNull();
+  },
+);

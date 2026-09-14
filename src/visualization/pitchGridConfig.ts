@@ -4,7 +4,7 @@ import { DEFAULT_VISIBLE_PITCH_RANGE } from './visiblePitchRange';
 export const DEFAULT_PITCH_GRID_RANGE: Readonly<MidiRange> =
   DEFAULT_VISIBLE_PITCH_RANGE;
 
-export const DEFAULT_PRESENT_TIME_X_RATIO = 0.8;
+export const DEFAULT_PRESENT_TIME_X_RATIO = 0.96;
 export const MAX_DEVICE_PIXEL_RATIO = 3;
 export const ALL_LABELS_MIN_SEMITONE_HEIGHT_CSS_PX = 12;
 

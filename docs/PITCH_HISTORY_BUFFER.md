@@ -50,3 +50,7 @@ Canvas rendering consumes a readonly snapshot and maps horizontal positions from
 - No pause state, persistence, smoothing, or octave correction exists.
 - History resets between microphone sessions.
 - Future rendering must define interpolation only between adjacent pitch points that are not separated by a gap.
+
+## Visualization retention
+
+[Graph polish](PITCH_VISUALIZATION_POLISH.md) configures App with 30-second retention, about 451 normal 15 Hz points, after measuring metadata and Canvas costs. The utility default and ingestion/trim/gap semantics are unchanged. The 5/15/30-second view filters this retained data without mutating it. A separate bounded render-only rejection buffer prevents connecting through brief uncertain observations that core continuity deliberately does not store as gap points.

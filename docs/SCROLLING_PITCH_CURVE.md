@@ -1,12 +1,12 @@
 # Scrolling Pitch Curve
 
-Issue 013 does not change coordinates or the 250 ms connection maximum. Upstream continuity now confirms gaps: recovered short uncertainty has no artificial gap or pitch sample, while uncertainty beyond 160 ms has one explicit gap and remains disconnected. Canvas is not the continuity owner.
+Stored continuity semantics remain unchanged: short uncertainty adds no pitch/history point and confirmed gaps remain explicit. The [visualization polish milestone](PITCH_VISUALIZATION_POLISH.md) additionally breaks rendering at raw rejection timestamps, without modifying history or owning continuity. The 250 ms maximum connection interval remains.
 
 Issue 008 renders the bounded pitch history as a live foreground Canvas over the static semitone-grid Canvas. It consumes immutable accepted pitch and gap points directly; it does not read audio samples, detector candidates, or recompute frequency-to-MIDI conversion.
 
 ## Time coordinates and reference time
 
-The horizontal axis uses monotonic detector timestamps. The existing present-time marker remains at 80% of graph width, excluding the label gutter. The historical width is `presentTimeX - graphLeft`, and the authoritative visible duration reuses the history buffer's default 15,000 ms.
+The horizontal axis uses monotonic detector timestamps. The present-time marker uses 96% of graph width. The historical width is `presentTimeX - graphLeft`; the viewing window independently selects 5, 15 (default), or 30 seconds from App's 30-second retention.
 
 ```text
 pixelsPerMs = historicalWidth / visibleDurationMs
@@ -30,7 +30,7 @@ Straight polyline segments are built defensively in stored order; history is nev
 
 The 250 ms maximum tolerates missed publications above the normal approximately 67 ms history cadence while preventing a misleading bridge across a substantial missing interval. Explicit gaps always break regardless of adjacent timing. Re-entry after silence or an out-of-range note begins a new segment. Out-of-range pitch remains available in the DOM tuner readout but is omitted rather than falsely clamped to a graph edge.
 
-Adjacent accepted points are joined with straight lines. Large pitch jumps remain visible when timing and range are valid. Confidence is retained in history but not visually encoded yet. No Bézier interpolation, pitch correction, octave suppression, or visual smoothing is applied, so vibrato and detector errors remain inspectable. An isolated valid point is drawn as a small dot.
+Valid runs use bounded cubic interpolation through every displayed sample by default, with a straight-line comparison option. Control points stay inside endpoint pitch bounds; gaps always split runs before interpolation. No stored samples or timestamps are smoothed. Large pitch jumps and sample extrema remain visible. Confidence is retained but not visually encoded. An isolated sample remains a dot.
 
 ## Canvas layering, clipping, and DPR
 
@@ -57,6 +57,6 @@ Changing the visible range creates a shared grid/curve viewport and redraws reta
 
 ## Known limitations and extension path
 
-The visible range remains a fixed two-octave span selected from C2–C6. Lines are intentionally straight and unsmoothed; raw vibrato and detector octave errors remain visible. The aligned DOM keyboard is silent until reference-tone synthesis is implemented. There is no recording, replay, zoom, or persisted history. Mobile background scheduling and Canvas performance still require physical-device verification.
+The graph now supports 1/2/3-octave zoom within C2–C6, separate time windows, and bounded display-only interpolation. It cannot recover motion missing between history samples. See [measured render costs and physical acceptance](PITCH_VISUALIZATION_POLISH.md); there is still no recording, replay, persistence, or automatic viewport following.
 
 Future smoothing can transform a separate rendered-pitch representation before segment construction without changing raw history. Recording or replay can provide an explicit playback reference time to the same renderer without changing MIDI or timestamp coordinate utilities.

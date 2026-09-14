@@ -1,10 +1,13 @@
-import { DEFAULT_HISTORY_DURATION_MS } from '../history/pitchHistoryConfig';
 import type { PitchCurveConfig } from '../types/pitchCurve';
+
+export const PITCH_VIEW_WINDOWS_MS = [5_000, 15_000, 30_000] as const;
+export const DEFAULT_PITCH_VIEW_WINDOW_MS = 15_000;
 
 export const MAX_PITCH_CURVE_CONNECT_INTERVAL_MS = 250;
 
 export const DEFAULT_PITCH_CURVE_CONFIG: Readonly<PitchCurveConfig> = {
-  visibleDurationMs: DEFAULT_HISTORY_DURATION_MS,
+  visibleDurationMs: DEFAULT_PITCH_VIEW_WINDOW_MS,
+  interpolation: 'monotone',
   maxConnectIntervalMs: MAX_PITCH_CURVE_CONNECT_INTERVAL_MS,
   strokeColor: '#78dfcb',
   strokeWidthCssPx: 2,
@@ -13,6 +16,9 @@ export const DEFAULT_PITCH_CURVE_CONFIG: Readonly<PitchCurveConfig> = {
 
 export function isValidPitchCurveConfig(config: PitchCurveConfig): boolean {
   return (
+    (config.interpolation === undefined ||
+      config.interpolation === 'linear' ||
+      config.interpolation === 'monotone') &&
     Number.isFinite(config.visibleDurationMs) &&
     config.visibleDurationMs > 0 &&
     Number.isFinite(config.maxConnectIntervalMs) &&

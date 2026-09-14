@@ -1,3 +1,5 @@
+import { PHRASE_HISTORY_RETENTION_MS } from '../history/pitchHistoryConfig';
+import { createPitchCurveBreaks } from '../visualization/pitchCurveBreaks';
 import { createCadenceProbe } from '../pitch/cadenceProbe';
 import { useEffect, useMemo } from 'react';
 import { createAnalysisDurationProbe } from '../pitch/analysisDurationProbe';
@@ -65,12 +67,24 @@ export function App() {
   );
   const pitch = usePitchDetection();
   const continuity = usePitchContinuity();
-  const history = usePitchHistory();
+  const history = usePitchHistory(PHRASE_HISTORY_RETENTION_MS);
+  const curveBreaks = useMemo(
+    () => createPitchCurveBreaks(PHRASE_HISTORY_RETENTION_MS),
+    [],
+  );
   const visiblePitchRange = useVisiblePitchRange();
   const { state, inputLevel, start, stop, pitchSource } = useMicrophone(
     undefined,
     {
       onObservation: (detection) => {
+        if (history.captureState.status === 'recording') {
+          const timestamp = history.toEffectiveTimestamp(detection.timestampMs);
+          if (timestamp !== null)
+            curveBreaks.record(
+              timestamp,
+              detection.rejectionReason !== 'detected',
+            );
+        }
         analysisDurationProbe?.record(detection.analysisDurationMs);
         cadence?.analysis.record(performance.now());
       },
@@ -79,6 +93,7 @@ export function App() {
         cadence?.analysis.reset();
         cadence?.presentation.reset();
         continuity.reset();
+        curveBreaks.reset();
         history.startSession();
       },
       onDetection: (detection) => {
@@ -161,6 +176,7 @@ export function App() {
         />
       )}
       <PitchMonitor
+        curveBreaks={curveBreaks}
         presentationSilence={presentationSilence}
         history={history.history}
         summary={history.summary}
@@ -169,17 +185,20 @@ export function App() {
         sessionVersion={history.sessionVersion}
         toEffectiveTimestamp={history.toEffectiveTimestamp}
         durationMs={history.durationMs}
-        onClear={history.clear}
+        onClear={() => {
+          curveBreaks.reset();
+          history.clear();
+        }}
         onPause={history.pause}
         onResume={history.resume}
         visibleRange={visiblePitchRange.range}
-        selectedRangePresetId={visiblePitchRange.selectedPresetId}
-        canShiftRangeDown={visiblePitchRange.canShiftDown}
-        canShiftRangeUp={visiblePitchRange.canShiftUp}
-        currentMidi={musicalPitch?.fractionalMidi ?? null}
-        onSelectRangePreset={visiblePitchRange.selectPreset}
-        onShiftRangeDown={visiblePitchRange.shiftDownOctave}
-        onShiftRangeUp={visiblePitchRange.shiftUpOctave}
+        onZoomRange={visiblePitchRange.zoom}
+        onCenterRange={visiblePitchRange.center}
+        currentMidi={
+          continuity.state.status === 'voiced'
+            ? (musicalPitch?.fractionalMidi ?? null)
+            : null
+        }
         onResetRange={visiblePitchRange.reset}
         detectedPitch={readoutPitch}
         continuityStatus={readoutContinuityStatus}

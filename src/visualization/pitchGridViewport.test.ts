@@ -89,7 +89,7 @@ describe('pitch grid viewport and coordinates', () => {
   it.each([
     [0, 0],
     [0.5, 246],
-    [DEFAULT_PRESENT_TIME_X_RATIO, 393.6],
+    [DEFAULT_PRESENT_TIME_X_RATIO, 472.32],
     [1, 492],
   ])('places graph-relative ratio %s at %s', (ratio, expected) => {
     expect(viewport(500, 416, ratio)?.presentTimeX).toBe(expected);
@@ -153,3 +153,34 @@ describe('pitch grid viewport and coordinates', () => {
     expect(getCrispStrokeWidth(1, 2)).toBe(1);
   });
 });
+
+it.each([12, 24, 36])(
+  'preserves exact semitone spacing at %s-semitone zoom, all sizes and DPRs',
+  (span) => {
+    for (const [width, height, dpr] of [
+      [250, 384, 3],
+      [320, 624, 2],
+      [1100, 720, 1.5],
+    ]) {
+      const view = createPitchGridViewport({
+        ...DEFAULT_PITCH_GRID_LAYOUT,
+        lowMidi: 60 - span / 2,
+        highMidi: 60 + span / 2,
+        widthCssPx: width,
+        heightCssPx: height,
+        devicePixelRatio: dpr,
+        presentTimeXRatio: 0.96,
+      })!;
+      for (let midi = view.lowMidi; midi < view.highMidi; midi++) {
+        expect(midiToY(midi, view)! - midiToY(midi + 1, view)!).toBeCloseTo(
+          view.semitoneHeight,
+          10,
+        );
+        expect(yToMidi(midiToY(midi + 0.27, view)!, view)).toBeCloseTo(
+          midi + 0.27,
+          10,
+        );
+      }
+    }
+  },
+);

@@ -4,11 +4,11 @@ Issue 007 replaced the temporary DOM rows with a static Canvas coordinate backgr
 
 ## Musical coordinates and visible range
 
-The vertical axis uses fractional MIDI because a difference of one always represents one semitone. Frequency in hertz is never mapped directly in the visualization layer. The authoritative default is inclusive MIDI 48–72: C3 through C5. Issue 010 adds fixed-span C2–C4, C3–C5, and C4–C6 selection within global MIDI 36–84 limits. Every supported range contains 25 note bands.
+The vertical axis uses fractional MIDI because a difference of one always represents one semitone. Frequency in hertz is never mapped directly in the visualization layer. The authoritative default is inclusive MIDI 48–72: C3 through C5. Issue 010 adds fixed-span C2–C4, C3–C5, and C4–C6 selection within global MIDI 36–84 limits. The later [graph polish](PITCH_VISUALIZATION_POLISH.md) supports 12/24/36-semitone spans, with 13/25/37 inclusive note bands.
 
 Each integer MIDI note is centered in an equal-height band. The high note is centered in the top band, the low note in the bottom band, and values half a semitone beyond those centers meet the graph edges. For a graph height `H`, semitone height is `H / (high - low + 1)`. Fractional MIDI maps linearly and the inverse Y-to-MIDI function uses the same convention.
 
-Issue 011 replaces the 42 CSS-pixel Canvas label gutter with a 56-pixel DOM reference-keyboard column beside the Canvas. Canvas graph-left is now its own left edge, preserving more horizontal curve space. The Canvas retains 8-pixel right padding and authoritative 8-pixel top and bottom padding. The keyboard consumes those same vertical padding values, with one equal CSS-grid row per visible note, so each key center exactly matches `midiToY`. The present-time marker defaults to 0.8 of graph width. Finite ratios are clamped to 0–1; non-finite ratios invalidate the viewport.
+Issue 011 replaces the 42 CSS-pixel Canvas label gutter with a 48-pixel DOM reference-keyboard column beside the Canvas. Canvas graph-left is now its own left edge, preserving more horizontal curve space. The Canvas retains 8-pixel right padding and authoritative 8-pixel top and bottom padding. The keyboard consumes those same vertical padding values, with one equal CSS-grid row per visible note, so each key center exactly matches `midiToY`. The present-time marker defaults to 0.96 of graph width. Finite ratios are clamped to 0–1; non-finite ratios invalidate the viewport.
 
 ## Rendering hierarchy and labels
 

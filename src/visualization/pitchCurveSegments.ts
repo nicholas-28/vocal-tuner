@@ -1,3 +1,4 @@
+import type { PitchCurveBreaks } from './pitchCurveBreaks';
 import type { PitchCurveSegment } from '../types/pitchCurve';
 import type { PitchGridViewport } from '../types/pitchGrid';
 import type { PitchHistoryPoint } from '../types/pitchHistory';
@@ -9,6 +10,7 @@ export function buildPitchCurveSegments(
   referenceTimeMs: number,
   visibleDurationMs: number,
   maxConnectIntervalMs: number,
+  breaks?: PitchCurveBreaks,
 ): PitchCurveSegment[] {
   if (
     !Number.isFinite(referenceTimeMs) ||
@@ -48,11 +50,20 @@ export function buildPitchCurveSegments(
         viewport,
         visibleDurationMs,
       ) !== null;
+    const crossesRejection =
+      previousTimestampMs !== null &&
+      breaks?.between(previousTimestampMs, point.timestampMs);
     const connectable =
       previousTimestampMs === null ||
       point.timestampMs - previousTimestampMs <= maxConnectIntervalMs;
 
-    if (!monotonic || !validPitch || !visible || !connectable) {
+    if (
+      !monotonic ||
+      !validPitch ||
+      !visible ||
+      !connectable ||
+      crossesRejection
+    ) {
       breakSegment();
     }
     if (monotonic && validPitch && visible) current.push(point);

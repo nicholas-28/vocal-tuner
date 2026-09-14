@@ -1,100 +1,89 @@
-import type {
-  VisiblePitchRange,
-  VisiblePitchRangePresetId,
-} from '../types/visiblePitchRange';
+import type { VisiblePitchRange } from '../types/visiblePitchRange';
 import {
-  DEFAULT_VISIBLE_PITCH_RANGE,
-  VISIBLE_PITCH_RANGE_PRESETS,
-  areVisiblePitchRangesEqual,
+  MAXIMUM_VISIBLE_MIDI,
+  MINIMUM_VISIBLE_MIDI,
+  PITCH_ZOOM_SPANS,
+  type PitchZoomSpan,
   getPitchRangePosition,
   getVisiblePitchRangeLabel,
 } from '../visualization/visiblePitchRange';
+import { getPitchGridNote } from '../visualization/pitchGridNotes';
 
 type PitchRangeControlsProps = {
   range: VisiblePitchRange;
-  selectedPresetId: VisiblePitchRangePresetId | null;
-  canShiftDown: boolean;
-  canShiftUp: boolean;
   currentMidi: number | null;
-  onSelectPreset: (id: VisiblePitchRangePresetId) => void;
-  onShiftDown: () => void;
-  onShiftUp: () => void;
+  onZoom: (span: PitchZoomSpan) => void;
+  onCenter: (midi: number) => void;
   onReset: () => void;
 };
 
 export function PitchRangeControls({
   range,
-  selectedPresetId,
-  canShiftDown,
-  canShiftUp,
   currentMidi,
-  onSelectPreset,
-  onShiftDown,
-  onShiftUp,
+  onZoom,
+  onCenter,
   onReset,
 }: PitchRangeControlsProps) {
-  const rangeLabel = getVisiblePitchRangeLabel(range) ?? 'Unavailable';
   const pitchPosition =
     currentMidi === null ? null : getPitchRangePosition(currentMidi, range);
-
   return (
-    <fieldset className="pitch-range-controls">
-      <legend>Visible graph range</legend>
-      <div className="pitch-range-controls__presets">
-        {VISIBLE_PITCH_RANGE_PRESETS.map((preset) => (
-          <button
-            key={preset.id}
-            className="range-button"
-            type="button"
-            aria-pressed={selectedPresetId === preset.id}
-            onClick={() => onSelectPreset(preset.id)}
+    <div
+      className="pitch-range-controls"
+      role="group"
+      aria-label="Visible graph range"
+    >
+      <label>
+        Pitch span
+        <select
+          aria-label="Pitch span"
+          value={range.highMidi - range.lowMidi}
+          onChange={(event) =>
+            onZoom(Number(event.target.value) as PitchZoomSpan)
+          }
+        >
+          {PITCH_ZOOM_SPANS.map((span) => (
+            <option key={span} value={span}>
+              {span / 12} {span === 12 ? 'octave' : 'octaves'}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="secondary-button"
+        type="button"
+        disabled={currentMidi === null || !Number.isFinite(currentMidi)}
+        onClick={() => currentMidi !== null && onCenter(currentMidi)}
+      >
+        Center my voice
+      </button>
+      <details className="pitch-range-controls__options">
+        <summary>Position · {getVisiblePitchRangeLabel(range)}</summary>
+        <label>
+          Graph center note
+          <select
+            aria-label="Graph center note"
+            value={(range.lowMidi + range.highMidi) / 2}
+            onChange={(event) => onCenter(Number(event.target.value))}
           >
-            {getVisiblePitchRangeLabel(preset.range)}
-          </button>
-        ))}
-      </div>
-      <div className="pitch-range-controls__actions">
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={!canShiftDown}
-          onClick={onShiftDown}
-        >
-          Shift graph down one octave
-        </button>
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={areVisiblePitchRangesEqual(
-            range,
-            DEFAULT_VISIBLE_PITCH_RANGE,
-          )}
-          onClick={onReset}
-        >
+            {Array.from(
+              { length: MAXIMUM_VISIBLE_MIDI - MINIMUM_VISIBLE_MIDI + 1 },
+              (_, i) => i + MINIMUM_VISIBLE_MIDI,
+            ).map((midi) => (
+              <option value={midi} key={midi}>
+                {getPitchGridNote(midi)?.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="secondary-button" type="button" onClick={onReset}>
           Reset graph range
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={!canShiftUp}
-          onClick={onShiftUp}
-        >
-          Shift graph up one octave
-        </button>
-      </div>
-      <p className="pitch-range-controls__status" aria-live="polite">
-        Current graph range: {rangeLabel}.
-      </p>
-      {pitchPosition === 'below' && (
+      </details>
+      {(pitchPosition === 'below' || pitchPosition === 'above') && (
         <p className="pitch-range-controls__outside">
-          Current pitch is below the visible graph range.
+          Current pitch is {pitchPosition} the visible graph range.
         </p>
       )}
-      {pitchPosition === 'above' && (
-        <p className="pitch-range-controls__outside">
-          Current pitch is above the visible graph range.
-        </p>
-      )}
-    </fieldset>
+    </div>
   );
 }
