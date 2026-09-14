@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PitchRangeControls } from './PitchRangeControls';
+import {
+  PitchRangeControls,
+  PitchRangePositionControls,
+} from './PitchRangeControls';
 
 describe('compact pitch viewport controls', () => {
   it('exposes span, explicit centering and reset without fixed octave presets', () => {
@@ -8,13 +11,19 @@ describe('compact pitch viewport controls', () => {
       onCenter = vi.fn(),
       onReset = vi.fn();
     render(
-      <PitchRangeControls
-        range={{ lowMidi: 48, highMidi: 72 }}
-        currentMidi={69.2}
-        onZoom={onZoom}
-        onCenter={onCenter}
-        onReset={onReset}
-      />,
+      <>
+        <PitchRangeControls
+          range={{ lowMidi: 48, highMidi: 72 }}
+          currentMidi={69.2}
+          onZoom={onZoom}
+          onCenter={onCenter}
+        />
+        <PitchRangePositionControls
+          range={{ lowMidi: 48, highMidi: 72 }}
+          onCenter={onCenter}
+          onReset={onReset}
+        />
+      </>,
     );
     expect(screen.getByLabelText('Pitch span')).toHaveValue('24');
     fireEvent.change(screen.getByLabelText('Pitch span'), {
@@ -23,7 +32,6 @@ describe('compact pitch viewport controls', () => {
     expect(onZoom).toHaveBeenCalledWith(12);
     fireEvent.click(screen.getByRole('button', { name: 'Center my voice' }));
     expect(onCenter).toHaveBeenCalledWith(69.2);
-    fireEvent.click(screen.getByText('Position · C3–C5'));
     fireEvent.change(screen.getByLabelText('Graph center note'), {
       target: { value: '48' },
     });

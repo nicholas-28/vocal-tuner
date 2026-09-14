@@ -601,15 +601,15 @@ h1 {
   font-size: 0.75rem;
 }
 
-.pitch-range-controls__options {
-  flex-basis: 100%;
+.graph-view-controls > .pitch-range-controls {
+  margin-bottom: 0;
 }
-.pitch-range-controls__options[open] {
-  display: block;
-}
-.pitch-range-controls__options label {
-  display: inline-grid;
-  margin-right: 0.5rem;
+.graph-display-options__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 .pitch-range-controls__outside {
   margin: 0;
@@ -623,7 +623,7 @@ h1 {
   padding-bottom: 0.5rem;
 }
 .graph-display-options label {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
 }
 .graph-display-options p {
   color: #8d98a8;

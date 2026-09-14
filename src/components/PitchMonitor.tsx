@@ -12,7 +12,10 @@ import type { PitchContinuityStatus } from '../types/pitchContinuity';
 import type { VisiblePitchRange } from '../types/visiblePitchRange';
 import { PitchGridCanvas } from './PitchGridCanvas';
 import { PitchHistoryControls } from './PitchHistoryControls';
-import { PitchRangeControls } from './PitchRangeControls';
+import {
+  PitchRangeControls,
+  PitchRangePositionControls,
+} from './PitchRangeControls';
 import type { AudioSessionDiagnosticTimeline } from '../types/audioDiagnostics';
 
 type PitchMonitorProps = {
@@ -127,23 +130,31 @@ export function PitchMonitor({
             )}
           </select>
         </label>
-        <button
-          type="button"
-          className="secondary-button"
-          aria-pressed={tall}
-          onClick={() => setTall((value) => !value)}
-        >
-          Taller graph
-        </button>
+        <PitchRangeControls
+          range={visibleRange}
+          onZoom={onZoomRange}
+          onCenter={onCenterRange}
+          currentMidi={currentMidi}
+        />
       </div>
-      <PitchRangeControls
-        range={visibleRange}
-        onZoom={onZoomRange}
-        onCenter={onCenterRange}
-        currentMidi={currentMidi}
-        onReset={onResetRange}
-      />
       <PitchGridCanvas
+        viewSettings={
+          <>
+            <PitchRangePositionControls
+              range={visibleRange}
+              onCenter={onCenterRange}
+              onReset={onResetRange}
+            />
+            <button
+              type="button"
+              className="secondary-button"
+              aria-pressed={tall}
+              onClick={() => setTall((value) => !value)}
+            >
+              Taller graph
+            </button>
+          </>
+        }
         curveBreaks={curveBreaks}
         presentationSilence={presentationSilence}
         history={history}

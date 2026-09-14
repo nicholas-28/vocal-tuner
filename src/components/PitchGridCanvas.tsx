@@ -9,6 +9,7 @@ import {
   useRef,
   useEffect,
   type CSSProperties,
+  type ReactNode,
 } from 'react';
 import { useCanvasViewport } from '../hooks/useCanvasViewport';
 import { usePitchCurveAnimation } from '../hooks/usePitchCurveAnimation';
@@ -44,6 +45,7 @@ import { TargetPracticeSession } from './TargetPracticeSession';
 
 type PitchGridCanvasProps = Partial<MidiRange> & {
   curveBreaks?: PitchCurveBreaks;
+  viewSettings?: ReactNode;
   history: PitchHistory;
   active: boolean;
   captureState: PitchHistoryCaptureState;
@@ -64,6 +66,7 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
 
 export const PitchGridCanvas = memo(function PitchGridCanvas({
   history,
+  viewSettings,
   curveBreaks,
   active,
   captureState,
@@ -204,31 +207,37 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   return (
     <div className="pitch-visualization-block">
       <details className="graph-display-options">
-        <summary>Line &amp; guides</summary>
-        <label>
-          Line style
-          <select
-            aria-label="Line style"
-            value={interpolation}
-            onChange={(event) =>
-              setInterpolation(event.target.value as 'linear' | 'monotone')
-            }
-          >
-            <option value="monotone">Smooth through samples</option>
-            <option value="linear">Straight through samples</option>
-          </select>
-        </label>
-        <label className="graph-checkbox">
-          <input
-            type="checkbox"
-            checked={showTarget}
-            onChange={(event) => setShowTarget(event.target.checked)}
-          />
-          Selected target guide
-        </label>
+        <summary>View settings</summary>
+        <div className="graph-display-options__controls">
+          {viewSettings}
+          <label>
+            Line style
+            <select
+              aria-label="Line style"
+              value={interpolation}
+              onChange={(event) =>
+                setInterpolation(event.target.value as 'linear' | 'monotone')
+              }
+            >
+              <option value="monotone">Smooth through samples</option>
+              <option value="linear">Straight through samples</option>
+            </select>
+          </label>
+          {referenceKeyboard.state.selectedMidi !== null && (
+            <label className="graph-checkbox">
+              <input
+                type="checkbox"
+                checked={showTarget}
+                onChange={(event) => setShowTarget(event.target.checked)}
+              />
+              Selected target guide
+            </label>
+          )}
+        </div>
         <p>
           Blank regions may be silence, uncertainty, or pitch outside this view.
-          The guide marks your selected reference note.
+          {referenceKeyboard.state.selectedMidi !== null &&
+            ' The guide marks your selected reference note.'}
         </p>
       </details>
       <div

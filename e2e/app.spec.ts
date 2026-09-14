@@ -565,7 +565,8 @@ test('loads the initial tuner screen', async ({ page }) => {
     page.getByRole('button', { name: 'Pause history' }),
   ).toBeDisabled();
   await expect(page.getByLabel('Pitch span')).toHaveValue('24');
-  await page.getByText('Position · C3–C5', { exact: true }).click();
+  await page.getByText('View settings', { exact: true }).click();
+  await expect(page.getByLabel('Selected target guide')).toBeVisible();
   await page.getByLabel('Graph center note').selectOption('48');
   await expect(
     page.getByRole('img', {
@@ -791,6 +792,8 @@ test('graph zoom and detailed views stay faithful and fit narrow mobile screens'
   expect(
     await curve.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
   ).toBe(before);
+  await expect(page.getByLabel('Line style')).not.toBeVisible();
+  await expect(page.getByLabel('Selected target guide')).toHaveCount(0);
   for (const width of [320, 390, 1360]) {
     await page.setViewportSize({ width, height: 900 });
     for (const span of ['12', '24', '36']) {
@@ -805,7 +808,11 @@ test('graph zoom and detailed views stay faithful and fit narrow mobile screens'
       expect(key!.y).toBeCloseTo(graph!.y + 8, 0);
     }
     await page.getByLabel('Pitch span').selectOption('12');
+    await page.getByText('View settings', { exact: true }).click();
     for (const control of [
+      page.getByLabel('Graph center note'),
+      page.getByLabel('Line style'),
+      page.getByRole('button', { name: 'Reset graph range' }),
       page.getByLabel('Pitch span'),
       page.getByLabel('Time window'),
       page.getByRole('button', { name: 'Center my voice' }),
@@ -815,6 +822,11 @@ test('graph zoom and detailed views stay faithful and fit narrow mobile screens'
       expect(box!.height).toBeGreaterThanOrEqual(44);
       expect(box!.width).toBeGreaterThanOrEqual(44);
     }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
     const height = (await curve.boundingBox())!.height;
     await page.getByRole('button', { name: 'Taller graph' }).click();
     await expect
@@ -826,8 +838,12 @@ test('graph zoom and detailed views stay faithful and fit narrow mobile screens'
     if (width === 1360)
       expect((await curve.boundingBox())!.width).toBeGreaterThan(1000);
     await page.getByRole('button', { name: 'Taller graph' }).click();
+    await page.getByText('View settings', { exact: true }).click();
+    await page.locator('.monitor').screenshot({
+      path: testInfo.outputPath(`monitor-cleanup-${width}.png`),
+    });
   }
-  await page.getByText('Line & guides', { exact: true }).click();
+  await page.getByText('View settings', { exact: true }).click();
   await page.getByLabel('Line style').selectOption('linear');
   for (const seconds of ['5000', '15000', '30000'])
     await page.getByLabel('Time window').selectOption(seconds);

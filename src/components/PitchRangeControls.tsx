@@ -5,7 +5,6 @@ import {
   PITCH_ZOOM_SPANS,
   type PitchZoomSpan,
   getPitchRangePosition,
-  getVisiblePitchRangeLabel,
 } from '../visualization/visiblePitchRange';
 import { getPitchGridNote } from '../visualization/pitchGridNotes';
 
@@ -14,7 +13,6 @@ type PitchRangeControlsProps = {
   currentMidi: number | null;
   onZoom: (span: PitchZoomSpan) => void;
   onCenter: (midi: number) => void;
-  onReset: () => void;
 };
 
 export function PitchRangeControls({
@@ -22,7 +20,6 @@ export function PitchRangeControls({
   currentMidi,
   onZoom,
   onCenter,
-  onReset,
 }: PitchRangeControlsProps) {
   const pitchPosition =
     currentMidi === null ? null : getPitchRangePosition(currentMidi, range);
@@ -56,34 +53,46 @@ export function PitchRangeControls({
       >
         Center my voice
       </button>
-      <details className="pitch-range-controls__options">
-        <summary>Position · {getVisiblePitchRangeLabel(range)}</summary>
-        <label>
-          Graph center note
-          <select
-            aria-label="Graph center note"
-            value={(range.lowMidi + range.highMidi) / 2}
-            onChange={(event) => onCenter(Number(event.target.value))}
-          >
-            {Array.from(
-              { length: MAXIMUM_VISIBLE_MIDI - MINIMUM_VISIBLE_MIDI + 1 },
-              (_, i) => i + MINIMUM_VISIBLE_MIDI,
-            ).map((midi) => (
-              <option value={midi} key={midi}>
-                {getPitchGridNote(midi)?.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="secondary-button" type="button" onClick={onReset}>
-          Reset graph range
-        </button>
-      </details>
       {(pitchPosition === 'below' || pitchPosition === 'above') && (
         <p className="pitch-range-controls__outside">
           Current pitch is {pitchPosition} the visible graph range.
         </p>
       )}
     </div>
+  );
+}
+
+export function PitchRangePositionControls({
+  range,
+  onCenter,
+  onReset,
+}: {
+  range: VisiblePitchRange;
+  onCenter: (midi: number) => void;
+  onReset: () => void;
+}) {
+  return (
+    <>
+      <label>
+        Graph center note
+        <select
+          aria-label="Graph center note"
+          value={(range.lowMidi + range.highMidi) / 2}
+          onChange={(event) => onCenter(Number(event.target.value))}
+        >
+          {Array.from(
+            { length: MAXIMUM_VISIBLE_MIDI - MINIMUM_VISIBLE_MIDI + 1 },
+            (_, i) => i + MINIMUM_VISIBLE_MIDI,
+          ).map((midi) => (
+            <option value={midi} key={midi}>
+              {getPitchGridNote(midi)?.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button className="secondary-button" type="button" onClick={onReset}>
+        Reset graph range
+      </button>
+    </>
   );
 }

@@ -158,7 +158,7 @@ describe('App', () => {
     expect(diagnostics).toHaveTextContent('Destination connectedyes');
     expect(diagnostics).toHaveTextContent('Oscillator startedyes');
     expect(diagnostics).toHaveTextContent('Effective gain0.080');
-    fireEvent.click(screen.getByText('Position · C3–C5'));
+    fireEvent.click(screen.getByText('View settings'));
     fireEvent.change(screen.getByLabelText('Graph center note'), {
       target: { value: '48' },
     });

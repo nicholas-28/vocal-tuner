@@ -591,6 +591,15 @@ it('changes time and height without touching stored history or capture controls'
       `Live pitch history from C3 to C5 over the last ${seconds} seconds.`,
     );
   }
+  expect(screen.getByLabelText('Line style')).not.toBeVisible();
+  expect(screen.getByLabelText('Graph center note')).not.toBeVisible();
+  expect(
+    screen.queryByLabelText('Selected target guide'),
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Pitch span')).toBeVisible();
+  expect(screen.getByLabelText('Time window')).toBeVisible();
+  fireEvent.click(screen.getByText('View settings'));
+  expect(screen.getByLabelText('Line style')).toHaveValue('monotone');
   fireEvent.click(screen.getByRole('button', { name: 'Taller graph' }));
   expect(screen.getByRole('region', { name: 'Pitch monitor' })).toHaveClass(
     'monitor--tall',
