@@ -1,8 +1,10 @@
+import { smoothVisualCents } from '../tuner/visualResponse';
 import type { PitchContinuityStatus } from '../types/pitchContinuity';
 import type { TargetCentsDisplayState } from '../types/targetPitch';
 import { TARGET_DISPLAY_TIME_CONSTANT_MS } from './targetPitchConfig';
 
 export type TargetCentsDisplayInput = {
+  detectedMidi?: number | null;
   targetRelativeCents: number | null;
   targetMidi: number | null;
   timestampMs: number | null;
@@ -23,9 +25,17 @@ export function transitionTargetCentsDisplay(
   if (
     current === null ||
     current.targetMidi !== targetMidi ||
+    current.detectedMidi !== input.detectedMidi ||
     input.reducedMotion
   )
-    return { displayCents: targetRelativeCents, targetMidi, timestampMs };
+    return {
+      displayCents: targetRelativeCents,
+      targetMidi,
+      timestampMs,
+      ...(input.detectedMidi === undefined
+        ? {}
+        : { detectedMidi: input.detectedMidi }),
+    };
   if (input.continuityStatus === 'uncertain') return current;
   const deltaTimeMs = timestampMs - current.timestampMs;
   const validTimeConstant =
@@ -33,11 +43,14 @@ export function transitionTargetCentsDisplay(
       ? timeConstantMs
       : TARGET_DISPLAY_TIME_CONSTANT_MS;
   if (!Number.isFinite(deltaTimeMs) || deltaTimeMs <= 0) return current;
-  const alpha = 1 - Math.exp(-deltaTimeMs / validTimeConstant);
-  const displayCents =
-    current.displayCents + alpha * (targetRelativeCents - current.displayCents);
+  const displayCents = smoothVisualCents(
+    current.displayCents,
+    targetRelativeCents,
+    deltaTimeMs,
+    validTimeConstant,
+  );
   return Number.isFinite(displayCents)
-    ? { displayCents, targetMidi, timestampMs }
+    ? { ...current, displayCents, targetMidi, timestampMs }
     : current;
 }
 

@@ -38,6 +38,7 @@ export type TargetPitchComparison =
     };
 
 export type TargetCentsDisplayState = Readonly<{
+  detectedMidi?: number | null;
   displayCents: number;
   targetMidi: number;
   timestampMs: number;

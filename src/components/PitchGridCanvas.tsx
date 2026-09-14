@@ -54,6 +54,7 @@ type PitchGridCanvasProps = Partial<MidiRange> & {
   practiceMicrophoneActive?: boolean;
   showReferenceDroneDiagnostics?: boolean;
   showAudioDiagnostics?: boolean;
+  presentationSilence?: boolean;
   audioSessionTimeline?: AudioSessionDiagnosticTimeline | null;
 };
 
@@ -74,6 +75,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
   practiceMicrophoneActive = active,
   showReferenceDroneDiagnostics = false,
   showAudioDiagnostics = false,
+  presentationSilence = false,
   audioSessionTimeline = null,
 }: PitchGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -245,6 +247,7 @@ export const PitchGridCanvas = memo(function PitchGridCanvas({
         onVolumeChange={referenceDrone.setVolume}
       />
       <TargetPitchGuidance
+        presentationSilence={presentationSilence}
         selectedMidi={referenceKeyboard.state.selectedMidi}
         detectedPitch={detectedPitch}
         continuityStatus={continuityStatus}

@@ -12,17 +12,17 @@ The only existing consumer of every computed frame was the detector's own analys
 Microphone → analyser (4096 samples) → YIN, rendering-clock gated, up to 30 Hz
                                          ├─ PitchSource: current-frame accepted
                                          │  musical interpretation + raw diagnostics
-                                         │       └─ realtime getLatest()/subscribe()
+                                         │       └─ primary ribbon: subscription + SVG RAF
                                          └─ existing 15 Hz presentation callback
                                              → React continuity
-                                             ├─ musical pitch → text/cents/target
+                                             ├─ musical pitch → text/target
                                              ├─ history → Canvas RAF
                                              └─ practice observation effect
 ```
 
 Source samples are current-frame observations, **before continuity**. A rejected frame has no accepted frequency/MIDI/cents even when UI continuity temporarily holds the preceding note. This preserves existing product behavior and avoids creating a competing continuity filter. Games can explicitly implement their own presentation/uncertainty handling; neither UI smoothing nor held pitch is fresh source evidence. No game is implemented here.
 
-Practice and visual history remain on their existing path and cadence. Source retention is a short consumer convenience, not visual history or a scoring log. Migrating practice or consolidating ingestion requires a separate evidence-accounting decision.
+Practice and visual history remain on their existing presentation path and nominal 15 Hz cadence. The deadline fix restores that intended rate; it does not change scoring rules. Source retention is a short consumer convenience, not visual history or a scoring log. Migrating practice or consolidating ingestion requires a separate evidence-accounting decision.
 
 ## Consumer and producer contract
 
@@ -54,10 +54,10 @@ if (
 
 ## Cadence and memory
 
-- Analysis: unchanged 30 Hz maximum, RAF-quantized, with the existing YIN settings and rendering-clock guards.
+- Analysis: nominal 30 Hz with phase-preserving RAF deadlines and 1 ms timing tolerance, existing YIN settings and rendering-clock guards. See [cadence audit and response polish](REALTIME_PITCH_RESPONSE.md).
 - PitchSource: every computed observation, before the UI throttle, including rejections and silence. No extra detector invocation.
-- React/UI, continuity, practice and visual history: unchanged 15 Hz maximum publication path. Source publication alone does not set React state. The microphone active indicator still follows the presentation callback.
-- Future render loop: display refresh, typically 60/120 Hz, reading the last completed observation. Faster reads do not imply faster acquisition or lower physical latency.
+- React/UI, continuity, practice and visual history: existing nominal 15 Hz publication path, now using phase-preserving deadlines. Source publication alone does not set React state. The microphone active indicator still follows the presentation callback.
+- Primary ribbon render loop: display refresh, typically 60/120 Hz, reading the last completed observation with consumer-clock freshness checks. Faster reads alone do not imply faster acquisition or lower physical latency.
 
 `getLatest()` is one closure-variable read: O(1), no allocation, clock read, mutation, notification, or React update. Publication does fixed-size conversion/copy work plus O(subscribers) delivery. The ring retains at most 256 immutable observations, roughly 8.5 seconds at 30 Hz (longer at lower delivered cadence). Insertion/eviction is O(1). It is bounded by count rather than permanent duration. `getRecent(windowMs)` scans at most 256 entries, allocates a new chronological result, and filters using the supplied monotonic clock; it is not intended for each animation frame. Lifecycle markers are not retained as observations. Session start, invalidation and clear release the ring's references.
 
@@ -79,4 +79,4 @@ This remains main-thread RAF analysis, not AudioWorklet processing. Background s
 
 ## Calibration performance baseline
 
-[Pitch calibration and performance](PITCH_CALIBRATION_PERFORMANCE.md) documents repeatable synthetic benchmarks, plain-language p50/p95 definitions, the capture-to-display latency budget, and the physical iPhone measurement procedure. Probe collection remains unchanged: enabled only by `?audioDiagnostics=1`, bounded to 128 durations, reset at microphone Start, and retained after Stop. No pitch-source migration or detector cadence change was made.
+[Pitch calibration and performance](PITCH_CALIBRATION_PERFORMANCE.md) documents repeatable synthetic benchmarks, plain-language p50/p95 definitions, the capture-to-display latency budget, and the physical iPhone measurement procedure. Probe collection remains unchanged: enabled only by `?audioDiagnostics=1`, bounded to 128 durations, reset at microphone Start, and retained after Stop. That baseline predates [response polish](REALTIME_PITCH_RESPONSE.md), which now migrates the primary ribbon and restores intended cadence without changing YIN.

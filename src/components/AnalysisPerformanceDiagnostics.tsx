@@ -1,9 +1,17 @@
+import type { createCadenceProbe } from '../pitch/cadenceProbe';
 import type { createAnalysisDurationProbe } from '../pitch/analysisDurationProbe';
 
 export function AnalysisPerformanceDiagnostics({
   probe,
+  cadence,
+  active = false,
 }: {
   probe: ReturnType<typeof createAnalysisDurationProbe>;
+  cadence?: {
+    analysis: ReturnType<typeof createCadenceProbe>;
+    presentation: ReturnType<typeof createCadenceProbe>;
+  } | null;
+  active?: boolean;
 }) {
   // Refresh on the existing presentation render; collection never sets state.
   const summary = probe.getSummary();
@@ -22,6 +30,26 @@ export function AnalysisPerformanceDiagnostics({
         more than 8 ms. This measures computation, not microphone-to-screen
         delay.
       </p>
+      {cadence && (
+        <dl aria-label="Actual pitch cadence">
+          {(['analysis', 'presentation'] as const).map((kind) => {
+            const timing = cadence[kind].getSummary();
+            const label = kind === 'analysis' ? 'Analysis' : 'Presentation';
+            return (
+              <div key={kind}>
+                <dt>{label}</dt>
+                <dd>
+                  {active && timing.hz !== null
+                    ? `~${timing.hz.toFixed(1)} Hz`
+                    : '—'}{' '}
+                  · median {milliseconds(timing.medianMs)} · p95{' '}
+                  {milliseconds(timing.p95Ms)} · count {timing.count}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      )}
       <dl aria-label="Pitch analysis timing">
         <dt>Rolling observations (up to 128)</dt>
         <dd>{summary.count}</dd>

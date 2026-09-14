@@ -6,7 +6,7 @@ The primary readout previously asked the singer to follow a circular marker on a
 
 Flat extends left from center; sharp extends right. The ribbon contracts in both length and thickness through zero, then grows on the other side. There is no minimum displacement or dead zone. In-tune input gives the fixed center a calm mint accent without a pulse. Warm sand on the left and lavender on the right reinforce direction, while position, arrow labels, and Dead center/In tune/Close/Flat/Sharp text communicate it without color. Frequency and signed cents remain secondary to the note and spatial feedback.
 
-The center explicitly means the **nearest note**, not the separately selected reference target. Reference playback and selection do not retarget this visual. The historical scrolling graph still answers “what happened through time”; selected-target guidance and practice keep their existing measurement, tolerance, smoothing, and scoring behavior.
+The center explicitly means the **nearest note**, not the separately selected reference target. Reference playback and selection do not retarget this visual. The historical scrolling graph still answers “what happened through time”; selected-target guidance and practice keep their existing measurement, tolerance and scoring behavior. Target smoothing now shares the response model described below.
 
 ## Scale and clamping
 
@@ -18,33 +18,25 @@ Mapping is linear: zero is always 50% of the track, and each cent spans 1% of tr
 
 ## Rendering and data ownership
 
-This SVG/DOM presentation reuses the existing React publication path (up to approximately 15 Hz) and `useSmoothedCentsDisplay`. Continuity supplies accepted measurements or explicitly held uncertain observations. No new RAF loop, timer, dependency, audio work, or high-frequency React state path is added.
+The primary SVG ribbon now reads fresh accepted PitchSource evidence and animates geometry directly on RAF, without per-frame React state. Raw text and accessible measurements retain the approximately 15 Hz presentation path. The prop-driven demo continues using `useSmoothedCentsDisplay`. See [realtime response polish](REALTIME_PITCH_RESPONSE.md) for the source decision, cadence audit and bounded diagnostics.
 
-PitchSource was considered: its direct current-frame contract requires voiced/accepted and consumer-clock freshness checks, and does not supply the same held continuity presentation. A 60 Hz loop has no demonstrated benefit for this small ribbon, so the visual does not subscribe to PitchSource or create another pitch truth. PitchSource's API, detector cadence, and freshness contract remain unchanged. Current microphone/continuity lifecycle continues to own invalidation.
-
-Raw cents drive numeric text and classification. Smoothed cents drive only ribbon geometry. They never feed detection, continuity, history, diagnostics, drone state, or practice scoring. A ribbon may briefly lag a raw classification during a change of direction; its position and directional color follow the same smoothed geometry.
+Numeric cents remain raw. Categorical feedback uses centralized 2-cent hysteresis around the unchanged 5/10/25-cent calibration bands. Smoothed cents drive only geometry and never feed detection, continuity, history or Practice.
 
 ## Motion and continuity
 
-Existing time-aware exponential smoothing is reused unchanged:
+The shared response integrates a 25 ms exponential while display error exceeds 3 cents, then 65 ms for the final small displacement. First evidence and nearest-note changes reset immediately; reduced motion uses direct raw values. A synthetic 30-cent correction is within 2 cents after 100 ms. No CSS movement transition, spring or prediction is added.
 
-`alpha = 1 - exp(-deltaTimeMs / 150 ms)`
+- **Voiced:** fresh accepted source observations drive the ribbon; text remains on the presentation path.
+- **Uncertain:** the live ribbon disappears. Existing text can retain an explicitly uncertain last measurement; it never becomes fresh marker evidence. The demo retains its explicit held presentation.
+- **Silence/unvoiced/stale:** hide geometry and reset smoothing. RMS silence also clears tuner text and target guidance at the next UI publication. The neutral center guide does not indicate an in-tune observation.
 
-`display = previousDisplay + alpha * (raw - previousDisplay)`
-
-The first value initializes directly. A sustained step moves about 86% in 300 ms and 95% in 450 ms without overshoot. Nearest-MIDI changes reset immediately, preventing a false sweep from about +49 to −49. There is no additional CSS movement transition, spring, or idle animation layered over smoothing.
-
-- **Voiced:** update raw text/classification and smoothed geometry. Invalid/absent observations cannot expose leftover geometry or an in-tune accent.
-- **Uncertain:** hold the previous geometry, dim it, add a dashed outline, and retain explicit “briefly uncertain”/“last measured” text. Do not synthesize a displacement if mounted without a previous accepted display value. The readout retains its existing last-measured age label.
-- **Unvoiced:** immediately hide the ribbon, clear classification, and reset smoothing. The neutral center guide stays; it does not mean an in-tune observation. Never animate silence toward zero.
-
-Start, Stop, and unexpected cleanup retain existing continuity behavior. History Pause/Clear remain independent.
+Core continuity/history/Practice grace remains unchanged; the silence distinction is presentation-only. Stop and failed capture invalidate the source and cancel live animation. History Pause/Clear remain independent.
 
 ## Accessibility and mobile
 
 The existing named meter, signed raw numeric readout, and accessible sentence remain. `aria-valuenow` is bounded to the declared range and omitted for unavailable/invalid pitch. No high-frequency live announcement or new focus target is introduced. SVG decoration is hidden from assistive technology; visible direction labels use arrows and words. Existing touch and keyboard controls are unchanged.
 
-`prefers-reduced-motion: reduce` uses direct accepted updates through the same existing hook. There are no CSS motion transitions or continuous animations. Responsive width, internal edge padding, and fixed center positioning are checked at 320, 390, and 768 CSS pixels in mobile WebKit; narrow layouts retain labels without horizontal overflow.
+`prefers-reduced-motion: reduce` uses direct accepted updates through the same existing hook. There are no CSS movement transitions; live RAF interpolation is bypassed in reduced-motion mode. Responsive width, internal edge padding, and fixed center positioning are checked at 320, 390, and 768 CSS pixels in mobile WebKit; narrow layouts retain labels without horizontal overflow.
 
 ## Physical iPhone acceptance
 
@@ -52,7 +44,7 @@ Automated geometry and browser checks cannot establish musical feel. On a physic
 
 - Readability of the ribbon, note, direction words, and cents at a normal singing distance.
 - Jitter on a steady vowel and natural vibrato.
-- Perceived latency when correcting a pitch, including the existing 150 ms smoothing.
+- Perceived latency when correcting a pitch, using the new adaptive presentation response.
 - Center stability while singing, rotating the phone, and resizing the viewport.
 - Immediate flat/left and sharp/right comprehension without relying on color.
 - Whether the ±50-cent scale and ±5-cent center region give enough usable precision.
@@ -60,4 +52,4 @@ Automated geometry and browser checks cannot establish musical feel. On a physic
 - A breath/pause and brief noisy interruption: held uncertainty must look different from active input, and silence must not look in tune.
 - Reduced Motion enabled: direct feedback remains usable without interpolation.
 
-Perceived calmness, low-amplitude ribbon visibility, latency, VoiceOver usability, and device-specific browser rendering still require physical acceptance. The existing nearest-note boundary reset and display/raw lag are deliberate, unchanged musical semantics.
+Perceived calmness, low-amplitude ribbon visibility, latency, VoiceOver usability, and device-specific browser rendering still require physical acceptance. The nearest-note boundary reset remains deliberate; the response milestone reduces display/raw lag. Use the full [before/after iPhone checklist](REALTIME_PITCH_RESPONSE.md#physical-iphone-acceptance-compare-before--after).

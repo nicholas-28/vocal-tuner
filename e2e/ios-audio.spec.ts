@@ -7,7 +7,7 @@ type AudioProbeWindow = Window & {
     oscillatorStarts: number;
     allowResume: boolean;
     copiedReport: string;
-    waveform: 'active' | 'silent';
+    waveform: 'active' | 'silent' | 'voiced';
     getUserMediaRequests: number;
     audioSessionAssignments: string[];
     context: { interrupt: () => void } | null;
@@ -59,7 +59,13 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
       getFloatTimeDomainData(buffer: Float32Array) {
         for (let index = 0; index < buffer.length; index += 1)
           buffer[index] =
-            probe.waveform === 'active' ? (index % 2 === 0 ? 0.1 : -0.1) : 0;
+            probe.waveform === 'voiced'
+              ? 0.2 * Math.sin((2 * Math.PI * 440 * index) / 48000)
+              : probe.waveform === 'active'
+                ? index % 2 === 0
+                  ? 0.1
+                  : -0.1
+                : 0;
       }
     }
     class MockOscillator extends MockNode {
@@ -408,6 +414,9 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   await expect(panel).toContainText('1× 65.41 Hz');
   await c2.click();
 
+  await page.evaluate(() => {
+    (window as AudioProbeWindow).__audioProbe.waveform = 'voiced';
+  });
   await page.getByRole('button', { name: 'Start microphone' }).click();
   await expect(page.getByLabel('Microphone status')).toContainText(
     'Microphone active',
@@ -416,6 +425,25 @@ test('mobile WebKit keeps reference audio inside explicit activation and exposes
   const timing = page.getByLabel('Pitch analysis timing');
   await expect(timing).toBeVisible();
   await expect(timing.locator('dd').first()).not.toHaveText('0');
+  await expect(page.getByLabel('Actual pitch cadence')).toContainText(
+    /Analysis~[\d.]+ Hz/,
+  );
+  await expect(page.getByLabel('Actual pitch cadence')).toContainText(
+    /Presentation~[\d.]+ Hz/,
+  );
+  await expect(page.getByLabel('Current note: A4')).toBeVisible();
+  await expect(page.locator('.cents-meter__tension')).toHaveAttribute(
+    'data-visible',
+    'true',
+  );
+  await page.evaluate(() => {
+    (window as AudioProbeWindow).__audioProbe.waveform = 'silent';
+  });
+  await expect(page.locator('.cents-meter__tension')).toHaveAttribute(
+    'data-visible',
+    'false',
+  );
+  await expect(page.getByLabel('Current note: unavailable')).toBeVisible();
   await expect(panel).toContainText('after getUserMedia resolved');
   await expect(panel).toContainText('after microphone AudioContext starts');
   await page.getByRole('button', { name: 'Stop microphone' }).click();

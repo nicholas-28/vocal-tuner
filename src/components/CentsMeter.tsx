@@ -1,7 +1,7 @@
-import {
-  PITCH_CALIBRATION,
-  classifyPitchAccuracy,
-} from '../calibration/pitchCalibration';
+import type { PitchSource } from '../pitch/pitchSource';
+import { useLiveCentsMarker } from '../hooks/useLiveCentsMarker';
+import { useAccuracyLabel } from '../hooks/useAccuracyLabel';
+import { PITCH_CALIBRATION } from '../calibration/pitchCalibration';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useSmoothedCentsDisplay } from '../hooks/useSmoothedCentsDisplay';
 import { formatCents } from '../music/pitchDisplay';
@@ -14,6 +14,7 @@ import { getCentsTensionGeometry } from '../tuner/centsTensionGeometry';
 import type { PitchContinuityStatus } from '../types/pitchContinuity';
 
 type CentsMeterProps = {
+  pitchSource?: PitchSource;
   rawCents: number | null;
   noteMidi: number | null;
   timestampMs: number | null;
@@ -29,17 +30,19 @@ const classificationLabels = {
 } as const;
 
 export function CentsMeter({
+  pitchSource,
   rawCents,
   noteMidi,
   timestampMs,
   continuityStatus,
 }: CentsMeterProps) {
   const reducedMotion = useReducedMotion();
+  const markerRef = useLiveCentsMarker(pitchSource, reducedMotion);
   const displayCents = useSmoothedCentsDisplay({
     rawCents,
     noteMidi,
     timestampMs,
-    continuityStatus,
+    continuityStatus: pitchSource ? 'unvoiced' : continuityStatus,
     reducedMotion,
   });
   // Continuity owns held observations. Never expose a leftover smoothed value
@@ -54,11 +57,18 @@ export function CentsMeter({
     Number.isFinite(timestampMs) &&
     timestampMs >= 0;
   const measuredCents = hasMeasurement ? rawCents : null;
-  const classification = classifyCents(measuredCents);
+  const accuracy = useAccuracyLabel(measuredCents, noteMidi);
+  const classification =
+    accuracy === 'dead-center' || accuracy === 'in-tune'
+      ? 'in-tune'
+      : measuredCents === null
+        ? null
+        : measuredCents < 0
+          ? 'flat'
+          : 'sharp';
   const geometry = getCentsTensionGeometry(
     hasMeasurement ? displayCents : null,
   );
-  const accuracy = classifyPitchAccuracy(measuredCents);
   const feedbackLabel =
     accuracy === 'dead-center'
       ? 'Dead center'
@@ -78,7 +88,7 @@ export function CentsMeter({
         : `${feedbackLabel}${beyondScale ? ' · beyond scale' : ''}`;
   const accessibleDescription = getAccessibleDescription(
     measuredCents,
-    classification,
+    classifyCents(measuredCents),
     continuityStatus,
   );
 
@@ -123,14 +133,19 @@ export function CentsMeter({
             />
           ))}
           <svg
+            ref={markerRef}
             className="cents-meter__tension"
             viewBox="0 0 100 48"
             preserveAspectRatio="none"
-            data-visible={geometry === null ? 'false' : 'true'}
-            data-direction={geometry?.direction ?? 'center'}
-            data-endpoint={geometry?.endpointPercent}
+            data-visible={
+              pitchSource ? undefined : geometry === null ? 'false' : 'true'
+            }
+            data-direction={
+              pitchSource ? undefined : (geometry?.direction ?? 'center')
+            }
+            data-endpoint={pitchSource ? undefined : geometry?.endpointPercent}
           >
-            <path d={geometry?.path ?? ''} />
+            <path d={pitchSource ? undefined : (geometry?.path ?? '')} />
           </svg>
           <span className="cents-meter__center" />
         </div>

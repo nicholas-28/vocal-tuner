@@ -1,7 +1,9 @@
+import { VISUAL_RESPONSE } from '../tuner/visualResponse';
 import { PITCH_CALIBRATION } from '../calibration/pitchCalibration';
 export const TARGET_TOLERANCE_CENTS = PITCH_CALIBRATION.inTuneCents;
 export const TARGET_CLOSE_LIMIT_CENTS = PITCH_CALIBRATION.closeCents;
 export const TARGET_NEIGHBORHOOD_LIMIT_CENTS = 50;
 export const TARGET_DIFFERENT_NOTE_CENTS = 100;
 export const TARGET_METER_LIMIT_CENTS = PITCH_CALIBRATION.visualLimitCents;
-export const TARGET_DISPLAY_TIME_CONSTANT_MS = 180;
+export const TARGET_DISPLAY_TIME_CONSTANT_MS =
+  VISUAL_RESPONSE.quietTimeConstantMs;

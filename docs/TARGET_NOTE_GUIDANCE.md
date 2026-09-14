@@ -41,7 +41,7 @@ Changing target recomputes immediately from the latest accepted pitch and resets
 
 ## Display smoothing and reduced motion
 
-Target marker smoothing has its own scalar state and a 180 ms time-aware exponential response. It affects only marker position. Target changes initialize directly, uncertainty freezes, and no pitch resets. Reduced-motion mode bypasses smoothing and CSS transitions while preserving all text and meter semantics.
+Target marker smoothing retains its own scalar state but shares the primary meter's adaptive 25/65 ms response, with a 3-cent transition. It affects only marker position. Target or detected-nearest-note changes initialize directly, ambiguity freezes, and no pitch resets. RMS silence clears presentation immediately at the next publication without changing core continuity or Practice. Directional instructions use the shared 2-cent categorical hysteresis; raw distance and tolerance remain unchanged. See [response polish](REALTIME_PITCH_RESPONSE.md). Reduced-motion mode bypasses smoothing and CSS transitions while preserving all text and meter semantics.
 
 ## Independence, accessibility, and performance
 

@@ -38,6 +38,7 @@ type PitchMonitorProps = {
   practiceMicrophoneActive?: boolean;
   showReferenceDroneDiagnostics?: boolean;
   showAudioDiagnostics?: boolean;
+  presentationSilence?: boolean;
   audioSessionTimeline?: AudioSessionDiagnosticTimeline | null;
 };
 
@@ -68,6 +69,7 @@ export function PitchMonitor({
   practiceMicrophoneActive = active,
   showReferenceDroneDiagnostics = false,
   showAudioDiagnostics = false,
+  presentationSilence = false,
   audioSessionTimeline = null,
 }: PitchMonitorProps) {
   const relativeNewestMs =
@@ -150,6 +152,7 @@ export function PitchMonitor({
         onReset={onResetRange}
       />
       <PitchGridCanvas
+        presentationSilence={presentationSilence}
         history={history}
         active={active}
         captureState={captureState}

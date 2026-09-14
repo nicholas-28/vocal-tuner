@@ -310,3 +310,27 @@ describe('CentsMeter', () => {
     }
   });
 });
+
+it('keeps categorical feedback steady while raw cents still cross the boundary, then resets on note change', () => {
+  const props = {
+    rawCents: 4,
+    noteMidi: 69,
+    timestampMs: 100,
+    continuityStatus: 'voiced' as const,
+  };
+  const view = render(<CentsMeter {...props} />);
+  for (const rawCents of [5.8, 4.2, 5.7]) {
+    view.rerender(
+      <CentsMeter {...props} rawCents={rawCents} timestampMs={167} />,
+    );
+    expect(screen.getByText('Dead center', { selector: 'p' })).toBeVisible();
+    expect(screen.getByRole('meter')).toHaveAttribute(
+      'aria-valuenow',
+      String(rawCents),
+    );
+  }
+  view.rerender(
+    <CentsMeter {...props} rawCents={5.7} noteMidi={70} timestampMs={200} />,
+  );
+  expect(screen.getByText('In tune', { selector: 'p' })).toBeVisible();
+});

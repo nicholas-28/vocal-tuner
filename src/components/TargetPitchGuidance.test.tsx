@@ -146,6 +146,20 @@ describe('TargetPitchGuidance', () => {
     );
   });
 
+  it('clears RMS silence without consuming held continuity as current target evidence', () => {
+    render(
+      <TargetPitchGuidance
+        selectedMidi={69}
+        detectedPitch={pitchAtMidi(69)}
+        continuityStatus="uncertain"
+        measurementTimestampMs={100}
+        presentationSilence
+      />,
+    );
+    expect(screen.getByText('No pitch detected.')).toBeVisible();
+    expect(screen.queryByRole('meter')).not.toBeInTheDocument();
+  });
+
   it('exposes reduced-motion mode without removing guidance', () => {
     vi.stubGlobal('matchMedia', () => ({
       matches: true,

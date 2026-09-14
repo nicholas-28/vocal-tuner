@@ -138,6 +138,33 @@ describe('pitch analysis graph', () => {
     expect(observation).toHaveBeenCalledTimes(4);
   });
 
+  it.each([60, 120, 30])(
+    'runs exactly the intended analyses/publications on %s Hz RAF',
+    async (hz) => {
+      const observed = vi.fn(),
+        published = vi.fn(),
+        failed = vi.fn();
+      const handle = startPitchAnalysis(
+        {} as MediaStream,
+        published,
+        failed,
+        observed,
+      );
+      for (let i = 1; i <= hz * 2; i++) frame((i * 1000) / hz);
+      expect(observed).toHaveBeenCalledTimes(60);
+      expect(published).toHaveBeenCalledTimes(30);
+      expect(
+        MockAudioContext.current.analyser.getFloatTimeDomainData,
+      ).toHaveBeenCalledTimes(60);
+      for (const [detection] of published.mock.calls)
+        expect(observed.mock.calls.some(([raw]) => raw === detection)).toBe(
+          true,
+        );
+      expect(failed).not.toHaveBeenCalled();
+      await handle.stop();
+    },
+  );
+
   it('does not publish presentation after a realtime consumer synchronously stops analysis', async () => {
     const presentation = vi.fn();
     const handle = startPitchAnalysis(

@@ -1,3 +1,4 @@
+import { useAccuracyLabel } from '../hooks/useAccuracyLabel';
 import {
   TARGET_METER_LIMIT_CENTS,
   TARGET_TOLERANCE_CENTS,
@@ -18,6 +19,7 @@ import type { PitchContinuityStatus } from '../types/pitchContinuity';
 import type { TargetPitchMeasurement } from '../types/targetPitch';
 
 type TargetPitchGuidanceProps = {
+  presentationSilence?: boolean;
   selectedMidi: number | null;
   detectedPitch: MusicalPitch | null;
   continuityStatus: PitchContinuityStatus;
@@ -25,6 +27,7 @@ type TargetPitchGuidanceProps = {
 };
 
 export function TargetPitchGuidance({
+  presentationSilence = false,
   selectedMidi,
   detectedPitch,
   continuityStatus,
@@ -32,12 +35,13 @@ export function TargetPitchGuidance({
 }: TargetPitchGuidanceProps) {
   const comparison = comparePitchToTarget(
     selectedMidi,
-    detectedPitch,
-    continuityStatus,
+    presentationSilence ? null : detectedPitch,
+    presentationSilence ? 'unvoiced' : continuityStatus,
   );
   const measurement = getMeasurement(comparison);
   const reducedMotion = useReducedMotion();
   const displayCents = useTargetCentsDisplay({
+    detectedMidi: measurement?.detectedPitch.midiNote ?? null,
     targetRelativeCents: measurement?.targetRelativeCents ?? null,
     targetMidi: comparison.target?.midiNote ?? null,
     timestampMs: measurementTimestampMs,
@@ -107,7 +111,17 @@ function TargetMeasurementContent({
   uncertain: boolean;
   markerPercent: number | null;
 }) {
-  const instruction = getTargetInstruction(measurement.direction);
+  const accuracy = useAccuracyLabel(
+    measurement.targetRelativeCents,
+    `${targetLabel}:${measurement.detectedPitch.midiNote}`,
+  );
+  const labelDirection =
+    accuracy === 'dead-center' || accuracy === 'in-tune'
+      ? 'on-target'
+      : measurement.targetRelativeCents < 0
+        ? 'below'
+        : 'above';
+  const instruction = getTargetInstruction(labelDirection);
   const distance =
     formatTargetDistance(measurement.targetRelativeCents, targetLabel) ?? '—';
   const offScale = measurement.offScaleDirection;

@@ -146,3 +146,88 @@ it('clears live pitch and guidance, stops history, and pauses practice after ana
   ).toBeInTheDocument();
   expect(screen.getByText('Practice paused')).toBeInTheDocument();
 });
+
+it('clears silent presentation faster while preserving the same Practice accounting as ambiguous rejection', async () => {
+  const results: string[] = [];
+  for (const rejectionReason of ['silence', 'low-confidence'] as const) {
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    let publish!: (d: RawPitchDetection) => void;
+    const track = Object.assign(new EventTarget(), {
+      stop: vi.fn(),
+      readyState: 'live',
+    });
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track] }),
+      },
+    });
+    vi.mocked(startPitchAnalysis).mockImplementation(
+      (_stream, detection, _error, observation) => {
+        publish = (d) => {
+          observation?.(d);
+          detection(d);
+        };
+        return {
+          stop: vi.fn().mockResolvedValue(undefined),
+          diagnostics: {
+            contextState: 'running',
+            sampleRate: 48000,
+            destinationChannelCount: 2,
+            destinationConnected: false,
+          },
+        };
+      },
+    );
+    const view = render(<App />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reference note A4, 440.0 hertz' }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start microphone' }));
+    });
+    act(() =>
+      publish(createPitchDetection({ frequencyHz: 440, timestampMs: now })),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start practice' }));
+    now += 100;
+    act(() =>
+      publish(createPitchDetection({ frequencyHz: 440, timestampMs: now })),
+    );
+    now += 67;
+    act(() =>
+      publish(
+        createPitchDetection({
+          frequencyHz: null,
+          timestampMs: now,
+          rejectionReason,
+        }),
+      ),
+    );
+    expect(
+      view.container.querySelector('.cents-meter__tension'),
+    ).toHaveAttribute('data-visible', 'false');
+    if (rejectionReason === 'silence') {
+      expect(
+        screen.getByLabelText('Current note: unavailable'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('meter', { name: 'Selected-target cents meter' }),
+      ).not.toBeInTheDocument();
+    } else {
+      expect(
+        screen.getByLabelText('Current note: A4, briefly uncertain'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('meter', { name: 'Selected-target cents meter' }),
+      ).toHaveAttribute(
+        'aria-valuetext',
+        expect.stringContaining('Last measured:'),
+      );
+    }
+    results.push(screen.getByLabelText('Live practice metrics').textContent!);
+    view.unmount();
+  }
+  expect(results[0]).toBe(results[1]);
+});

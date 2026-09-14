@@ -28,7 +28,8 @@ describe('target cents display smoothing', () => {
       { displayCents: 0, targetMidi: 69, timestampMs: 100 },
       raw,
     );
-    expect(next?.displayCents).toBeCloseTo(100 * (1 - Math.exp(-1)), 8);
+    expect(next!.displayCents).toBeGreaterThan(99);
+    expect(next!.displayCents).toBeLessThan(100);
     expect(raw.targetRelativeCents).toBe(100);
   });
 
@@ -60,6 +61,21 @@ describe('target cents display smoothing', () => {
         }),
       ),
     ).toEqual({ displayCents: -80, targetMidi: 70, timestampMs: 200 });
+  });
+
+  it('resets immediately when the detected note changes', () => {
+    const current = {
+      displayCents: 40,
+      targetMidi: 69,
+      timestampMs: 100,
+      detectedMidi: 69,
+    };
+    expect(
+      transitionTargetCentsDisplay(
+        current,
+        input({ targetRelativeCents: 60, timestampMs: 167, detectedMidi: 70 }),
+      )?.displayCents,
+    ).toBe(60);
   });
 
   it('bypasses smoothing for reduced motion', () => {

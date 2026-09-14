@@ -1,3 +1,4 @@
+import type { PitchSource } from '../pitch/pitchSource';
 import { formatCents, formatFrequency } from '../music/pitchDisplay';
 import { DEFAULT_TUNING_A4_HZ } from '../music/tuning';
 import type { MusicalPitch } from '../types/musicalPitch';
@@ -5,6 +6,7 @@ import type { PitchContinuityStatus } from '../types/pitchContinuity';
 import { CentsMeter } from './CentsMeter';
 
 type TunerReadoutProps = {
+  pitchSource?: PitchSource;
   pitch: MusicalPitch | null;
   continuityStatus?: PitchContinuityStatus;
   lastAcceptedAgeMs?: number | null;
@@ -13,6 +15,7 @@ type TunerReadoutProps = {
 
 export function TunerReadout({
   pitch,
+  pitchSource,
   continuityStatus = pitch ? 'voiced' : 'unvoiced',
   lastAcceptedAgeMs = null,
   measurementTimestampMs = null,
@@ -47,6 +50,7 @@ export function TunerReadout({
         <p>{centsLabel}</p>
       </div>
       <CentsMeter
+        pitchSource={pitchSource}
         rawCents={pitch?.cents ?? null}
         noteMidi={pitch?.midiNote ?? null}
         timestampMs={measurementTimestampMs}

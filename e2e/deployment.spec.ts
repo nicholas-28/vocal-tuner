@@ -104,5 +104,6 @@ test('production deployment loads safely without activating public mock flags', 
   await expect(
     page.getByText('Pitch analysis performance', { exact: true }),
   ).toHaveCount(0);
+  await expect(page.getByLabel('Actual pitch cadence')).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });

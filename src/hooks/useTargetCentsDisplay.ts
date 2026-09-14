@@ -8,6 +8,7 @@ import type { TargetCentsDisplayState } from '../types/targetPitch';
 export function useTargetCentsDisplay(input: TargetCentsDisplayInput) {
   const [state, setState] = useState<TargetCentsDisplayState>(null);
   const {
+    detectedMidi,
     continuityStatus,
     reducedMotion,
     targetMidi,
@@ -17,6 +18,7 @@ export function useTargetCentsDisplay(input: TargetCentsDisplayInput) {
   useEffect(() => {
     setState((current) =>
       transitionTargetCentsDisplay(current, {
+        detectedMidi,
         continuityStatus,
         reducedMotion,
         targetMidi,
@@ -25,6 +27,7 @@ export function useTargetCentsDisplay(input: TargetCentsDisplayInput) {
       }),
     );
   }, [
+    detectedMidi,
     continuityStatus,
     reducedMotion,
     targetMidi,

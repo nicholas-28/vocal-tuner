@@ -1,3 +1,4 @@
+import { createCadenceProbe } from '../pitch/cadenceProbe';
 import { useEffect, useMemo } from 'react';
 import { createAnalysisDurationProbe } from '../pitch/analysisDurationProbe';
 import { AnalysisPerformanceDiagnostics } from '../components/AnalysisPerformanceDiagnostics';
@@ -55,31 +56,46 @@ export function App() {
         : null,
     [runtimeFeatures.showAudioDiagnostics],
   );
+  const cadence = useMemo(
+    () =>
+      runtimeFeatures.showAudioDiagnostics
+        ? { analysis: createCadenceProbe(), presentation: createCadenceProbe() }
+        : null,
+    [runtimeFeatures.showAudioDiagnostics],
+  );
   const pitch = usePitchDetection();
   const continuity = usePitchContinuity();
   const history = usePitchHistory();
   const visiblePitchRange = useVisiblePitchRange();
-  const { state, inputLevel, start, stop } = useMicrophone(undefined, {
-    onObservation: (detection) =>
-      analysisDurationProbe?.record(detection.analysisDurationMs),
-    onSessionStarted: () => {
-      analysisDurationProbe?.reset();
-      continuity.reset();
-      history.startSession();
+  const { state, inputLevel, start, stop, pitchSource } = useMicrophone(
+    undefined,
+    {
+      onObservation: (detection) => {
+        analysisDurationProbe?.record(detection.analysisDurationMs);
+        cadence?.analysis.record(performance.now());
+      },
+      onSessionStarted: () => {
+        analysisDurationProbe?.reset();
+        cadence?.analysis.reset();
+        cadence?.presentation.reset();
+        continuity.reset();
+        history.startSession();
+      },
+      onDetection: (detection) => {
+        cadence?.presentation.record(performance.now());
+        pitch.onDetection(detection);
+        history.onContinuityDecision(continuity.onDetection(detection));
+      },
+      onAnalysisError: pitch.onError,
+      onAnalysisReset: () => {
+        pitch.reset();
+        continuity.reset();
+        history.stopSession();
+      },
+      onAudioDiagnosticEvent: (event) =>
+        audioSessionTimeline?.captureMicrophone(event),
     },
-    onDetection: (detection) => {
-      pitch.onDetection(detection);
-      history.onContinuityDecision(continuity.onDetection(detection));
-    },
-    onAnalysisError: pitch.onError,
-    onAnalysisReset: () => {
-      pitch.reset();
-      continuity.reset();
-      history.stopSession();
-    },
-    onAudioDiagnosticEvent: (event) =>
-      audioSessionTimeline?.captureMicrophone(event),
-  });
+  );
   const musicalPitch = useMusicalPitchFromDetection(
     continuity.state.lastAcceptedPitch,
   );
@@ -98,6 +114,8 @@ export function App() {
     centsMeterDemo === null
       ? continuity.state.lastPublicationAtMs
       : centsMeterDemo.timestampMs;
+  const presentationSilence =
+    centsMeterDemo === null && pitch.diagnostics.state === 'silence';
   const practiceMicrophoneActive =
     centsMeterDemo?.practiceMicrophoneActive ?? state === 'active';
 
@@ -112,8 +130,11 @@ export function App() {
 
       <MicrophoneStatus state={state} inputLevel={inputLevel} />
       <TunerReadout
-        pitch={readoutPitch}
-        continuityStatus={readoutContinuityStatus}
+        pitch={presentationSilence ? null : readoutPitch}
+        pitchSource={centsMeterDemo === null ? pitchSource : undefined}
+        continuityStatus={
+          presentationSilence ? 'unvoiced' : readoutContinuityStatus
+        }
         lastAcceptedAgeMs={
           centsMeterDemo !== null
             ? 0
@@ -126,7 +147,11 @@ export function App() {
         measurementTimestampMs={readoutTimestampMs}
       />
       {analysisDurationProbe && (
-        <AnalysisPerformanceDiagnostics probe={analysisDurationProbe} />
+        <AnalysisPerformanceDiagnostics
+          probe={analysisDurationProbe}
+          cadence={cadence}
+          active={state === 'active'}
+        />
       )}
       {runtimeFeatures.showDeveloperDiagnostics && (
         <PitchDiagnostics
@@ -136,6 +161,7 @@ export function App() {
         />
       )}
       <PitchMonitor
+        presentationSilence={presentationSilence}
         history={history.history}
         summary={history.summary}
         active={state === 'active'}

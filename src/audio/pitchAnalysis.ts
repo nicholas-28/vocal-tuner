@@ -1,3 +1,4 @@
+import { createFrameCadence } from './frameCadence';
 import type { RawPitchDetection } from '../types/pitch';
 import { detectPitchYin, pitchDetectorConfig } from './pitchDetector';
 
@@ -35,8 +36,12 @@ export function startPitchAnalysis(
   let centeredBuffer: Float32Array | null = null;
   let differenceBuffer: Float64Array | null = null;
   let animationFrame: number | null = null;
-  let lastAnalysisAt = -pitchAnalysisConfig.analysisIntervalMs;
-  let lastPublishedAt = -pitchAnalysisConfig.publishIntervalMs;
+  const analysisDue = createFrameCadence(
+    pitchAnalysisConfig.analysisIntervalMs,
+  );
+  const presentationDue = createFrameCadence(
+    pitchAnalysisConfig.publishIntervalMs,
+  );
   let lastAudioTime = context.currentTime;
   let lastProgressAt = performance.now();
   let hasProgressed = false;
@@ -91,11 +96,7 @@ export function startPitchAnalysis(
           fail();
           return;
         }
-      } else if (
-        timestamp - lastAnalysisAt >=
-        pitchAnalysisConfig.analysisIntervalMs
-      ) {
-        lastAnalysisAt = timestamp;
+      } else if (analysisDue(timestamp)) {
         const audioTime = context.currentTime;
         if (!Number.isFinite(audioTime) || audioTime < lastAudioTime) {
           fail();
@@ -116,12 +117,8 @@ export function startPitchAnalysis(
           // Realtime consumers receive every computed observation before the UI gate.
           onObservation?.(detection);
           if (stopped) return;
-          if (
-            timestamp - lastPublishedAt >=
-            pitchAnalysisConfig.publishIntervalMs
-          ) {
+          if (presentationDue(timestamp)) {
             onDetection(detection);
-            lastPublishedAt = timestamp;
           }
         } else if (
           now - lastProgressAt >=

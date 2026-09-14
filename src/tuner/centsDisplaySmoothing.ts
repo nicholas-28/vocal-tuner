@@ -1,3 +1,4 @@
+import { smoothVisualCents } from './visualResponse';
 import type {
   CentsClassification,
   CentsDisplayConfig,
@@ -60,9 +61,12 @@ export function transitionCentsDisplay(
 
   const deltaTimeMs = timestampMs - current.timestampMs;
   if (!Number.isFinite(deltaTimeMs) || deltaTimeMs <= 0) return current;
-  const alpha = 1 - Math.exp(-deltaTimeMs / config.timeConstantMs);
-  const displayCents =
-    current.displayCents + alpha * (rawCents - current.displayCents);
+  const displayCents = smoothVisualCents(
+    current.displayCents,
+    rawCents,
+    deltaTimeMs,
+    config.timeConstantMs,
+  );
   if (!Number.isFinite(displayCents)) return current;
   return { displayCents, noteMidi, timestampMs };
 }

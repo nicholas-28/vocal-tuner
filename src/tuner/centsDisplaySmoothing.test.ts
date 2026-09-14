@@ -71,7 +71,7 @@ describe('display-only cents smoothing', () => {
     expect(short!.displayCents).toBeGreaterThan(0);
     expect(long!.displayCents).toBeGreaterThan(short!.displayCents);
     expect(long!.displayCents).toBeLessThan(30);
-    expect(long!.displayCents).toBeCloseTo(25.94, 2);
+    expect(long!.displayCents).toBeGreaterThan(29.9);
   });
 
   it('is refresh-rate independent for equivalent elapsed time', () => {
@@ -144,6 +144,6 @@ describe('display-only cents smoothing', () => {
         timeConstantMs: Number.NaN,
         inTuneToleranceCents: 5,
       })?.displayCents,
-    ).toBeCloseTo(18.96, 2);
+    ).toBeGreaterThan(29);
   });
 });
