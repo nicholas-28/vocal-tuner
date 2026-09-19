@@ -28,6 +28,7 @@ export function createRuntimeFeaturePolicy(
       buildInfo.deploymentEnvironment !== 'production' &&
       buildInfo.testControlsEnabled &&
       query.has('centsMeterDemo'),
+    enablePlayMode: query.has('play'),
   });
 }
 

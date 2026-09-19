@@ -4,4 +4,5 @@ export type RuntimeFeaturePolicy = Readonly<{
   showAudioDiagnostics: boolean;
   enableReferenceDroneDebugLog: boolean;
   enableCentsMeterDemo: boolean;
+  enablePlayMode: boolean;
 }>;

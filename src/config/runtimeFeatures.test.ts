@@ -21,6 +21,7 @@ describe('runtime feature policy', () => {
       showAudioDiagnostics: false,
       enableReferenceDroneDebugLog: false,
       enableCentsMeterDemo: false,
+      enablePlayMode: false,
     });
   });
 
@@ -38,6 +39,7 @@ describe('runtime feature policy', () => {
       showAudioDiagnostics: true,
       enableCentsMeterDemo: false,
       showDeveloperDiagnostics: false,
+      enablePlayMode: false,
     });
   });
 
@@ -58,6 +60,7 @@ describe('runtime feature policy', () => {
       showAudioDiagnostics: false,
       enableReferenceDroneDebugLog: true,
       enableCentsMeterDemo: false,
+      enablePlayMode: false,
     });
   });
 
@@ -80,6 +83,7 @@ describe('runtime feature policy', () => {
       showReferenceDroneDiagnostics: true,
       enableReferenceDroneDebugLog: false,
       enableCentsMeterDemo: false,
+      enablePlayMode: false,
     });
 
     const test = createBuildInfo({ mode: 'test' });
@@ -87,5 +91,20 @@ describe('runtime feature policy', () => {
       createRuntimeFeaturePolicy('?centsMeterDemo=1', test)
         .enableCentsMeterDemo,
     ).toBe(true);
+  });
+
+  it('enables play mode from the query in production', () => {
+    const production = createBuildInfo({
+      mode: 'production',
+      vercelEnvironment: 'production',
+    });
+
+    expect(createRuntimeFeaturePolicy('?play', production).enablePlayMode).toBe(
+      true,
+    );
+  });
+
+  it('keeps play mode disabled without the query', () => {
+    expect(createRuntimeFeaturePolicy('').enablePlayMode).toBe(false);
   });
 });
